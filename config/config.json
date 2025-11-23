@@ -1,0 +1,44 @@
+{
+  "app": {
+    "name": "OS Hardening RAG",
+    "env": "dev",
+    "language": "tr"
+  },
+  "rag": {
+    "source_documents": [
+      {
+        "id": "cis_ubuntu_24_04",
+        "type": "pdf",
+        "path": "data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf",
+        "chunker": "pdf_semantic",
+        "metadata_strategy": "section_based"
+      }
+    ],
+    "rules": {
+      "ubuntu_24_04": {
+        "path": "data/rules/ubuntu_24_04_rules.yaml",
+        "enabled": true
+      }
+    }
+  },
+  "embedding": {
+  "provider": "novita",
+  "model_name": "qwen/qwen3-embedding-8b",
+  "dim": 4096,
+  "base_url": "https://api.novita.ai/openai"
+  },
+  "vector_store": {
+    "provider": "qdrant",
+    "index_path": "data/indexes/ubuntu_24_04/faiss.index",
+    "metadata_path": "data/indexes/ubuntu_24_04/metadata.json",
+    "qdrant": {
+      "url": "https://286d1f0c-9411-4842-b153-a571d8af4479.eu-west-2-0.aws.cloud.qdrant.io",
+      "collection_name": "cis_ubuntu_24_04"
+    }
+  },
+  "llm": {
+    "provider": "dummy",
+    "model_name": "gpt-4o-mini",
+    "api_key": null
+  }
+}

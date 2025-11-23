@@ -1,0 +1,69 @@
+Çalıştırmak için:[
+  "python -m scripts.build_index_ubuntu", -->rag pipeline çalıştırmak için
+  "python -m main", -->api serverı başlatmak için 
+  "python -m scripts.test_rag_api", -->rag api test etmek için
+  "python -m scripts.test_novita_embedding", -->novita embedding test etmek için
+]
+
+config.json ayarları için;
+embed lokalde çalışıcaksan:
+"embedding": {
+    "provider": "sentence_transformers", 
+    "model_name": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+    "dim": 768,
+}
+coher cloud embedding kullanıcaksan:
+  "embedding": {
+    "provider": "cohere",
+    "model_name": "embed-multilingual-v3.0",
+    "dim": 1024,
+  },
+
+  kullanmak istediğin vector store faiss ise:
+"vector_store": {
+"provider": "faiss",
+}
+
+
+
+TEST ederken:
+POST /rag/search
+{
+  "query": "Ubuntu 24.04'te cramfs kernel modülünü neden disable etmeliyim?",
+  "top_k": 5
+}
+
+
+
+Metadata extraction için CIS benchmark parser eklendi. Semantic pdf chunker içinde kullanıldı:[
+  {
+  "source_id": "cis-ubuntu-24.04-v1.0.0",
+  "page": 965,
+  "doc_type": "cis_benchmark",
+
+  // "benchmark_name_raw": "CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0",
+  // "benchmark_vendor": "CIS",
+  "benchmark_product": "Ubuntu Linux",
+  "os_family": "linux",
+  "os_version": "24.04",
+  "benchmark_version": "1.0.0",
+
+  "num_paragraphs": 3,
+  "num_chars": 842,
+
+  // "cis_rule_id": "7.2.1",
+  // "has_cis_rule": true,
+  "profile_applicability": [
+    "Level 1 - Server",
+    "Level 1 - Workstation"
+  ]
+}
+
+]
+
+Genel İşlem Süreeleri:[
+[IndexPipeline] cis_ubuntu_24_04 için 1378 chunk oluşturuldu.
+[IndexPipeline] Chunk embedding bulundu, API çağrısı yapılmayacak.
+[IndexPipeline] cis_ubuntu_24_04 için index güncellendi.
+[IndexPipeline] İstatistikler -> chunks: 1378, embed_time: 4739.20s, upsert_time: 96.61s
+]
