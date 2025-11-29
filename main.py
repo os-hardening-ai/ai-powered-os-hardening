@@ -1,7 +1,7 @@
 from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes_rag import router as rag_router
+from api.router_rag import router as rag_router
 from api.router_health import router as health_router
 import uvicorn
 
