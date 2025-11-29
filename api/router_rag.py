@@ -7,9 +7,6 @@ from api.rag_retriever import RAGRetriever
 router = APIRouter()
 
 def get_retriever() -> RAGRetriever:
-    # Şimdilik basit; istersek ileride dependency injection / caching ekleyebiliriz.
-    # Eğer tek instance kullanmak istersen, main.py’de global bir retriever yaratıp
-    # buraya oradan da referans geçebiliriz.
     return RAGRetriever()
 
 @router.post("/search", response_model=RagSearchResponse)
