@@ -1,7 +1,17 @@
-venv/
+# Python cache
 __pycache__/
-node_modules/
-dist/
-build/
 *.pyc
+*.pyo
+*.pyd
+
+# Virtual environment (çok büyük)
+llm/venv/
+
+# IDE
+.claude/
+.vscode/
+.idea/
+
+# Logs
 *.log
+logs/

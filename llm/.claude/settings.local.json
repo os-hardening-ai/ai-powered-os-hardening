@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test -f \"models/groq_client.py\")",
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "Bash(pip install:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebSearch",
+      "WebFetch(domain:langfuse.com)",
+      "WebFetch(domain:www.datacamp.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

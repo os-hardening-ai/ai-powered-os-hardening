@@ -2,14 +2,15 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.router_rag import router as rag_router
+from api.router_chat import router as chat_router
 from api.router_health import router as health_router
 import uvicorn
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="OS Hardening RAG",
-        version="0.1.0",
-        description="CIS Ubuntu 24.04 benchmark için RAG retrieval servisi (Cohere + Qdrant).",
+        title="AI-Powered OS Hardening",
+        version="0.2.0",
+        description="CIS benchmark için RAG + LLM entegrasyonlu güvenlik hardening asistanı (Cohere + Qdrant + OpenAI/Groq).",
     )
 
     app.add_middleware(
@@ -20,7 +21,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(rag_router ,prefix="/rag", tags=["rag"])
+    # RAG-only endpoint (backward compatibility)
+    app.include_router(rag_router, prefix="/rag", tags=["rag"])
+
+    # RAG + LLM combined endpoint (yeni!)
+    app.include_router(chat_router, prefix="/api", tags=["chat"])
+
+    # Health check
     app.include_router(health_router)
 
     return app
