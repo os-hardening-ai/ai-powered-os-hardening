@@ -4,7 +4,10 @@
       "Bash(python -c:*)",
       "Bash(test:*)",
       "Bash(.gitignore)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(python -m main:*)"
     ],
     "deny": [],
     "ask": []

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Callable, Tuple
 
-from config import LLM_PROVIDER
+# Relative import - llm.config yerine parent package'dan config import et
+from ..config import LLM_PROVIDER
 
 LLMCallable = Callable[[str], str]
 

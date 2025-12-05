@@ -1,4 +1,4 @@
-Çalıştırmak için:[
+Calistirmak için:[
   "python -m scripts.build_index_ubuntu", -->rag pipeline çalıştırmak için
   "python -m main", -->api serverı başlatmak için 
   "python -m scripts.test_rag_api", -->rag api test etmek için

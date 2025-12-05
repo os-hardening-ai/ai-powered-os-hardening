@@ -10,7 +10,7 @@ except ImportError:
     NEW_API_AVAILABLE = False
     OpenAI = None  # type: ignore[assignment,misc]
 
-from config import (
+from ..config import (
     OPENAI_API_KEY,
     OPENAI_SMALL_MODEL_NAME,
     OPENAI_LARGE_MODEL_NAME,

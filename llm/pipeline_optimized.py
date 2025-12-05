@@ -18,17 +18,17 @@ from __future__ import annotations
 from typing import Callable, Optional
 from datetime import datetime
 
-from context import RequestContext, SafetyResult
-from models.adaptive_router import AdaptiveModelRouter, ModelSpec
-from prompts.cot_prompts import CoTSecurityAnalyzer
-from prompts.simple_prompts import get_prompt_for_complexity
-from utils.question_classifier import classify_question
-from utils.local_responder import get_local_response
-from config import CONFIG
+from .context import RequestContext, SafetyResult
+from .models.adaptive_router import AdaptiveModelRouter, ModelSpec
+from .prompts.cot_prompts import CoTSecurityAnalyzer
+from .prompts.simple_prompts import get_prompt_for_complexity
+from .utils.question_classifier import classify_question
+from .utils.local_responder import get_local_response
+from .config import CONFIG
 
 # RAG Integration
 try:
-    from rag_integration import get_rag_context_builder
+    from .rag_integration import get_rag_context_builder
     RAG_AVAILABLE = True
 except ImportError:
     RAG_AVAILABLE = False

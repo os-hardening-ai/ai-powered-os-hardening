@@ -9,7 +9,7 @@ Maliyet optimizasyonu için:
 """
 
 from __future__ import annotations
-from context import RequestContext
+from ..context import RequestContext
 
 
 def build_simple_prompt(ctx: RequestContext) -> str:

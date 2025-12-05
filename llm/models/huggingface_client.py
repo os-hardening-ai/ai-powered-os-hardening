@@ -1,7 +1,7 @@
 # models/huggingface_client.py
 from __future__ import annotations
 from huggingface_hub import InferenceClient
-from config import (
+from ..config import (
     HF_API_KEY,
     SMALL_MODEL_NAME,
     LARGE_MODEL_NAME,

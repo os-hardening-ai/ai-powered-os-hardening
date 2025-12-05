@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Literal, Callable
 from enum import Enum
 
-from context import RequestContext, IntentType
+from ..context import RequestContext, IntentType
 
 
 # Type alias

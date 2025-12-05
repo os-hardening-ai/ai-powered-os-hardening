@@ -7,12 +7,15 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-# Add llm directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "llm"))
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-from context import RequestContext
-from pipeline_optimized import run_optimized_pipeline_with_retry
-from models import get_llm_clients
+# Import LLM modules (now llm is importable as a package)
+from llm.context import RequestContext
+from llm.pipeline_optimized import run_optimized_pipeline_with_retry
+from llm.models import get_llm_clients
 
 router = APIRouter()
 

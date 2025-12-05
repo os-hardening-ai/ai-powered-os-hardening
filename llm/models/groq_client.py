@@ -1,7 +1,7 @@
 # models/groq_client.py
 from __future__ import annotations
 from groq import Groq
-from config import (
+from ..config import (
     GROQ_API_KEY,
     GROQ_SMALL_MODEL_NAME,
     GROQ_LARGE_MODEL_NAME,
