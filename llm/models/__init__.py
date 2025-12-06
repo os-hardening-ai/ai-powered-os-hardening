@@ -36,6 +36,26 @@ def _get_groq_clients() -> Tuple[LLMCallable, LLMCallable]:
     return small, large
 
 
+def _get_ollama_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """Ollama client'larını local import ile al."""
+    from .ollama_client import get_small_ollama_llm, get_large_ollama_llm
+    from ..config import CONFIG
+
+    small = get_small_ollama_llm(
+        model_name=CONFIG.ollama_small_model,
+        base_url=CONFIG.ollama_base_url,
+        temperature=CONFIG.small_model_temperature,
+        max_tokens=CONFIG.max_tokens,
+    )
+    large = get_large_ollama_llm(
+        model_name=CONFIG.ollama_large_model,
+        base_url=CONFIG.ollama_base_url,
+        temperature=CONFIG.large_model_temperature,
+        max_tokens=CONFIG.max_tokens,
+    )
+    return small, large
+
+
 def get_llm_clients() -> Tuple[LLMCallable, LLMCallable]:
     """
     Konfigürasyondaki LLM_PROVIDER değerine göre küçük ve büyük modeli döndürür.
@@ -43,18 +63,20 @@ def get_llm_clients() -> Tuple[LLMCallable, LLMCallable]:
     Dönüş:
         (llm_small, llm_large)  # her ikisi de Callable[[str], str]
     """
-    provider = (LLM_PROVIDER or "huggingface").lower()
+    provider = (LLM_PROVIDER or "groq").lower()
 
     if provider == "openai":
         return _get_openai_clients()
     elif provider == "groq":
         return _get_groq_clients()
+    elif provider == "ollama":
+        return _get_ollama_clients()
     elif provider == "huggingface":
         return _get_hf_clients()
     else:
         raise ValueError(
             f"Desteklenmeyen LLM_PROVIDER: '{provider}'\n"
-            f"Geçerli değerler: 'openai', 'groq', 'huggingface'"
+            f"Geçerli değerler: 'groq' (FREE), 'ollama' (FREE Local), 'openai', 'huggingface'"
         )
 
 

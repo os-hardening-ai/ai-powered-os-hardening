@@ -13,6 +13,10 @@
 
 ## ✨ Özellikler
 
+### 🎁 100% Ücretsiz LLM Desteği
+- **Groq**: Tamamen ücretsiz API, 500+ token/s hız (önerilen)
+- **Ollama**: Lokal çalışan LLM'ler, internet gerekmez, tam gizlilik
+
 ### RAG (Retrieval Augmented Generation)
 - CIS Benchmark dokümanlarından anlamsal arama
 - Cohere/Novita embedding desteği
@@ -48,18 +52,31 @@ pip install -r llm/requirements.txt
 `.env` dosyası oluşturun:
 
 ```env
-# LLM Provider (groq, openai, huggingface)
-LLM_PROVIDER=groq
+# ═══════════════════════════════════════════
+# 🎁 ÜCRETSIZ SEÇENEKLER (Demo için önerilen)
+# ═══════════════════════════════════════════
 
-# Groq (Ücretsiz, hızlı)
-GROQ_API_KEY=gsk_xxxxxxxxxxxxx
+# Option 1: Groq (Tamamen ücretsiz, API key gerekli)
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_xxxxxxxxxxxxx  # https://console.groq.com/keys
 GROQ_SMALL_MODEL_NAME=llama-3.1-8b-instant
 GROQ_LARGE_MODEL_NAME=llama-3.3-70b-versatile
 
-# OpenAI (Optional)
-OPENAI_API_KEY=sk-xxxxxxxxxxxxx
-OPENAI_SMALL_MODEL_NAME=gpt-4o-mini
-OPENAI_LARGE_MODEL_NAME=gpt-4o
+# Option 2: Ollama (Tamamen ücretsiz, lokal)
+# LLM_PROVIDER=ollama
+# OLLAMA_BASE_URL=http://localhost:11434
+# OLLAMA_SMALL_MODEL_NAME=llama3.1:8b
+# OLLAMA_LARGE_MODEL_NAME=llama3.1:70b
+
+# ═══════════════════════════════════════════
+# 💰 ÜCRETLI SEÇENEKLER (Production için)
+# ═══════════════════════════════════════════
+
+# OpenAI (Ücretli, en iyi kalite)
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=sk-xxxxxxxxxxxxx
+# OPENAI_SMALL_MODEL_NAME=gpt-4o-mini
+# OPENAI_LARGE_MODEL_NAME=gpt-4o
 
 # Embedding Provider (cohere veya sentence_transformers)
 EMBEDDING_PROVIDER=cohere
@@ -70,14 +87,36 @@ VECTOR_STORE_PROVIDER=qdrant
 QDRANT_URL=http://localhost:6333
 ```
 
-### 3. RAG Index Oluşturma
+### 3. LLM Seçimine Göre Kurulum
+
+#### Option A: Groq (Önerilen - Tamamen Ücretsiz)
+```bash
+# 1. https://console.groq.com/keys adresinden ücretsiz API key al
+# 2. .env dosyasına ekle:
+echo 'GROQ_API_KEY=gsk_your_key_here' >> .env
+echo 'LLM_PROVIDER=groq' >> .env
+```
+
+#### Option B: Ollama (Lokal - Internet Gerektirmez)
+```bash
+# 1. Ollama'yı indir ve kur: https://ollama.ai/download
+# 2. Modelleri indir:
+ollama pull llama3.1:8b      # ~4.7GB
+ollama pull llama3.1:70b     # ~40GB (opsiyonel, güçlü sistem gerekir)
+
+# 3. .env dosyasını ayarla:
+echo 'LLM_PROVIDER=ollama' >> .env
+echo 'OLLAMA_BASE_URL=http://localhost:11434' >> .env
+```
+
+### 4. RAG Index Oluşturma
 
 ```bash
 # CIS Benchmark PDF'lerini işle ve index oluştur
 python -m scripts.build_index_ubuntu
 ```
 
-### 4. Uygulamayı Başlat
+### 5. Uygulamayı Başlat
 
 ```bash
 # API server'ı başlat (http://0.0.0.0:8000)

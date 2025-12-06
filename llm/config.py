@@ -17,7 +17,7 @@ except ImportError:
 # Type Definitions
 # ─────────────────────────────────────────────
 
-LLMProvider = Literal["huggingface", "openai", "groq"]
+LLMProvider = Literal["huggingface", "openai", "groq", "ollama"]
 
 
 # ─────────────────────────────────────────────
@@ -52,7 +52,12 @@ class Config:
     groq_api_key: str
     groq_small_model: str
     groq_large_model: str
-    
+
+    # ── Ollama (Local) ──
+    ollama_base_url: str
+    ollama_small_model: str
+    ollama_large_model: str
+
     # ── Sampling Parameters ──
     small_model_temperature: float
     large_model_temperature: float
@@ -158,6 +163,8 @@ class Config:
             return (self.openai_small_model, self.openai_large_model)
         elif self.llm_provider == "groq":
             return (self.groq_small_model, self.groq_large_model)
+        elif self.llm_provider == "ollama":
+            return (self.ollama_small_model, self.ollama_large_model)
         else:  # huggingface
             return (self.hf_small_model, self.hf_large_model)
     
@@ -223,11 +230,11 @@ def load_config() -> Config:
     Hata varsa anlamlı exception fırlatır.
     """
     # Provider validation
-    provider_str = _get_env("LLM_PROVIDER", "huggingface").lower()
-    if provider_str not in ("huggingface", "openai", "groq"):
+    provider_str = _get_env("LLM_PROVIDER", "groq").lower()  # Default: groq (free)
+    if provider_str not in ("huggingface", "openai", "groq", "ollama"):
         raise ValueError(
             f"Invalid LLM_PROVIDER: '{provider_str}'. "
-            f"Valid values: 'huggingface', 'openai', 'groq'"
+            f"Valid values: 'groq', 'ollama', 'huggingface', 'openai'"
         )
     
     provider: LLMProvider = provider_str  # type: ignore[assignment]
@@ -249,8 +256,13 @@ def load_config() -> Config:
         # Groq
         groq_api_key=_get_env("GROQ_API_KEY"),
         groq_small_model=_get_env("GROQ_SMALL_MODEL_NAME", "llama-3.1-8b-instant"),
-        groq_large_model=_get_env("GROQ_LARGE_MODEL_NAME", "llama-3.1-70b-versatile"),
-        
+        groq_large_model=_get_env("GROQ_LARGE_MODEL_NAME", "llama-3.3-70b-versatile"),
+
+        # Ollama (Local)
+        ollama_base_url=_get_env("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_small_model=_get_env("OLLAMA_SMALL_MODEL_NAME", "llama3.1:8b"),
+        ollama_large_model=_get_env("OLLAMA_LARGE_MODEL_NAME", "llama3.1:70b"),
+
         # Sampling
         small_model_temperature=_get_env_float("SMALL_MODEL_TEMPERATURE", 0.3),
         large_model_temperature=_get_env_float("LARGE_MODEL_TEMPERATURE", 0.2),
@@ -274,8 +286,13 @@ def load_config() -> Config:
 try:
     CONFIG = load_config()
 except Exception as e:
-    print(f"❌ Config loading failed: {e}")
-    print("   Please check your .env file and environment variables.")
+    import sys
+    # Windows console emoji hatalarını önle
+    try:
+        print(f"[ERROR] Config loading failed: {e}")
+        print("   Please check your .env file and environment variables.")
+    except UnicodeEncodeError:
+        sys.stderr.write(f"Config loading failed: {e}\n")
     raise
 
 
@@ -297,6 +314,10 @@ OPENAI_LARGE_MODEL_NAME = CONFIG.openai_large_model
 GROQ_API_KEY = CONFIG.groq_api_key
 GROQ_SMALL_MODEL_NAME = CONFIG.groq_small_model
 GROQ_LARGE_MODEL_NAME = CONFIG.groq_large_model
+
+OLLAMA_BASE_URL = CONFIG.ollama_base_url
+OLLAMA_SMALL_MODEL_NAME = CONFIG.ollama_small_model
+OLLAMA_LARGE_MODEL_NAME = CONFIG.ollama_large_model
 
 SMALL_MODEL_TEMPERATURE = CONFIG.small_model_temperature
 LARGE_MODEL_TEMPERATURE = CONFIG.large_model_temperature
