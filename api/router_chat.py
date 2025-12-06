@@ -5,7 +5,7 @@ import os
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +17,9 @@ from llm.context import RequestContext
 from llm.pipeline_optimized import run_optimized_pipeline_with_retry
 from llm.models import get_llm_clients
 
+# Import security utilities
+from api.security import validate_chat_input, sanitize_output
+
 router = APIRouter()
 
 
@@ -26,14 +29,46 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     """Chat request payload"""
-    question: str = Field(..., description="Kullanıcı sorusu", min_length=1)
-    os: Optional[str] = Field(None, description="Operating system (ubuntu_22_04, windows_11, etc.)")
-    role: Optional[str] = Field(None, description="User role (sysadmin, soc, developer, devops)")
-    security_level: str = Field("balanced", description="Security level: minimal/balanced/strict")
-    zt_maturity: str = Field("medium", description="Zero Trust maturity: low/medium/high")
+    question: str = Field(
+        ...,
+        description="Kullanıcı sorusu",
+        min_length=1,
+        max_length=5000,  # Security: max length
+        examples=["Ubuntu 24.04 sistemimde SSH nasıl sıkılaştırırım?"]
+    )
+    os: Optional[str] = Field(
+        None,
+        description="Operating system (ubuntu_22_04, ubuntu_24_04, windows_11, etc.)",
+        examples=["ubuntu_24_04"]
+    )
+    role: Optional[str] = Field(
+        None,
+        description="User role (sysadmin, soc, developer, devops)",
+        examples=["sysadmin"]
+    )
+    security_level: str = Field(
+        "balanced",
+        description="Security level: minimal/balanced/strict",
+        pattern="^(minimal|balanced|strict)$"
+    )
+    zt_maturity: str = Field(
+        "medium",
+        description="Zero Trust maturity: low/medium/high",
+        pattern="^(low|medium|high)$"
+    )
     use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı")
-    rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği")
-    rag_min_score: float = Field(0.7, description="Minimum relevance score")
+    rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20)
+    rag_min_score: float = Field(0.7, description="Minimum relevance score", ge=0.0, le=1.0)
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        """Validate and sanitize question input"""
+        # Use security module for validation
+        # check_injection=False because LLM providers (Groq, OpenAI) already handle this
+        # We keep input length validation to prevent API quota abuse
+        validate_chat_input(v, max_length=5000, check_injection=False)
+        return v.strip()
 
 
 class RAGSource(BaseModel):
@@ -133,9 +168,12 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             except Exception as e:
                 print(f"[ChatAPI] Failed to parse RAG sources: {e}")
 
+        # Sanitize output (remove any leaked prompts/instructions)
+        sanitized_answer = sanitize_output(result_ctx.final_answer or "Cevap üretilemedi.")
+
         # Response oluştur
         return ChatResponse(
-            answer=result_ctx.final_answer or "Cevap üretilemedi.",
+            answer=sanitized_answer,
             intent=str(result_ctx.intent) if result_ctx.intent else None,
             safety_category=result_ctx.safety.category if result_ctx.safety else None,
             rag_sources=rag_sources,
