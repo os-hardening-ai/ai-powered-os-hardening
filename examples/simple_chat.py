@@ -20,8 +20,8 @@ def chat(question: str):
     config = manager.get_config()
 
     # API'ye gönder
-    print(f"\n💬 Soru: {question}\n")
-    print("⏳ Cevap hazırlanıyor...\n")
+    print(f"\n[SORU] {question}\n")
+    print("[BEKLEYIN] Cevap hazırlanıyor...\n")
 
     try:
         response = requests.post(
@@ -42,13 +42,13 @@ def chat(question: str):
             data = response.json()
 
             print("="*60)
-            print("📝 CEVAP:")
+            print("[CEVAP]")
             print("="*60)
             print(data["answer"])
 
             if data.get("rag_sources"):
                 print("\n" + "="*60)
-                print("📚 KAYNAKLAR:")
+                print("[KAYNAKLAR]")
                 print("="*60)
                 for i, source in enumerate(data["rag_sources"], 1):
                     print(f"\n{i}. {source['source']} (Skor: {source['score']:.2f})")
@@ -56,20 +56,20 @@ def chat(question: str):
 
             print("\n" + "="*60 + "\n")
         else:
-            print(f"❌ Hata: {response.status_code}")
+            print(f"[HATA] HTTP {response.status_code}")
             print(response.text)
 
     except requests.exceptions.ConnectionError:
-        print("❌ Backend'e bağlanılamadı!")
+        print("[HATA] Backend'e bağlanılamadı!")
         print("Sunucunun çalıştığından emin olun: python -m src.main")
     except Exception as e:
-        print(f"❌ Hata: {e}")
+        print(f"[HATA] {e}")
 
 
 def interactive_mode():
     """İnteraktif mod - sürekli soru-cevap"""
     print("\n" + "="*60)
-    print("🤖 AI-POWERED OS HARDENING - İNTERAKTİF SOHBET")
+    print("AI-POWERED OS HARDENING - INTERAKTIF SOHBET")
     print("="*60)
     print("\nÇıkmak için 'quit' veya 'exit' yazın")
     print("Ayarları sıfırlamak için 'reset' yazın\n")
@@ -78,13 +78,13 @@ def interactive_mode():
 
     while True:
         try:
-            question = input("💬 Soru: ").strip()
+            question = input("[SORU] ").strip()
 
             if not question:
                 continue
 
             if question.lower() in ['quit', 'exit', 'q']:
-                print("\n👋 Görüşmek üzere!")
+                print("\n[CIKIS] Görüşmek üzere!")
                 break
 
             if question.lower() == 'reset':
@@ -95,10 +95,10 @@ def interactive_mode():
             chat(question)
 
         except KeyboardInterrupt:
-            print("\n\n👋 Görüşmek üzere!")
+            print("\n\n[CIKIS] Görüşmek üzere!")
             break
         except Exception as e:
-            print(f"\n❌ Hata: {e}\n")
+            print(f"\n[HATA] {e}\n")
 
 
 if __name__ == "__main__":
