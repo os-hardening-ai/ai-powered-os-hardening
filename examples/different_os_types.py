@@ -12,7 +12,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from llm.models import get_llm_clients
-from llm.pipeline_v2 import SecurityPipeline, RequestContext
+from llm.pipeline_v2 import SecurePipelineV2
+from llm.context import RequestContext
 
 
 def example_ubuntu():
@@ -22,7 +23,7 @@ def example_ubuntu():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="SSH güvenlik ayarları için script oluştur",
@@ -50,7 +51,7 @@ def example_debian():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Firewall kuralları oluştur",
@@ -78,7 +79,7 @@ def example_centos():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="SELinux güvenlik ayarları scripti yaz",
@@ -106,7 +107,7 @@ def example_windows_server():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Windows Defender ve firewall ayarları için PowerShell scripti oluştur",
@@ -134,7 +135,7 @@ def example_windows_10():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="RDP güvenlik ayarları scripti",
@@ -162,7 +163,7 @@ def example_rhel():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Audit daemon yapılandırması için script",

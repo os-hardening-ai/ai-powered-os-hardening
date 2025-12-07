@@ -14,7 +14,7 @@ if project_root not in sys.path:
 
 # Import LLM modules (now llm is importable as a package)
 from llm.context import RequestContext
-from llm.pipeline_v2 import SecurityPipeline
+from llm.pipeline_v2 import SecurePipelineV2
 from llm.models import get_llm_clients
 
 # Import security utilities
@@ -140,12 +140,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         )
 
         # Pipeline'i calistir (4-layer security pipeline)
-        pipeline = SecurityPipeline(
+        # SecurePipelineV2 requires ultra_fast, small, large models
+        pipeline = SecurePipelineV2(
+            llm_ultra_fast=llm_small,  # Use small model for fast safety check
             llm_small=llm_small,
             llm_large=llm_large,
-            use_rag=payload.use_rag,
-            rag_top_k=payload.rag_top_k,
-            rag_min_score=payload.rag_min_score,
             debug=False,
         )
 

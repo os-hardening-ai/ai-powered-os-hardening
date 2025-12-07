@@ -12,7 +12,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from llm.models import get_llm_clients
-from llm.pipeline_v2 import SecurityPipeline, RequestContext
+from llm.pipeline_v2 import SecurePipelineV2
+from llm.context import RequestContext
 
 
 def example_what_is_ssh():
@@ -22,7 +23,7 @@ def example_what_is_ssh():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="SSH nedir ve nasıl çalışır?",
@@ -51,7 +52,7 @@ def example_zero_trust():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Zero Trust Architecture nedir? Temel prensipleri nelerdir?",
@@ -86,7 +87,7 @@ def example_cis_benchmarks():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="CIS Benchmarks nedir? Ubuntu için hangi kuralları içerir?",
@@ -115,7 +116,7 @@ def example_firewall_concepts():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Firewall stateful ve stateless arasındaki fark nedir?",
@@ -144,7 +145,7 @@ def example_nist_standards():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="NIST 800-207 standardı neyi kapsar?",

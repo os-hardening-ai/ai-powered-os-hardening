@@ -12,7 +12,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from llm.models import get_llm_clients
-from llm.pipeline_v2 import SecurityPipeline, RequestContext
+from llm.pipeline_v2 import SecurePipelineV2
+from llm.context import RequestContext
 
 
 def example_ssh_hardening():
@@ -22,7 +23,7 @@ def example_ssh_hardening():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Ubuntu 22.04 için SSH hardening scripti oluştur",
@@ -55,7 +56,7 @@ def example_firewall_rules():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Windows Server 2022 için temel firewall kuralları oluştur",
@@ -88,7 +89,7 @@ def example_rdp_hardening():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Windows 10 için RDP güvenlik ayarları scripti yaz",
@@ -121,7 +122,7 @@ def example_with_zt_enrichment():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurityPipeline(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
 
     ctx = RequestContext(
         user_input="Debian 11 için kullanıcı erişim kontrolü scripti oluştur",
