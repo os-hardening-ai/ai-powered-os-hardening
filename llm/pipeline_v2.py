@@ -206,7 +206,12 @@ class SecurePipelineV2:
         # LAYER 3: ROUTING
         # ─────────────────────────────────────────────
 
-        if intent.type == "smalltalk":
+        if intent.type == "out_of_scope":
+            # Out-of-scope: Polite rejection
+            result = self._handle_out_of_scope(ctx, safety_result, intent)
+            self.stats["pattern_responses"] += 1  # No cost, like pattern responses
+
+        elif intent.type == "smalltalk":
             # Layer 3A: Pattern Responder
             result = self._handle_layer_3a(ctx, safety_result, intent)
             self.stats["pattern_responses"] += 1
@@ -371,6 +376,52 @@ class SecurePipelineV2:
             metadata={
                 "model": action_result.model_used,
                 "script_generated": True,
+            }
+        )
+
+    def _handle_out_of_scope(
+        self,
+        ctx: RequestContext,
+        safety: SafetyResult,
+        intent: Intent
+    ) -> PipelineResult:
+        """Handle out-of-scope (non-security) queries with polite rejection"""
+        if self.debug:
+            print("\n[Out-of-Scope] Non-security topic detected")
+
+        start_time = datetime.now()
+
+        # Build polite rejection message
+        message = """ℹ️ **Kapsam Dışı Soru**
+
+Ben sadece **siber güvenlik** ve **işletim sistemi sıkılaştırma** (OS hardening) konularında yardımcı olabiliyorum.
+
+**Size yardımcı olabileceğim konular:**
+- 🔒 SSH, RDP, Firewall hardening
+- 🛡️ CIS Benchmarks ve NIST 800-207 uygulamaları
+- 🔐 Zero Trust Architecture
+- 📋 Güvenlik yapılandırmaları ve scriptleri
+- 🔍 Vulnerability assessment ve risk azaltma
+
+Lütfen güvenlik veya sistem sıkılaştırma ile ilgili bir soru sorun."""
+
+        total_time = (datetime.now() - start_time).total_seconds()
+
+        if self.debug:
+            print(f"  Topic: Non-security")
+            print(f"  Response: Polite rejection")
+
+        return PipelineResult(
+            success=True,  # Not an error, just out of scope
+            answer=message,
+            layer_path="1→2→OUT_OF_SCOPE",
+            safety=safety,
+            intent=intent,
+            total_time_s=total_time,
+            estimated_cost=0.0001,  # Just safety check cost
+            metadata={
+                "reason": "out_of_scope",
+                "matched_keywords": intent.metadata.get("matched_keywords", [])
             }
         )
 

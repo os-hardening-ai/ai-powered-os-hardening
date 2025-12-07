@@ -18,14 +18,15 @@ Based on 2025 NLU best practices:
 
 from __future__ import annotations
 from typing import Literal, Optional
-from dataclass import dataclass
+from dataclasses import dataclass
 import re
 
 
 IntentType = Literal[
     "smalltalk",        # Greeting, farewell, thanks, help request
     "info_request",     # Question about concept/config
-    "action_request"    # Script/config generation request
+    "action_request",   # Script/config generation request
+    "out_of_scope"      # Non-security topics (weather, math, etc.)
 ]
 
 SmalltalkSubtype = Literal[
@@ -145,6 +146,37 @@ class IntentDetector:
         "best_practice": ["best practice", "önerilen", "recommended"],
     }
 
+    # ═════════════════════════════════════════════
+    # OUT-OF-SCOPE INDICATORS (Non-security topics)
+    # ═════════════════════════════════════════════
+
+    OUT_OF_SCOPE_KEYWORDS = [
+        # Weather
+        "hava durumu", "weather", "yağmur", "rain", "snow",
+
+        # Math/calculation
+        "hesapla", "calculate", "matematik", "math", "toplam", "sum",
+
+        # General knowledge
+        "tarih", "history", "coğrafya", "geography",
+
+        # Personal advice
+        "sevgilim", "girlfriend", "boyfriend", "ilişki", "relationship",
+        "aile", "family", "arkadaş", "friend",
+
+        # Entertainment
+        "film", "movie", "müzik", "music", "oyun", "game",
+
+        # Sports
+        "futbol", "football", "basketbol", "basketball",
+
+        # Food/cooking
+        "yemek", "recipe", "tarif", "cooking",
+
+        # Travel
+        "tatil", "vacation", "seyahat", "travel", "otel", "hotel",
+    ]
+
     def __init__(self, debug: bool = False):
         """
         Args:
@@ -156,6 +188,7 @@ class IntentDetector:
             "smalltalk_count": 0,
             "info_count": 0,
             "action_count": 0,
+            "out_of_scope_count": 0,
         }
 
     def detect(self, question: str) -> Intent:
@@ -183,6 +216,36 @@ class IntentDetector:
 
         q_stripped = question.strip()
         q_lower = q_stripped.lower()
+
+        # ─────────────────────────────────────────
+        # 0. OUT-OF-SCOPE DETECTION (Priority check)
+        # ─────────────────────────────────────────
+
+        # Check for non-security keywords
+        out_of_scope_matches = [kw for kw in self.OUT_OF_SCOPE_KEYWORDS if kw in q_lower]
+
+        if out_of_scope_matches:
+            # Check if there are also security keywords (mixed intent)
+            security_keywords = [
+                "güvenlik", "security", "hardening", "firewall", "ssh", "rdp",
+                "vulnerability", "zafiyet", "cis", "nist", "iso", "zero trust"
+            ]
+            has_security = any(kw in q_lower for kw in security_keywords)
+
+            # If ONLY out-of-scope keywords (no security), mark as out_of_scope
+            if not has_security:
+                self.stats["total_detections"] += 1
+                self.stats["out_of_scope_count"] += 1
+
+                if self.debug:
+                    print(f"[IntentDetector] Out-of-scope detected: {out_of_scope_matches}")
+
+                return Intent(
+                    type="out_of_scope",
+                    confidence=0.95,
+                    method="keyword",
+                    metadata={"matched_keywords": out_of_scope_matches}
+                )
 
         # ─────────────────────────────────────────
         # 1. SMALLTALK DETECTION (Pattern-based)
