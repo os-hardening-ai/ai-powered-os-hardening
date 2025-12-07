@@ -69,23 +69,22 @@ curl -X POST http://localhost:8000/api/chat \
 
 ## Dokümantasyon
 
-| Dosya | İçerik |
-|-------|---------|
-| [SETUP.md](docs/SETUP.md) | Detaylı kurulum ve konfigürasyon |
-| [API.md](docs/API.md) | API endpoints ve kullanım |
-| [SECURITY.md](docs/SECURITY.md) | Güvenlik özellikleri |
-| [QUICKSTART.md](docs/QUICKSTART.md) | Hızlı başlangıç kılavuzu |
-| **LLM Dokümantasyonu** | |
-| [LLM_ARCHITECTURE.md](docs/LLM_ARCHITECTURE.md) | LLM pipeline, CoT, routing detayları |
-| [PIPELINE_ANALYSIS.md](docs/PIPELINE_ANALYSIS.md) | 5 route detaylı analizi |
-| [PARAMETER_USAGE.md](docs/PARAMETER_USAGE.md) | Parametre kullanım kılavuzu |
-| [PARAMETER_AND_RAG_STRATEGY.md](docs/PARAMETER_AND_RAG_STRATEGY.md) | Parametre ve RAG stratejisi |
-| [PATH_EVALUATION_AND_IMPROVEMENTS.md](docs/PATH_EVALUATION_AND_IMPROVEMENTS.md) | Path değerlendirme ve iyileştirmeler |
-| **RAG Dokümantasyonu** | |
-| [RAG_LLM_INTEGRATION.md](docs/RAG_LLM_INTEGRATION.md) | RAG + LLM entegrasyonu |
-| [RAG_SETUP_GUIDE.md](docs/RAG_SETUP_GUIDE.md) | RAG kurulum ve konfigürasyon |
-| **Test ve Güvenlik** | |
-| [TESTS.md](docs/TESTS.md) | Test dokümantasyonu |
+📖 **[Detaylı Dokümantasyon Rehberi](docs/README.md)**
+
+### Hızlı Başlangıç
+- [QUICKSTART.md](docs/QUICKSTART.md) - 5 dakikada başlayın
+- [SETUP.md](docs/SETUP.md) - Detaylı kurulum
+- [API.md](docs/API.md) - API kullanımı
+
+### Mimari
+- ⭐ [REVISED_ROUTE_ARCHITECTURE.md](docs/REVISED_ROUTE_ARCHITECTURE.md) - 4-Layer güvenlik mimarisi (2025 best practices)
+- [LLM_ARCHITECTURE.md](docs/LLM_ARCHITECTURE.md) - LLM pipeline detayları
+
+### RAG ve Güvenlik
+- [RAG_SETUP_GUIDE.md](docs/RAG_SETUP_GUIDE.md) - RAG kurulum
+- [SECURITY.md](docs/SECURITY.md) - Güvenlik özellikleri
+- [SECURITY_FIXES.md](SECURITY_FIXES.md) - Güvenlik güncellemeleri
+- [TESTS.md](docs/TESTS.md) - Test dokümantasyonu
 
 ---
 
