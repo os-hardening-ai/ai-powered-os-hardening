@@ -9,6 +9,14 @@ Usage:
 
 import sys
 import os
+
+# Fix Windows console encoding for UTF-8 support
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    os.system('chcp 65001 > nul')
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from llm.models import get_llm_clients
@@ -23,17 +31,22 @@ def example_ssh_hardening():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Ubuntu 22.04 için SSH hardening scripti oluştur",
-        os_type="ubuntu_22_04",
+        user_question="Ubuntu 22.04 için SSH hardening scripti oluştur",
+        os="ubuntu_22_04",
         role="admin",
         security_level="high"
     )
 
-    print(f"Input: {ctx.user_input}")
-    print(f"OS: {ctx.os_type}")
+    print(f"Input: {ctx.user_question}")
+    print(f"OS: {ctx.os}")
     print(f"Role: {ctx.role}")
     print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
@@ -56,17 +69,22 @@ def example_firewall_rules():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Windows Server 2022 için temel firewall kuralları oluştur",
-        os_type="windows_server_2022",
+        user_question="Windows Server 2022 için temel firewall kuralları oluştur",
+        os="windows_server_2022",
         role="admin",
         security_level="medium"
     )
 
-    print(f"Input: {ctx.user_input}")
-    print(f"OS: {ctx.os_type}")
+    print(f"Input: {ctx.user_question}")
+    print(f"OS: {ctx.os}")
     print(f"Role: {ctx.role}")
     print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
@@ -89,17 +107,22 @@ def example_rdp_hardening():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Windows 10 için RDP güvenlik ayarları scripti yaz",
-        os_type="windows_10",
+        user_question="Windows 10 için RDP güvenlik ayarları scripti yaz",
+        os="windows_10",
         role="admin",
         security_level="high"
     )
 
-    print(f"Input: {ctx.user_input}")
-    print(f"OS: {ctx.os_type}")
+    print(f"Input: {ctx.user_question}")
+    print(f"OS: {ctx.os}")
     print(f"Role: {ctx.role}")
     print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
@@ -122,17 +145,22 @@ def example_with_zt_enrichment():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Debian 11 için kullanıcı erişim kontrolü scripti oluştur",
-        os_type="debian_11",
+        user_question="Debian 11 için kullanıcı erişim kontrolü scripti oluştur",
+        os="debian_11",
         role="admin",
         security_level="critical"
     )
 
-    print(f"Input: {ctx.user_input}")
-    print(f"OS: {ctx.os_type}")
+    print(f"Input: {ctx.user_question}")
+    print(f"OS: {ctx.os}")
     print(f"Role: {ctx.role}")
     print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")

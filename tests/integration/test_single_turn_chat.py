@@ -9,7 +9,16 @@ Usage:
 """
 
 import sys
+import os
 from pathlib import Path
+
+# Set UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    # Set console code page to UTF-8
+    os.system('chcp 65001 > nul')
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent

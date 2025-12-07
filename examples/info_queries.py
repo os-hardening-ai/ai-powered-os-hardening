@@ -9,6 +9,14 @@ Usage:
 
 import sys
 import os
+
+# Fix Windows console encoding for UTF-8 support
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    os.system('chcp 65001 > nul')
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from llm.models import get_llm_clients
@@ -23,15 +31,20 @@ def example_what_is_ssh():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="SSH nedir ve nasıl çalışır?",
-        os_type="ubuntu_22_04",
+        user_question="SSH nedir ve nasıl çalışır?",
+        os="ubuntu_22_04",
         role="user"
     )
 
-    print(f"Input: {ctx.user_input}")
+    print(f"Input: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -52,15 +65,20 @@ def example_zero_trust():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Zero Trust Architecture nedir? Temel prensipleri nelerdir?",
-        os_type="ubuntu_22_04",
+        user_question="Zero Trust Architecture nedir? Temel prensipleri nelerdir?",
+        os="ubuntu_22_04",
         role="user"
     )
 
-    print(f"Input: {ctx.user_input}")
+    print(f"Input: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -87,15 +105,20 @@ def example_cis_benchmarks():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="CIS Benchmarks nedir? Ubuntu için hangi kuralları içerir?",
-        os_type="ubuntu_22_04",
+        user_question="CIS Benchmarks nedir? Ubuntu için hangi kuralları içerir?",
+        os="ubuntu_22_04",
         role="user"
     )
 
-    print(f"Input: {ctx.user_input}")
+    print(f"Input: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -116,15 +139,20 @@ def example_firewall_concepts():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Firewall stateful ve stateless arasındaki fark nedir?",
-        os_type="ubuntu_22_04",
+        user_question="Firewall stateful ve stateless arasındaki fark nedir?",
+        os="ubuntu_22_04",
         role="user"
     )
 
-    print(f"Input: {ctx.user_input}")
+    print(f"Input: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -145,15 +173,20 @@ def example_nist_standards():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="NIST 800-207 standardı neyi kapsar?",
-        os_type="ubuntu_22_04",
+        user_question="NIST 800-207 standardı neyi kapsar?",
+        os="ubuntu_22_04",
         role="user"
     )
 
-    print(f"Input: {ctx.user_input}")
+    print(f"Input: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)

@@ -113,17 +113,64 @@ class IntentDetector:
     # ═════════════════════════════════════════════
 
     ACTION_KEYWORDS = {
-        # Script generation
-        "script": ["script yaz", "script oluştur", "generate script", "create script"],
-        "automation": ["automation", "otomasyon", "automate", "otomatik"],
+        # Script generation - ENHANCED with more Turkish verbs
+        "script": [
+            "script yaz", "script oluştur", "script hazırla", "script üret",
+            "generate script", "create script", "write script",
+            "betik yaz", "betik oluştur", "bash script", "powershell script"
+        ],
+
+        # Create/Generate verbs (Turkish imperatives)
+        "create": [
+            "oluştur", "yarat", "üret", "hazırla", "yap",
+            "create", "generate", "make", "build", "produce"
+        ],
+
+        # Write verbs
+        "write": [
+            "yaz", "kod yaz", "write", "compose",
+            "için yaz", "için script"  # "for write", "for script"
+        ],
+
+        # Automation
+        "automation": [
+            "automation", "otomasyon", "automate", "otomatik", "otomatikleştir",
+            "automated", "otomatize"
+        ],
 
         # Configuration/Setup
-        "configure": ["yapılandır", "configure", "setup", "kur", "install"],
-        "deploy": ["deploy", "dağıt", "implement", "uygula"],
+        "configure": [
+            "yapılandır", "configure", "setup", "kur", "install",
+            "konfigüre", "ayarla", "konfigürasyon", "configuration"
+        ],
+
+        # Deploy/Apply
+        "deploy": [
+            "deploy", "dağıt", "implement", "uygula",
+            "devreye al", "deployment", "apply"
+        ],
 
         # Full/comprehensive requests
-        "comprehensive": ["full hardening", "tam sıkılaştırma", "comprehensive", "complete setup"],
+        "comprehensive": [
+            "full hardening", "tam sıkılaştırma", "comprehensive", "complete setup",
+            "kapsamlı", "komple", "tüm ayarlar"
+        ],
     }
+
+    # IMPERATIVE PATTERNS - Turkish command forms
+    ACTION_IMPERATIVE_PATTERNS = [
+        # Turkish imperatives: yaz, ver, göster, yap, oluştur, kur, hazırla
+        r'\b(yaz|ver|göster|yap|oluştur|kur|hazırla|üret|yarat)\b',
+
+        # "için X" patterns (for script, for config, etc.)
+        r'için\s+(script|config|hardening|güvenlik|firewall|ssh)',
+
+        # "X oluştur/yaz" patterns
+        r'(script|config|betik|komut)\s+(oluştur|yaz|hazırla|üret)',
+
+        # Direct English imperatives
+        r'\b(create|write|generate|make|build)\s+(script|config|automation)',
+    ]
 
     # ═════════════════════════════════════════════
     # INFO INDICATORS (Explanation/Documentation)
@@ -151,13 +198,15 @@ class IntentDetector:
     # ═════════════════════════════════════════════
 
     OUT_OF_SCOPE_KEYWORDS = [
-        # Weather
-        "hava durumu", "weather", "yağmur", "rain", "snow",
+        # Weather (including standalone "hava" for "bugün hava nasıl?")
+        "hava durumu", "hava nasıl", "weather", "yağmur", "rain", "snow",
+        "bugün hava", "yarın hava", "meteoroloji",
 
         # Math/calculation
         "hesapla", "calculate", "matematik", "math", "toplam", "sum",
+        "kaç yapar", "how much is",
 
-        # General knowledge
+        # General knowledge (not security-related)
         "tarih", "history", "coğrafya", "geography",
 
         # Personal advice
@@ -171,7 +220,7 @@ class IntentDetector:
         "futbol", "football", "basketbol", "basketball",
 
         # Food/cooking
-        "yemek", "recipe", "tarif", "cooking",
+        "yemek", "recipe", "tarif", "cooking", "nasıl pişirilir",
 
         # Travel
         "tatil", "vacation", "seyahat", "travel", "otel", "hotel",
@@ -275,19 +324,29 @@ class IntentDetector:
         action_score = self._count_keywords(q_lower, self.ACTION_KEYWORDS)
         info_score = self._count_keywords(q_lower, self.INFO_KEYWORDS)
 
-        if self.debug:
-            print(f"[IntentDetector] Scores - Action: {action_score}, Info: {info_score}")
+        # Check for imperative patterns (strong action indicator)
+        imperative_match = self._check_imperative_patterns(q_lower)
 
-        # Strong action indicator
-        if action_score >= 2 or (action_score >= 1 and info_score == 0):
+        if self.debug:
+            print(f"[IntentDetector] Scores - Action: {action_score}, Info: {info_score}, Imperative: {imperative_match}")
+
+        # STRONG action indicator: Imperative pattern OR high action score
+        # Imperative patterns are very strong signals (e.g., "oluştur", "yaz")
+        if imperative_match or action_score >= 2 or (action_score >= 1 and info_score == 0):
             self.stats["total_detections"] += 1
             self.stats["action_count"] += 1
 
+            confidence = 0.95 if imperative_match else (0.9 if action_score >= 2 else 0.8)
+
             return Intent(
                 type="action_request",
-                confidence=0.9 if action_score >= 2 else 0.8,
-                method="heuristic",
-                metadata={"action_score": action_score, "info_score": info_score}
+                confidence=confidence,
+                method="imperative" if imperative_match else "heuristic",
+                metadata={
+                    "action_score": action_score,
+                    "info_score": info_score,
+                    "imperative_match": imperative_match
+                }
             )
 
         # Strong info indicator
@@ -336,6 +395,24 @@ class IntentDetector:
                     if self.debug:
                         print(f"[IntentDetector] Matched keyword: '{keyword}' (category: {category})")
         return count
+
+    def _check_imperative_patterns(self, text: str) -> bool:
+        """
+        Check if text contains Turkish/English imperative patterns
+
+        Args:
+            text: Lowercase text
+
+        Returns:
+            True if imperative pattern found (strong action indicator)
+        """
+        for pattern in self.ACTION_IMPERATIVE_PATTERNS:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                if self.debug:
+                    print(f"[IntentDetector] Imperative pattern matched: '{pattern}' -> '{match.group()}'")
+                return True
+        return False
 
     def get_stats(self) -> dict:
         """Get detection statistics"""
@@ -389,6 +466,8 @@ if __name__ == "__main__":
         ("Ubuntu 22.04 için full hardening yapılandır", "action_request", None),
         ("Firewall kurulumu otomatikleştir", "action_request", None),
         ("Script oluştur", "action_request", None),
+        ("Ubuntu 22.04 için basit bir SSH hardening scripti oluştur", "action_request", None),
+        ("Windows 10 için RDP güvenlik ayarları scripti yaz", "action_request", None),
 
         # Ambiguous (should default to info)
         ("SSH güvenliği", "info_request", None),

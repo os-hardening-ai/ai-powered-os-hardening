@@ -9,6 +9,14 @@ Usage:
 
 import sys
 import os
+
+# Fix Windows console encoding for UTF-8 support
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    os.system('chcp 65001 > nul')
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from llm.models import get_llm_clients
@@ -23,17 +31,22 @@ def example_ubuntu():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="SSH güvenlik ayarları için script oluştur",
-        os_type="ubuntu_22_04",
+        user_question="SSH güvenlik ayarları için script oluştur",
+        os="ubuntu_22_04",
         role="admin",
         security_level="high"
     )
 
-    print(f"OS Type: {ctx.os_type}")
-    print(f"Request: {ctx.user_input}")
+    print(f"OS Type: {ctx.os}")
+    print(f"Request: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -51,17 +64,22 @@ def example_debian():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Firewall kuralları oluştur",
-        os_type="debian_11",
+        user_question="Firewall kuralları oluştur",
+        os="debian_11",
         role="admin",
         security_level="medium"
     )
 
-    print(f"OS Type: {ctx.os_type}")
-    print(f"Request: {ctx.user_input}")
+    print(f"OS Type: {ctx.os}")
+    print(f"Request: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -79,17 +97,22 @@ def example_centos():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="SELinux güvenlik ayarları scripti yaz",
-        os_type="centos_7",
+        user_question="SELinux güvenlik ayarları scripti yaz",
+        os="centos_7",
         role="admin",
         security_level="high"
     )
 
-    print(f"OS Type: {ctx.os_type}")
-    print(f"Request: {ctx.user_input}")
+    print(f"OS Type: {ctx.os}")
+    print(f"Request: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -107,17 +130,22 @@ def example_windows_server():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Windows Defender ve firewall ayarları için PowerShell scripti oluştur",
-        os_type="windows_server_2022",
+        user_question="Windows Defender ve firewall ayarları için PowerShell scripti oluştur",
+        os="windows_server_2022",
         role="admin",
         security_level="high"
     )
 
-    print(f"OS Type: {ctx.os_type}")
-    print(f"Request: {ctx.user_input}")
+    print(f"OS Type: {ctx.os}")
+    print(f"Request: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -135,17 +163,22 @@ def example_windows_10():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="RDP güvenlik ayarları scripti",
-        os_type="windows_10",
+        user_question="RDP güvenlik ayarları scripti",
+        os="windows_10",
         role="admin",
         security_level="critical"
     )
 
-    print(f"OS Type: {ctx.os_type}")
-    print(f"Request: {ctx.user_input}")
+    print(f"OS Type: {ctx.os}")
+    print(f"Request: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -163,17 +196,22 @@ def example_rhel():
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
-    pipeline = SecurePipelineV2(llm_small=llm_small, llm_large=llm_large, use_rag=True)
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
 
     ctx = RequestContext(
-        user_input="Audit daemon yapılandırması için script",
-        os_type="rhel_8",
+        user_question="Audit daemon yapılandırması için script",
+        os="rhel_8",
         role="admin",
         security_level="high"
     )
 
-    print(f"OS Type: {ctx.os_type}")
-    print(f"Request: {ctx.user_input}")
+    print(f"OS Type: {ctx.os}")
+    print(f"Request: {ctx.user_question}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
