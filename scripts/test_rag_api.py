@@ -23,7 +23,7 @@ def pretty_print_response(resp_json: dict) -> None:
         print("  " + text[:300].replace("\n", " ") + ("..." if len(text) > 300 else ""))
 
 
-def test_query(query: str, top_k: int = 5) -> None:
+def test_query(query: str, top_k: int = 1) -> None:
     url = f"{BASE_URL}/rag/search"
     payload = {
         "query": query,
