@@ -170,7 +170,7 @@ class SecurePipelineV2:
         # Check if unsafe
         if not safety_result.is_safe:
             if self.debug:
-                print(f"  ❌ REJECTED: {safety_result.reason}")
+                print(f"  [REJECTED]: {safety_result.reason}")
 
             self.stats["total_queries"] += 1
             self.stats["rejected_unsafe"] += 1
@@ -241,7 +241,7 @@ class SecurePipelineV2:
         # Final logging
         if self.debug:
             print("\n" + "="*70)
-            print(f"✅ COMPLETE: {result.layer_path}")
+            print(f"[COMPLETE]: {result.layer_path}")
             print(f"Time: {result.total_time_s:.2f}s | Cost: ${result.estimated_cost:.4f}")
             print("="*70)
 
@@ -264,7 +264,7 @@ class SecurePipelineV2:
         if not pattern_result:
             # Fallback: If pattern matching fails, use info pipeline
             if self.debug:
-                print("  ⚠️ Pattern match failed, falling back to Info Pipeline")
+                print("  [WARNING] Pattern match failed, falling back to Info Pipeline")
 
             return self._handle_layer_3b(ctx, safety, intent)
 
@@ -344,7 +344,7 @@ class SecurePipelineV2:
         if not action_result.success:
             # Missing parameters - ask user
             if self.debug:
-                print(f"  ⚠️ Missing parameters: {action_result.missing_params}")
+                print(f"  [WARNING] Missing parameters: {action_result.missing_params}")
 
             return PipelineResult(
                 success=False,
@@ -362,7 +362,7 @@ class SecurePipelineV2:
 
         # Success - script generated
         if self.debug:
-            print(f"  ✅ Script generated")
+            print(f"  [SUCCESS] Script generated")
             print(f"  Model: {action_result.model_used}")
 
         return PipelineResult(
@@ -392,18 +392,18 @@ class SecurePipelineV2:
         start_time = datetime.now()
 
         # Build polite rejection message
-        message = """ℹ️ **Kapsam Dışı Soru**
+        message = """KAPSAMDISI SORU
 
-Ben sadece **siber güvenlik** ve **işletim sistemi sıkılaştırma** (OS hardening) konularında yardımcı olabiliyorum.
+Ben sadece siber guvenlik ve isletim sistemi sikilaştirma (OS hardening) konularinda yardimci olabiliyorum.
 
-**Size yardımcı olabileceğim konular:**
-- 🔒 SSH, RDP, Firewall hardening
-- 🛡️ CIS Benchmarks ve NIST 800-207 uygulamaları
-- 🔐 Zero Trust Architecture
-- 📋 Güvenlik yapılandırmaları ve scriptleri
-- 🔍 Vulnerability assessment ve risk azaltma
+Size yardimci olabilecegim konular:
+- SSH, RDP, Firewall hardening
+- CIS Benchmarks ve NIST 800-207 uygulamalari
+- Zero Trust Architecture
+- Guvenlik yapilandirmalari ve scriptleri
+- Vulnerability assessment ve risk azaltma
 
-Lütfen güvenlik veya sistem sıkılaştırma ile ilgili bir soru sorun."""
+Lutfen guvenlik veya sistem sikilaştirma ile ilgili bir soru sorun."""
 
         total_time = (datetime.now() - start_time).total_seconds()
 
@@ -427,23 +427,23 @@ Lütfen güvenlik veya sistem sıkılaştırma ile ilgili bir soru sorun."""
 
     def _build_rejection_message(self, safety: SafetyResult) -> str:
         """Build user-friendly rejection message for unsafe queries"""
-        return f"""⚠️ **Güvenlik Uyarısı**
+        return f"""GUVENLIK UYARISI
 
-Bu soru güvenlik politikalarımız kapsamında yanıtlanamıyor.
+Bu soru guvenlik politikalarimiz kapsaminda yanitlanamıyor.
 
-**Kategori**: {safety.category}
-**Sebep**: {safety.reason}
+Kategori: {safety.category}
+Sebep: {safety.reason}
 
-**Neden reddedildi?**
-Bu sistem savunma amaçlı güvenlik sıkılaştırma için tasarlanmıştır. Saldırı, exploit geliştirme veya zararlı amaçlı sorular kabul edilmez.
+Neden reddedildi?
+Bu sistem savunma amacli guvenlik sikilaştirma icin tasarlanmiştir. Saldiri, exploit geliştirme veya zararli amacli sorular kabul edilmez.
 
-**Nasıl yardımcı olabilirim?**
-- ✅ Sistem güvenliği nasıl artırılır?
-- ✅ CIS Benchmark best practices neler?
-- ✅ SSH/RDP hardening nasıl yapılır?
-- ✅ Zero Trust nasıl uygulanır?
+Nasil yardimci olabilirim?
+- Sistem guvenligi nasil artirilir?
+- CIS Benchmark best practices neler?
+- SSH/RDP hardening nasil yapilir?
+- Zero Trust nasil uygulanir?
 
-Lütfen sorunuzu savunma odaklı olacak şekilde yeniden ifade edin.
+Lutfen sorunuzu savunma odakli olacak sekilde yeniden ifade edin.
 """
 
     def get_stats(self) -> dict:
@@ -579,14 +579,14 @@ echo "Done!"
             debug=False
         )
 
-        print(f"\n✅ RESULT:")
+        print(f"\n[RESULT]:")
         print(f"  Path: {result.layer_path}")
         print(f"  Success: {result.success}")
         print(f"  Time: {result.total_time_s:.2f}s")
         print(f"  Cost: ${result.estimated_cost:.4f}")
         print(f"  Answer: {result.answer[:100]}...")
 
-        status = "✅ OK" if expected_layer in result.layer_path else "⚠️ UNEXPECTED"
+        status = "[OK]" if expected_layer in result.layer_path else "[UNEXPECTED]"
         print(f"\nValidation: {status}")
 
     print("\n" + "="*70)

@@ -14,7 +14,7 @@ if project_root not in sys.path:
 
 # Import LLM modules (now llm is importable as a package)
 from llm.context import RequestContext
-from llm.pipeline_optimized import run_optimized_pipeline_with_retry
+from llm.pipeline_v2 import SecurityPipeline
 from llm.models import get_llm_clients
 
 # Import security utilities
@@ -81,12 +81,14 @@ class RAGSource(BaseModel):
 
 class ChatResponse(BaseModel):
     """Chat response payload"""
-    answer: str = Field(..., description="LLM cevabı")
+    answer: str = Field(..., description="LLM cevabi")
     intent: Optional[str] = Field(None, description="Tespit edilen intent")
-    safety_category: Optional[str] = Field(None, description="Güvenlik kategorisi")
+    safety_category: Optional[str] = Field(None, description="Guvenlik kategorisi")
+    layer_path: Optional[str] = Field(None, description="Pipeline katman yolu (1->2->3A gibi)")
     rag_sources: List[RAGSource] = Field(default_factory=list, description="RAG'den gelen kaynaklar")
     stats: Dict[str, Any] = Field(default_factory=dict, description="Pipeline istatistikleri")
     request_id: Optional[str] = Field(None, description="Request ID")
+    estimated_cost: Optional[float] = Field(None, description="Tahmini maliyet ($)")
 
 
 # ──────────────────────────────────────────────
@@ -111,18 +113,24 @@ def _get_llm_clients():
 @router.post("/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest) -> ChatResponse:
     """
-    RAG + LLM birleşik chat endpoint.
+    RAG + LLM birlesik chat endpoint (4-Layer Security Pipeline).
 
-    1. Kullanıcı sorusunu alır
-    2. RAG retrieval yapar (opsiyonel)
-    3. LLM pipeline'ı çalıştırır
-    4. Cevap + kaynak bilgilerini döndürür
+    Layer 1: Safety Classification
+    Layer 2: Intent Detection
+    Layer 3: Routing (Pattern/Info/Action/Out-of-Scope)
+    Layer 4: Generation
+
+    1. Kullanici sorusunu alir
+    2. Guvenlik kontrolu yapar
+    3. Intent tespit eder
+    4. Uygun pipeline'a yonlendirir
+    5. Cevap + kaynak bilgilerini dondurur
     """
     try:
         # LLM clients
         llm_small, llm_large = _get_llm_clients()
 
-        # Request context oluştur
+        # Request context olustur
         ctx = RequestContext(
             user_question=payload.question,
             os=payload.os,
@@ -131,54 +139,50 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
 
-        # Pipeline'ı çalıştır (RAG entegrasyonu pipeline içinde)
-        from pipeline_optimized import OptimizedPipeline
-
-        pipeline = OptimizedPipeline(
+        # Pipeline'i calistir (4-layer security pipeline)
+        pipeline = SecurityPipeline(
             llm_small=llm_small,
             llm_large=llm_large,
-            priority="balanced",
             use_rag=payload.use_rag,
             rag_top_k=payload.rag_top_k,
             rag_min_score=payload.rag_min_score,
+            debug=False,
         )
 
-        result_ctx = pipeline.run(ctx)
+        result = pipeline.run(ctx)
 
-        # RAG kaynaklarını parse et (eğer varsa)
+        # RAG kaynaklarini parse et (eger varsa)
         rag_sources: List[RAGSource] = []
-        if result_ctx.retrieved_context and payload.use_rag:
+        if result.rag_sources:
             try:
-                # RAG context'ten kaynak bilgilerini çıkar
-                # (Bu basit bir parsing, gerçek implementasyonda daha robust olmalı)
-                import re
-
-                pattern = r'\[Kaynak \d+\] \(Relevance: ([\d.]+)\)\nDoküman: (.+?)\nBölüm: (.+?)\n'
-                matches = re.findall(pattern, result_ctx.retrieved_context)
-
-                for idx, (score, source, section) in enumerate(matches, start=1):
+                for idx, source_data in enumerate(result.rag_sources, start=1):
                     rag_sources.append(
                         RAGSource(
                             id=f"source_{idx}",
-                            score=float(score),
-                            source=source,
-                            section=section,
+                            score=source_data.get("score", 0.0),
+                            source=source_data.get("source", "Unknown"),
+                            section=source_data.get("section", "Unknown"),
                         )
                     )
             except Exception as e:
                 print(f"[ChatAPI] Failed to parse RAG sources: {e}")
 
         # Sanitize output (remove any leaked prompts/instructions)
-        sanitized_answer = sanitize_output(result_ctx.final_answer or "Cevap üretilemedi.")
+        sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
 
-        # Response oluştur
+        # Response olustur
         return ChatResponse(
             answer=sanitized_answer,
-            intent=str(result_ctx.intent) if result_ctx.intent else None,
-            safety_category=result_ctx.safety.category if result_ctx.safety else None,
+            intent=result.intent.type if result.intent else None,
+            safety_category=result.safety.category if result.safety else None,
+            layer_path=result.layer_path,
             rag_sources=rag_sources,
-            stats=pipeline.stats,
-            request_id=result_ctx.request_id,
+            stats={
+                "total_time_s": result.total_time_s,
+                "layer_path": result.layer_path,
+            },
+            request_id=ctx.request_id,
+            estimated_cost=result.estimated_cost,
         )
 
     except Exception as e:
