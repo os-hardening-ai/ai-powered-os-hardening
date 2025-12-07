@@ -22,6 +22,8 @@ from ..context import RequestContext
 from ..prompts.cot_prompts import CoTSecurityAnalyzer
 from ..utils.parameter_inference import ParameterInferenceEngine
 from ..config import CONFIG
+from .zt_enrichment import ZeroTrustEnricher, ZTEnrichment
+from .output_validator import OutputValidator, ValidationResult
 
 # Type alias
 LLMCallable = Callable[[str], str]
@@ -38,6 +40,8 @@ class ActionQueryResult:
     model_used: str = "unknown"
     response_time_s: float = 0.0
     estimated_cost: float = 0.0
+    zt_enrichment: Optional[ZTEnrichment] = None  # Zero Trust enrichment
+    validation: Optional[ValidationResult] = None  # Output validation result
 
 
 class ActionPipeline:
@@ -59,16 +63,19 @@ class ActionPipeline:
     def __init__(
         self,
         llm_large: LLMCallable,
+        llm_small: Optional[LLMCallable] = None,
         rag_builder: Optional[Callable] = None,
         debug: bool = False,
     ):
         """
         Args:
             llm_large: Large model callable (scripts need quality)
+            llm_small: Small model for ZT enrichment (optional)
             rag_builder: RAG context builder (for security guidelines)
             debug: Enable debug logging
         """
         self.llm_large = llm_large
+        self.llm_small = llm_small or llm_large
         self.rag_builder = rag_builder
         self.debug = debug
 
@@ -77,6 +84,12 @@ class ActionPipeline:
 
         # Parameter inference engine
         self.param_engine = ParameterInferenceEngine(debug=debug)
+
+        # Zero Trust enrichment
+        self.zt_enricher = ZeroTrustEnricher(llm=self.llm_small, debug=debug)
+
+        # Output validator
+        self.validator = OutputValidator(llm=self.llm_small, use_llm_validation=True, debug=debug)
 
         self.stats = {
             "total_requests": 0,
@@ -138,7 +151,22 @@ class ActionPipeline:
             print(f"  Role: {ctx.role}")
             print(f"  Security Level: {ctx.security_level}")
 
-        # RAG retrieval (security guidelines for script)
+        # STEP 2A: Zero Trust Enrichment
+        zt_enrichment = self.zt_enricher.enrich(ctx)
+
+        if self.debug:
+            print(f"[ActionPipeline] ZT Enrichment complete:")
+            print(f"  Principles: {', '.join(zt_enrichment.zt_principles[:3])}...")
+            print(f"  Standards: {', '.join(zt_enrichment.standards[:3])}...")
+            print(f"  Impact: {zt_enrichment.impact_level}")
+
+        # Store in context for prompt building
+        ctx.zt_principles = zt_enrichment.zt_principles
+        ctx.standards = zt_enrichment.standards
+        ctx.extra["impact_level"] = zt_enrichment.impact_level
+        ctx.extra["rollback_approach"] = zt_enrichment.rollback_approach
+
+        # STEP 2B: RAG retrieval (security guidelines for script)
         if self.rag_builder:
             try:
                 rag_context = self.rag_builder.retrieve_context(ctx.user_question)
@@ -151,12 +179,36 @@ class ActionPipeline:
                 if self.debug:
                     print(f"[ActionPipeline] RAG failed: {e}")
 
-        # CoT script generation
+        # STEP 2C: CoT script generation
         script = self._generate_script_with_cot(ctx)
+
+        # STEP 2D: Output Validation
+        validation = self.validator.validate(
+            output=script,
+            intent="action_request",
+            use_deep_check=True  # Critical for scripts
+        )
+
+        if not validation.is_valid:
+            if self.debug:
+                print(f"[ActionPipeline] Validation found {len(validation.issues)} issue(s)")
+
+            # Use corrected output if available, otherwise use original with warning
+            if validation.corrected_output:
+                script = validation.corrected_output
+                if self.debug:
+                    print(f"[ActionPipeline] Using corrected output")
+            else:
+                # Add validation warnings to script
+                warning = f"\n\n# VALIDATION WARNINGS:\n"
+                for issue in validation.issues[:3]:  # Max 3 warnings
+                    warning += f"# - {issue}\n"
+                warning += "# Please review carefully before using.\n"
+                script = script + warning
 
         # Success stats
         self.stats["successful_scripts"] += 1
-        estimated_cost = 0.0025  # Script generation = expensive (large prompt + output)
+        estimated_cost = 0.0025 + 0.0005 + 0.001  # Script + ZT + Validation
         self.stats["total_cost"] += estimated_cost
 
         response_time = (datetime.now() - start_time).total_seconds()
@@ -165,9 +217,11 @@ class ActionPipeline:
             success=True,
             answer=script,
             script=script,
-            model_used="large+CoT",
+            model_used="large+CoT+ZT+Validation",
             response_time_s=response_time,
             estimated_cost=estimated_cost,
+            zt_enrichment=zt_enrichment,
+            validation=validation,
         )
 
     def _validate_metadata(self, ctx: RequestContext) -> List[str]:
