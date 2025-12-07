@@ -136,6 +136,7 @@ python tests/run_all_tests.py
 ### RAG, Güvenlik ve Test
 - [RAG_SETUP_GUIDE.md](docs/RAG_SETUP_GUIDE.md) - RAG kurulum
 - [SECURITY.md](docs/SECURITY.md) - Güvenlik özellikleri
+- [SECURITY_UPDATES.md](SECURITY_UPDATES.md) - Güvenlik güncellemeleri ve açık düzeltmeleri
 - [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) - Test rehberi (50 test case)
 - [tests/README.md](tests/README.md) - Test dokümantasyonu
 
