@@ -15,7 +15,12 @@
       "Bash(pip_audit:*)",
       "Bash(python tests/test_dataset.py:*)",
       "Bash(python -m pip install:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(nul)",
+      "Bash(mv:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

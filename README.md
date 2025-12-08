@@ -117,28 +117,26 @@ python tests/run_all_tests.py
 
 ---
 
-## Dokümantasyon
+## 📚 Dokümantasyon
 
-📖 **[Detaylı Dokümantasyon Rehberi](docs/README.md)**
+Tüm dokümantasyon Türkçe olarak hazırlanmıştır. Adım adım kılavuzlar ve detaylı açıklamalar için aşağıdaki belgelere göz atın:
 
-### Hızlı Başlangıç
-- [QUICKSTART_BASIT.md](docs/guides/QUICKSTART_BASIT.md) - Basit Türkçe rehber
-- [QUICKSTART.md](docs/QUICKSTART.md) - 5 dakikada başlayın
-- [SETUP.md](docs/SETUP.md) - Detaylı kurulum
-- [API.md](docs/API.md) - API kullanımı
+### Temel Dokümantasyon
+1. **[Proje Özeti](docs/01_PROJE_OZETI.md)** - Neler yaptık, nasıl yaptık, sonuçlar
+2. **[Pipeline ve Route'lar](docs/02_PIPELINE_VE_ROUTELAR.md)** - 4-katmanlı mimari detayları, akış şemaları
+3. **[Kurulum ve Kullanım](docs/03_KURULUM_VE_KULLANIM.md)** - Adım adım kurulum, örnek kullanımlar
+4. **[API Dokümantasyonu](docs/04_API_DOKUMANTASYONU.md)** - Endpoint'ler, parametreler, örnekler
 
-### Mimari ve LLM
-- [REVISED_ROUTE_ARCHITECTURE.md](docs/REVISED_ROUTE_ARCHITECTURE.md) - 4-Layer güvenlik mimarisi (2025 best practices)
-- [LLM_ARCHITECTURE.md](docs/LLM_ARCHITECTURE.md) - LLM pipeline detayları
-- [LLM_IMPROVEMENTS_ANALYSIS.md](docs/LLM_IMPROVEMENTS_ANALYSIS.md) - Modern LLM teknikleri ve iyileştirmeler
-- [STEPS_TO_LAYERS_MIGRATION.md](docs/STEPS_TO_LAYERS_MIGRATION.md) - Mimari geçiş rehberi
+### Teknik Dokümantasyon
+5. **[Teknolojiler](docs/05_TEKNOLOJILER.md)** - Kullanılan teknolojiler ve nedenleri
+6. **[LLM Uygulamaları](docs/06_LLM_UYGULAMALARI.md)** - ML intent detection, prompt engineering
+7. **[RAG Sistemi](docs/07_RAG_SISTEMI.md)** - Retrieval-augmented generation detayları
 
-### RAG, Güvenlik ve Test
-- [RAG_SETUP_GUIDE.md](docs/RAG_SETUP_GUIDE.md) - RAG kurulum
-- [SECURITY.md](docs/SECURITY.md) - Güvenlik özellikleri
-- [SECURITY_UPDATES.md](SECURITY_UPDATES.md) - Güvenlik güncellemeleri ve açık düzeltmeleri
-- [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) - Test rehberi (50 test case)
-- [tests/README.md](tests/README.md) - Test dokümantasyonu
+### Hızlı Linkler
+- 🚀 [Hızlı Başlangıç](docs/03_KURULUM_VE_KULLANIM.md#adım-1-repository-clone)
+- 📖 [API Kullanımı](docs/04_API_DOKUMANTASYONU.md#1-chat-api)
+- 🔍 [Test Sonuçları](docs/archive/VALIDATION_REPORT.md)
+- 📊 [Performans Metrikleri](docs/01_PROJE_OZETI.md#sonuçlar-ve-başarılar)
 
 ---
 
@@ -147,18 +145,28 @@ python tests/run_all_tests.py
 ```
 ai-powered-os-hardening/
 ├── api/                   # FastAPI routers & middleware
+│   ├── router_chat.py    # /api/chat endpoint
+│   └── router_rag.py     # /rag/search endpoint
 ├── llm/
 │   ├── layers/           # 4-layer security pipeline
-│   │   ├── safety_classifier.py      # Layer 1: Safety
-│   │   ├── intent_detector.py        # Layer 2: Intent
-│   │   ├── pattern_pipeline.py       # Layer 3A: Smalltalk
-│   │   ├── info_pipeline.py          # Layer 3B: Info
-│   │   ├── action_pipeline.py        # Layer 3C: Action
-│   │   ├── zt_enrichment.py          # Zero Trust enrichment
-│   │   └── output_validator.py       # Output validation
+│   │   ├── safety_classifier.py          # Layer 1: Safety
+│   │   ├── hybrid_intent_detector.py     # Layer 2: ML Intent
+│   │   ├── pattern_pipeline.py           # Layer 3A: Smalltalk
+│   │   ├── info_pipeline.py              # Layer 3B: Info
+│   │   ├── action_pipeline.py            # Layer 3C: Action
+│   │   ├── zt_enrichment.py              # Zero Trust enrichment
+│   │   └── output_validator.py           # Output validation
+│   ├── ml_intent_detector.py             # ML training & inference
 │   ├── pipeline_v2.py    # Main 4-layer pipeline
 │   └── models.py         # LLM model configuration
 ├── core/                  # RAG core (vector DB, embeddings)
+│   └── rag/              # RAG components
+├── data/                  # Training datasets
+│   ├── intent_training_dataset.csv       # 1,230 examples
+│   └── cis_benchmarks/   # CIS PDFs
+├── models/                # Trained ML models
+│   ├── intent_model.joblib               # Logistic Regression
+│   └── intent_vectorizer.joblib          # TF-IDF
 ├── tests/
 │   ├── integration/      # Integration tests
 │   ├── unit/             # Unit tests
@@ -170,7 +178,15 @@ ai-powered-os-hardening/
 │   ├── script_generation.py
 │   ├── info_queries.py
 │   └── different_os_types.py
-├── docs/                 # Comprehensive documentation
+├── docs/                 # Türkçe dokümantasyon
+│   ├── 01_PROJE_OZETI.md
+│   ├── 02_PIPELINE_VE_ROUTELAR.md
+│   ├── 03_KURULUM_VE_KULLANIM.md
+│   ├── 04_API_DOKUMANTASYONU.md
+│   ├── 05_TEKNOLOJILER.md
+│   ├── 06_LLM_UYGULAMALARI.md
+│   ├── 07_RAG_SISTEMI.md
+│   └── archive/          # Eski dokümantasyon
 └── main.py              # API entry point
 ```
 
