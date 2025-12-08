@@ -150,11 +150,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
 
         result = pipeline.run(ctx)
 
-        # RAG kaynaklarini parse et (eger varsa)
+        # RAG kaynaklarini parse et (eger varsa - metadata'dan)
         rag_sources: List[RAGSource] = []
-        if result.rag_sources:
+        if result.metadata and "rag_sources" in result.metadata:
             try:
-                for idx, source_data in enumerate(result.rag_sources, start=1):
+                for idx, source_data in enumerate(result.metadata["rag_sources"], start=1):
                     rag_sources.append(
                         RAGSource(
                             id=f"source_{idx}",

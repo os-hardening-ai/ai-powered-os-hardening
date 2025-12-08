@@ -25,7 +25,10 @@
       "Bash(do sed -i \"s|sys.path.insert(0, os.path.join(os.path.dirname(__file__), ''..''))|sys.path.insert(0, os.path.join(os.path.dirname(__file__), ''../..''))|g\" \"$file\")",
       "Bash(done)",
       "Bash(curl:*)",
-      "Bash(pip uninstall:*)"
+      "Bash(pip uninstall:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
