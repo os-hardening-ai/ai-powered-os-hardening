@@ -1,0 +1,1231 @@
+text,intent
+Merhaba,greeting
+Selam,greeting
+Hi,greeting
+Hello,greeting
+Hey,greeting
+Günaydın,greeting
+İyi günler,greeting
+İyi akşamlar,greeting
+Nasılsın,greeting
+How are you,greeting
+Hoşgeldin,greeting
+Merhaba nasılsın,greeting
+Selam dostum,greeting
+Hey there,greeting
+Hi there,greeting
+Günaydın size,greeting
+İyi günler arkadaşım,greeting
+Merhaba ben yeni geldim,greeting
+Selam sana,greeting
+Hey nasıl gidiyor,greeting
+Hoş bulduk,greeting
+Selamlar,greeting
+Merhabalar,greeting
+Herkese merhaba,greeting
+Good morning,greeting
+Good afternoon,greeting
+Good evening,greeting
+Hiya,greeting
+Howdy,greeting
+Yo,greeting
+Sup,greeting
+Greetings,greeting
+Welcome,greeting
+Nice to meet you,greeting
+Tanıştığımıza memnun oldum,greeting
+Memnun oldum,greeting
+Selamün aleyküm,greeting
+Aleykümselam,greeting
+Selam kardeşim,greeting
+Merhaba efendim,greeting
+Selamlar herkese,greeting
+Hey hey,greeting
+Hola,greeting
+Bonjour,greeting
+Guten tag,greeting
+Ciao,greeting
+Namaste,greeting
+Konnichiwa,greeting
+Privet,greeting
+Ola,greeting
+Salam,greeting
+Merhaba ben buraya yeniyim,greeting
+İlk defa geliyorum selam,greeting
+Yeni katıldım merhaba,greeting
+Merhaba ben Alex,greeting
+Selam ben Ayşe,greeting
+Merhaba benim adım Mehmet,greeting
+Hey ben Can,greeting
+Selamlar ben Zeynep,greeting
+Merhaba takım,greeting
+Hey ekip,greeting
+Selamlar gruba,greeting
+Merhaba yönetici,greeting
+Selam admin,greeting
+Hey destek ekibi,greeting
+Merhaba güvenlik ekibi,greeting
+Selamlar siber güvenlik,greeting
+Merhaba DevOps ekibi,greeting
+Hey SysAdmin,greeting
+Selam SOC ekibi,greeting
+Merhaba IR ekibi,greeting
+İyi sabahlar,greeting
+Günaydın herkese,greeting
+Sabah sabah merhaba,greeting
+Erken kalkmış kuşlara günaydın,greeting
+Öğle selamları,greeting
+Akşam selamları,greeting
+Gece vakti selam,greeting
+Geç saatte merhaba,greeting
+Yeni güne merhaba,greeting
+Hafta sonu selamları,greeting
+Pazartesi merhaba,greeting
+Cuma akşamı selam,greeting
+Hafta başı selamları,greeting
+Ayın ilk günü merhaba,greeting
+Yılbaşı selamları,greeting
+Mutlu yıllar merhaba,greeting
+Bayram selamları,greeting
+Tatil selamları,greeting
+Dönüş sonrası merhaba,greeting
+Uzun zamandır selam,greeting
+Hasret gidermeye geldim merhaba,greeting
+Çok uzun süre oldu selam,greeting
+Yeniden merhaba,greeting
+Tekrar selamlar,greeting
+Geri döndüm merhaba,greeting
+Yine buradayım selam,greeting
+Tekrardan hey,greeting
+Bir kez daha merhaba,greeting
+Yine geldik selam,greeting
+İşte karşınızdayım merhaba,greeting
+Buyrun burdayım selam,greeting
+Hazırım merhaba,greeting
+Emrinize amadeyim selam,greeting
+Size nasıl yardımcı olabilirim merhaba,greeting
+Bir sorunum var merhaba,greeting
+Yardıma ihtiyacım var selam,greeting
+Acil yardım lazım merhaba,greeting
+Destek gerekiyor selam,greeting
+Problem var merhaba,greeting
+Sorun çıktı selam,greeting
+Hata aldım merhaba,greeting
+Bug buldum selam,greeting
+Güvenlik açığı merhaba,greeting
+Sızıntı tespit ettim selam,greeting
+Anomali gördüm merhaba,greeting
+Alarm aldık selam,greeting
+İnsident oluştu merhaba,greeting
+Breach var selam,greeting
+Saldırı altındayız merhaba,greeting
+APT tespit ettim selam,greeting
+Malware bulaştı merhaba,greeting
+Ransomware saldırısı selam,greeting
+DDoS geliyor merhaba,greeting
+Phishing denemesi var selam,greeting
+SQL injection gördüm merhaba,greeting
+XSS açığı buldum selam,greeting
+CSRF zafiyeti var merhaba,greeting
+RCE mümkün görünüyor selam,greeting
+Privilege escalation olabilir merhaba,greeting
+Lateral movement gördüm selam,greeting
+Exfiltration şüphesi var merhaba,greeting
+C2 trafiği tespit ettim selam,greeting
+Botnet aktivitesi var merhaba,greeting
+Brute force denemesi selam,greeting
+Credential stuffing görüyoruz merhaba,greeting
+Token hijacking olabilir selam,greeting
+Session fixation açığı merhaba,greeting
+MITM saldırısı şüphesi selam,greeting
+DNS tunneling görüldü merhaba,greeting
+Port scanning tespit ettim selam,greeting
+Vulnerability scanning yapılıyor merhaba,greeting
+Recon aktivitesi var selam,greeting
+Enumeration görüyorum merhaba,greeting
+Exploitation denemeleri selam,greeting
+Post-exploitation aktivite merhaba,greeting
+Persistence kurulmaya çalışılıyor selam,greeting
+Defense evasion görüldü merhaba,greeting
+Obfuscation kullanılıyor selam,greeting
+Anti-forensics teknikler var merhaba,greeting
+Log temizleme girişimi selam,greeting
+Timestamp manipulation merhaba,greeting
+File deletion toplu selam,greeting
+Registry değişikliği anormal merhaba,greeting
+Scheduled task oluşturuldu selam,greeting
+WMI event subscription var merhaba,greeting
+COM hijacking şüphesi selam,greeting
+DLL injection tespit ettim merhaba,greeting
+Process hollowing görüldü selam,greeting
+Reflective DLL loading var merhaba,greeting
+Fileless malware olabilir selam,greeting
+Living off the land teknikler merhaba,greeting
+PowerShell Empire IOC'leri selam,greeting
+Cobalt Strike beacon var merhaba,greeting
+Metasploit aktivitesi merhaba,greeting
+Mimikatz çalıştırıldı selam,greeting
+PsExec kullanımı tespit ettim merhaba,greeting
+WinRM abuse var selam,greeting
+SMB exploit denemeleri merhaba,greeting
+RDP brute force selam,greeting
+SSH tunnel kuruluyor merhaba,greeting
+VPN bypass girişimi selam,greeting
+Firewall kuralı değişti merhaba,greeting
+ACL manipulasyonu var selam,greeting
+Group Policy değişikliği merhaba,greeting
+Günaydın güvenlik ekibi,greeting
+Merhaba incident response,greeting
+Selam SOC analysts,greeting
+Hey threat hunters,greeting
+Sabah shift başlıyor merhaba,greeting
+Görüşürüz,farewell
+Hoşçakal,farewell
+Hoşça kal,farewell
+Bye,farewell
+Goodbye,farewell
+Güle güle,farewell
+Elveda,farewell
+Kendine iyi bak,farewell
+Take care,farewell
+See you,farewell
+Görüşmek üzere,farewell
+Yakında görüşürüz,farewell
+Sonra görüşürüz,farewell
+İyi günler dilerim,farewell
+Sağlıcakla kal,farewell
+Hoşçakalın,farewell
+İyi akşamlar bye,farewell
+Güle güle hoşçakal,farewell
+Kendine dikkat et,farewell
+Dikkatli ol,farewell
+Sağlıcakla,farewell
+Esenlikle kal,farewell
+Allah'a ısmarladık,farewell
+Güle güle git,farewell
+Uğurlar olsun,farewell
+İyi yolculuklar,farewell
+Yolun açık olsun,farewell
+Selametle,farewell
+Hayırlı olsun,farewell
+Allah yolunu açık etsin,farewell
+Kalın sağlıcakla,farewell
+Allahaısmarladık,farewell
+Vesselam,farewell
+Hadi eyvallah,farewell
+Eyvallah görüşürüz,farewell
+Tamam o zaman görüşürüz,farewell
+Peki görüşmek üzere,farewell
+Anlaşıldı güle güle,farewell
+Teşekkürler hoşçakal,farewell
+Sağol bye,farewell
+Çok sağol görüşürüz,farewell
+Yardımın için teşekkürler hoşçakal,farewell
+Minnettarım güle güle,farewell
+Destek için sağol bye,farewell
+Yardımcı olduğun için teşekkürler görüşürüz,farewell
+Zamanını ayırdığın için sağol hoşçakal,farewell
+Çok iyiydin bye,farewell
+Harikaydın görüşürüz,farewell
+Süperdin güle güle,farewell
+Mükemmeldin hoşçakal,farewell
+İyi günler dilerim tekrar,farewell
+İyi çalışmalar dilerim hoşçakal,farewell
+Başarılar dilerim güle güle,farewell
+Kolay gelsin görüşürüz,farewell
+İşin rast gitsin hoşçakal,farewell
+Hayırlısı olsun bye,farewell
+Allah kolaylık versin güle güle,farewell
+Rabbim yardımcın olsun hoşçakal,farewell
+İnşallah tekrar görüşürüz,farewell
+Umarım bir dahaki sefere görüşürüz,farewell
+Belki sonra tekrar konuşuruz bye,farewell
+Daha sonra devam ederiz hoşçakal,farewell
+Şimdilik bu kadar güle güle,farewell
+Bugünlük yeter görüşürüz,farewell
+Artık gideyim hoşçakal,farewell
+Gitmem lazım bye,farewell
+Kaçar gibi oldum güle güle,farewell
+Acelem var hoşçakal,farewell
+Toplantıya geç kalıyorum bye,farewell
+Patron arıyor gitmem lazım güle güle,farewell
+Kod review var görüşürüz,farewell
+Sprint planning başlıyor hoşçakal,farewell
+Daily standup var bye,farewell
+Retrospective toplantısı güle güle,farewell
+Demo time hoşçakal,farewell
+Production deployment var görüşürüz,farewell
+Hotfix atmalıyım bye,farewell
+Rollback yapacağım güle güle,farewell
+Incident var koşuyorum hoşçakal,farewell
+Alert aldık hemen gidiyorum bye,farewell
+Breach olmuş acelem var güle güle,farewell
+SIEM alarm veriyor görüşürüz,farewell
+IDS/IPS tetiklendi koşuyorum hoşçakal,farewell
+DLP policy ihlal edilmiş bye,farewell
+Forensics başlamalı güle güle,farewell
+Malware analysis yapmalıyım hoşçakal,farewell
+Threat hunting devam etmeli görüşürüz,farewell
+Vulnerability assessment bitmedi bye,farewell
+Penetration test yapıyorum güle güle,farewell
+Red team exercise var hoşçakal,farewell
+Blue team drill başladı görüşürüz,farewell
+Purple team session var bye,farewell
+Tabletop exercise yapacağız güle güle,farewell
+BCP testi başlıyor hoşçakal,farewell
+Disaster recovery drill görüşürüz,farewell
+Compliance audit var bye,farewell
+SOC2 preparation güle güle,farewell
+ISO 27001 denetimi hoşçakal,farewell
+GDPR uyumluluk kontrolü görüşürüz,farewell
+PCI DSS audit bye,farewell
+HIPAA compliance check güle güle,farewell
+NIST framework assessment hoşçakal,farewell
+CIS benchmark kontrolü görüşürüz,farewell
+SANS controls review bye,farewell
+MITRE ATT&CK mapping güle güle,farewell
+Cyber Kill Chain analysis hoşçakal,farewell
+Diamond Model çalışması görüşürüz,farewell
+Threat modeling session bye,farewell
+Risk assessment meeting güle güle,farewell
+Security posture review hoşçakal,farewell
+Maturity model scoring görüşürüz,farewell
+Gap analysis yapıyoruz bye,farewell
+Remediation planning güle güle,farewell
+Patch management hoşçakal,farewell
+Teşekkür ederim,thanks
+Teşekkürler,thanks
+Sağol,thanks
+Sağ ol,thanks
+Çok sağol,thanks
+Eyvallah,thanks
+Thanks,thanks
+Thank you,thanks
+Thx,thanks
+Ty,thanks
+Süper teşekkürler,thanks
+Harika sağol,thanks
+Mükemmel teşekkür ederim,thanks
+Perfect thanks,thanks
+Great thank you,thanks
+Çok yardımcı oldun sağol,thanks
+Gerçekten çok teşekkürler,thanks
+Minnettarım,thanks
+Müteşekkirim,thanks
+Şükranlarımı sunarım,thanks
+Çok naziksin teşekkürler,thanks
+İyisin sağol,thanks
+Adamın dibi,thanks
+Kralsın teşekkürler,thanks
+Efsanesin sağol,thanks
+Harikaydın thanks,thanks
+Süperdin teşekkürler,thanks
+Mükemmelsin sağol,thanks
+En iyisisin thank you,thanks
+Tam aradığım buydu teşekkürler,thanks
+İşte bu sağol,thanks
+Tam istediğim gibi thanks,thanks
+Eksiksiz cevap teşekkürler,thanks
+Detaylı açıklama için sağol,thanks
+Net cevap için thank you,thanks
+Hızlı yanıt teşekkürler,thanks
+Anında yardım sağol,thanks
+Vakit kaybettirmeden thanks,thanks
+Çabuk davrandın teşekkürler,thanks
+Hemen çözdün sağol,thanks
+Sorunsuz hallettik thank you,thanks
+Problem çözüldü teşekkürler,thanks
+Hata giderildi sağol,thanks
+Bug fix oldu thanks,thanks
+Patch başarılı teşekkürler,thanks
+Güncelleme tamam sağol,thanks
+Deployment başarılı thank you,thanks
+Rollout sorunsuz teşekkürler,thanks
+Migration tamamlandı sağol,thanks
+Backup alındı thanks,thanks
+Restore edildi teşekkürler,thanks
+Recovery başarılı sağol,thanks
+Hardening yapıldı thank you,thanks
+Securing bitti teşekkürler,thanks
+Lockdown tamam sağol,thanks
+Firewall kuralları eklendi thanks,thanks
+ACL'ler güncellendi teşekkürler,thanks
+Politikalar uygulandı sağol,thanks
+Compliance sağlandı thank you,thanks
+Audit geçildi teşekkürler,thanks
+Zafiyet kapatıldı sağol,thanks
+Vulnerability patched thanks,thanks
+Exploit engellendi teşekkürler,thanks
+Saldırı durduruldu sağol,thanks
+Threat mitigated thank you,thanks
+Risk azaltıldı teşekkürler,thanks
+Impact minimize edildi sağol,thanks
+Incident kapatıldı thanks,thanks
+Alert temizlendi teşekkürler,thanks
+False positive düzeltildi sağol,thanks
+Tuning yapıldı thank you,thanks
+Threshold ayarlandı teşekkürler,thanks
+Baseline güncellendi sağol,thanks
+Anomaly detection iyileşti thanks,thanks
+SIEM kuralları optimize teşekkürler,thanks
+Correlation geliştirildi sağol,thanks
+Detection capability arttı thank you,thanks
+Response time iyileşti teşekkürler,thanks
+MTTR düştü sağol,thanks
+MTTD azaldı thanks,thanks
+Coverage genişledi teşekkürler,thanks
+Visibility arttı sağol,thanks
+Telemetry zenginleşti thank you,thanks
+Log sources eklendi teşekkürler,thanks
+Data ingestion arttı sağol,thanks
+Retention uzatıldı thanks,thanks
+Archiving düzenlendi teşekkürler,thanks
+Yardım,help
+Help,help
+Destek,help
+Support,help
+Assist,help
+Yardıma ihtiyacım var,help
+Help me,help
+Can you help,help
+I need help,help
+Nasıl kullanırım,help
+How do I use,help
+Sana bir sorum var,help
+I have a question,help
+Bunu nasıl yaparım,help
+How to do this,help
+Anlamadım,help
+I don't understand,help
+Açıklayabilir misin,help
+Can you explain,help
+Yardımcı olur musun,help
+Could you assist,help
+Destek gerekiyor,help
+Need support,help
+Acil yardım,help
+Urgent help,help
+Hemen yardım lazım,help
+Need help now,help
+SOS,help
+Emergency,help
+Acil durum,help
+Critical,help
+Kritik,help
+Çok önemli,help
+Very important,help
+Hemen bakılmalı,help
+Immediate attention,help
+Öncelikli,help
+Priority,help
+Yüksek öncelik,help
+High priority,help
+Acil müdahale,help
+Urgent response,help
+Anında çözüm,help
+Quick fix,help
+Hızlı yardım,help
+Fast help,help
+Çabuk destek,help
+Quick support,help
+Ne yapmalıyım,help
+What should I do,help
+Nasıl ilerlemeliyim,help
+How to proceed,help
+Hangi adımı atmalıyım,help
+What's next step,help
+Devam nasıl,help
+How to continue,help
+Tıkandım,help
+I'm stuck,help
+Çıkmaza girdim,help
+Dead end,help
+İlerleme yok,help
+No progress,help
+Çözemiyorum,help
+Can't solve,help
+Başaramıyorum,help
+Can't succeed,help
+Hata alıyorum,help
+Getting error,help
+Problem çıkıyor,help
+Having problem,help
+Sorun var,help
+There's issue,help
+Çalışmıyor,help
+Not working,help
+Bozuk,help
+Broken,help
+Arızalı,help
+Faulty,help
+Hatalı,help
+Erroneous,help
+Yanlış gidiyor,help
+Going wrong,help
+Düzgün çalışmıyor,help
+Not functioning properly,help
+Beklediğim gibi değil,help
+Not as expected,help
+Beklenmeyen sonuç,help
+Unexpected result,help
+Garip davranış,help
+Strange behavior,help
+Anormal durum,help
+Abnormal situation,help
+SSH nedir,info_request
+Firewall nasıl çalışır,info_request
+SELinux ne işe yarar,info_request
+AppArmor nedir,info_request
+iptables nasıl kullanılır,info_request
+ufw nedir,info_request
+fail2ban ne yapar,info_request
+ClamAV nasıl kurulur,info_request
+Rootkit nedir,info_request
+Malware nasıl tespit edilir,info_request
+What is SSH,info_request
+How does firewall work,info_request
+Explain SELinux,info_request
+What is zero trust,info_request
+Define CIA triad,info_request
+AAA nedir,info_request
+Authentication ne demek,info_request
+Authorization nasıl çalışır,info_request
+Accounting nedir,info_request
+MFA ne işe yarar,info_request
+2FA nedir,info_request
+SSO nasıl kurulur,info_request
+LDAP nedir,info_request
+Active Directory nasıl entegre edilir,info_request
+Kerberos ne işe yarar,info_request
+NTLM nedir,info_request
+SAML nasıl çalışır,info_request
+OAuth2 nedir,info_request
+OpenID Connect ne demek,info_request
+JWT nasıl kullanılır,info_request
+API key nedir,info_request
+Bearer token ne işe yarar,info_request
+Certificate-based auth nedir,info_request
+PKI nasıl kurulur,info_request
+X.509 certificate nedir,info_request
+TLS handshake nasıl olur,info_request
+SSL/TLS farkı nedir,info_request
+HTTPS nasıl çalışır,info_request
+Certificate pinning nedir,info_request
+HSTS ne işe yarar,info_request
+CSP nedir,info_request
+CORS nasıl yapılandırılır,info_request
+SOP nedir,info_request
+XSS nedir,info_request
+CSRF nasıl önlenir,info_request
+SQL injection nedir,info_request
+NoSQL injection nasıl tespit edilir,info_request
+Command injection nedir,info_request
+Path traversal nasıl önlenir,info_request
+SSRF nedir,info_request
+XXE ne işe yarar,info_request
+Deserialization attack nedir,info_request
+SSTI nasıl tespit edilir,info_request
+LDAP injection nedir,info_request
+XML injection nasıl önlenir,info_request
+Buffer overflow nedir,info_request
+Heap overflow nasıl exploit edilir,info_request
+Stack overflow nedir,info_request
+Use-after-free nasıl çalışır,info_request
+Race condition nedir,info_request
+TOCTOU nasıl önlenir,info_request
+Integer overflow nedir,info_request
+Format string vulnerability nasıl kullanılır,info_request
+ROP chain nedir,info_request
+DEP bypass nasıl yapılır,info_request
+ASLR nedir,info_request
+Stack canary nasıl çalışır,info_request
+PIE nedir,info_request
+RELRO ne işe yarar,info_request
+Fuzzing nedir,info_request
+Static analysis nasıl yapılır,info_request
+Dynamic analysis nedir,info_request
+SAST vs DAST farkı,info_request
+Penetration testing nedir,info_request
+Red team vs blue team,info_request
+Purple team nedir,info_request
+Threat hunting nasıl yapılır,info_request
+Threat intelligence nedir,info_request
+IOC nedir,info_request
+TTP ne demek,info_request
+MITRE ATT&CK nedir,info_request
+Cyber Kill Chain nasıl çalışır,info_request
+Diamond Model nedir,info_request
+F3EAD cycle nasıl uygulanır,info_request
+OODA loop nedir,info_request
+IDS vs IPS farkı,info_request
+NIDS nedir,info_request
+HIDS nasıl kurulur,info_request
+Snort nedir,info_request
+Suricata nasıl yapılandırılır,info_request
+Zeek nedir,info_request
+OSSEC ne işe yarar,info_request
+Wazuh nedir,info_request
+SIEM nedir,info_request
+Splunk nasıl kullanılır,info_request
+ELK Stack nedir,info_request
+Elasticsearch nasıl kurulur,info_request
+Logstash nedir,info_request
+Kibana nasıl yapılandırılır,info_request
+Graylog nedir,info_request
+Fluentd ne işe yarar,info_request
+Log aggregation nedir,info_request
+Log correlation nasıl yapılır,info_request
+Log analysis nedir,info_request
+Log retention policy nasıl belirlenir,info_request
+SIEM use case nedir,info_request
+Detection rule nasıl yazılır,info_request
+Correlation rule nedir,info_request
+Alert fatigue nasıl önlenir,info_request
+False positive nasıl azaltılır,info_request
+True positive rate nedir,info_request
+SOC nedir,info_request
+NOC vs SOC farkı,info_request
+CSIRT nedir,info_request
+CERT nasıl kurulur,info_request
+Incident response nedir,info_request
+IR playbook nasıl oluşturulur,info_request
+Runbook nedir,info_request
+SOAR nedir,info_request
+Security orchestration nasıl yapılır,info_request
+Security automation nedir,info_request
+Ansible for security nasıl kullanılır,info_request
+Terraform security best practices,info_request
+Infrastructure as Code güvenliği,info_request
+GitOps security nedir,info_request
+DevSecOps nedir,info_request
+Shift left security nasıl uygulanır,info_request
+Security as Code nedir,info_request
+Policy as Code nasıl yazılır,info_request
+Compliance as Code nedir,info_request
+OPA nedir,info_request
+Rego language nasıl öğrenilir,info_request
+Sentinel policy nedir,info_request
+Inspec nasıl kullanılır,info_request
+Chef compliance nedir,info_request
+Puppet security modules,info_request
+SaltStack security state,info_request
+Cloud security nedir,info_request
+AWS security best practices,info_request
+Azure security center nedir,info_request
+GCP security command center,info_request
+Cloud IAM nedir,info_request
+S3 bucket policy nasıl yazılır,info_request
+Azure AD conditional access,info_request
+GCP VPC firewall rules,info_request
+Cloud KMS nedir,info_request
+Secrets management nedir,info_request
+Vault by HashiCorp nasıl kullanılır,info_request
+AWS Secrets Manager nedir,info_request
+Azure Key Vault nasıl kurulur,info_request
+GCP Secret Manager nedir,info_request
+Encryption at rest nedir,info_request
+Encryption in transit nasıl sağlanır,info_request
+End-to-end encryption nedir,info_request
+Symmetric encryption nedir,info_request
+Asymmetric encryption nasıl çalışır,info_request
+AES nedir,info_request
+RSA encryption nedir,info_request
+ECC nedir,info_request
+Diffie-Hellman key exchange,info_request
+Perfect forward secrecy nedir,info_request
+Post-quantum cryptography,info_request
+Quantum-resistant algorithms,info_request
+Hash function nedir,info_request
+SHA-256 nasıl çalışır,info_request
+MD5 neden güvenli değil,info_request
+HMAC nedir,info_request
+Salt nedir,info_request
+Pepper ne işe yarar,info_request
+Password hashing best practices,info_request
+bcrypt nedir,info_request
+scrypt nasıl kullanılır,info_request
+Argon2 nedir,info_request
+PBKDF2 nasıl çalışır,info_request
+Rainbow table attack nedir,info_request
+Dictionary attack nasıl önlenir,info_request
+Brute force attack nedir,info_request
+Credential stuffing nasıl tespit edilir,info_request
+Password spraying nedir,info_request
+Pass-the-hash attack nasıl çalışır,info_request
+Pass-the-ticket nedir,info_request
+Kerberoasting nasıl yapılır,info_request
+AS-REP roasting nedir,info_request
+Golden ticket attack nasıl önlenir,info_request
+Silver ticket nedir,info_request
+Mimikatz nedir,info_request
+BloodHound nasıl kullanılır,info_request
+Impacket nedir,info_request
+CrackMapExec nasıl çalışır,info_request
+PowerView nedir,info_request
+Rubeus nasıl kullanılır,info_request
+Responder nedir,info_request
+LLMNR poisoning nasıl önlenir,info_request
+NBT-NS spoofing nedir,info_request
+WPAD hijacking nasıl çalışır,info_request
+SMB relay attack nedir,info_request
+NTLM relay nasıl önlenir,info_request
+PetitPotam nedir,info_request
+PrintNightmare nasıl patch edilir,info_request
+EternalBlue nedir,info_request
+BlueKeep vulnerability nasıl test edilir,info_request
+Zerologon nedir,info_request
+SolarWinds supply chain attack,info_request
+Log4Shell vulnerability nedir,info_request
+Spring4Shell nasıl tespit edilir,info_request
+ProxyLogon nedir,info_request
+ProxyShell nasıl patch edilir,info_request
+ProxyNotShell nedir,info_request
+Follina vulnerability nasıl çalışır,info_request
+DogWalk nedir,info_request
+NoPac vulnerability nasıl test edilir,info_request
+Dirty Pipe nedir,info_request
+PwnKit nasıl exploit edilir,info_request
+Polkit vulnerability nedir,info_request
+Sudo vulnerability nasıl patch edilir,info_request
+Baron Samedit nedir,info_request
+BootHole vulnerability nasıl çalışır,info_request
+GRUB2 bootloader security,info_request
+Secure Boot nedir,info_request
+UEFI security best practices,info_request
+TPM nedir,info_request
+Measured boot nasıl çalışır,info_request
+Attestation nedir,info_request
+Remote attestation nasıl yapılır,info_request
+Trusted execution environment nedir,info_request
+Intel SGX nedir,info_request
+AMD SEV nasıl kullanılır,info_request
+ARM TrustZone nedir,info_request
+Confidential computing nasıl uygulanır,info_request
+Homomorphic encryption nedir,info_request
+Secure multi-party computation,info_request
+Zero-knowledge proof nedir,info_request
+Differential privacy nasıl sağlanır,info_request
+Federated learning nedir,info_request
+Privacy-preserving ML nedir,info_request
+GDPR compliance nasıl sağlanır,info_request
+CCPA nedir,info_request
+PCI DSS requirements nelerdir,info_request
+HIPAA compliance checklist,info_request
+SOC 2 audit nasıl hazırlanır,info_request
+ISO 27001 certification süreci,info_request
+NIST Cybersecurity Framework,info_request
+CIS Controls nedir,info_request
+SANS Top 25 nedir,info_request
+OWASP Top 10 güncel liste,info_request
+CVE nedir,info_request
+CVSS scoring nasıl yapılır,info_request
+NVD database nedir,info_request
+Exploit DB nasıl kullanılır,info_request
+Packet Storm nedir,info_request
+SecurityFocus archive,info_request
+CERT/CC advisories nedir,info_request
+CISA alerts nasıl takip edilir,info_request
+NSA cybersecurity guidance,info_request
+ENISA recommendations nedir,info_request
+NCSC guidance UK nasıl uygulanır,info_request
+BSI grundschutz nedir,info_request
+ANSSI recommendations France,info_request
+ACSC essential eight nedir,info_request
+Cyber Essentials UK scheme,info_request
+Zero trust architecture nedir,info_request
+Never trust always verify prensibi,info_request
+Micro-segmentation nedir,info_request
+Network segmentation best practices,info_request
+VLAN security nasıl sağlanır,info_request
+SDN security nedir,info_request
+NFV security challenges,info_request
+5G security concerns nedir,info_request
+Edge computing security,info_request
+Fog computing nedir,info_request
+IoT security best practices,info_request
+OT security nedir,info_request
+ICS security nasıl sağlanır,info_request
+SCADA security challenges,info_request
+Purdue model nedir,info_request
+Industrial zone segmentation,info_request
+Safety instrumented systems nedir,info_request
+Functional safety vs cybersecurity,info_request
+IEC 62443 standards nedir,info_request
+NERC CIP compliance nedir,info_request
+Maritime cybersecurity standards,info_request
+Aviation cybersecurity nedir,info_request
+Healthcare device security,info_request
+Medical device cybersecurity,info_request
+FDA cybersecurity guidance,info_request
+Automotive cybersecurity nedir,info_request
+Connected car security challenges,info_request
+V2X security nedir,info_request
+CAN bus security nasıl sağlanır,info_request
+Smart grid security nedir,info_request
+Energy sector cybersecurity,info_request
+Critical infrastructure protection,info_request
+National security systems nedir,info_request
+Classified information handling,info_request
+TEMPEST standards nedir,info_request
+EMSEC nedir,info_request
+Side-channel attacks nasıl önlenir,info_request
+Timing attack nedir,info_request
+Power analysis nasıl yapılır,info_request
+Fault injection attack nedir,info_request
+Cold boot attack nasıl çalışır,info_request
+Evil maid attack nedir,info_request
+Physical security controls nelerdir,info_request
+Data center security best practices,info_request
+Server room hardening nasıl yapılır,info_request
+Rack security nedir,info_request
+Cable management security concerns,info_request
+KVM security nedir,info_request
+IPMI security hardening,info_request
+BMC security nedir,info_request
+iLO security best practices,info_request
+iDRAC hardening nasıl yapılır,info_request
+CIMC security nedir,info_request
+Out-of-band management security,info_request
+Serial console security nasıl sağlanır,info_request
+USB security policies nedir,info_request
+Removable media control nasıl uygulanır,info_request
+DLP nedir,info_request
+Data loss prevention strategies,info_request
+Exfiltration detection nasıl yapılır,info_request
+C2 communication nasıl tespit edilir,info_request
+Beaconing detection nedir,info_request
+DNS tunneling nasıl engellenir,info_request
+ICMP tunneling nedir,info_request
+HTTP/HTTPS tunneling nasıl tespit edilir,info_request
+SSH scripti oluştur,action_request
+Firewall yapılandır,action_request
+Create hardening script,action_request
+Configure SELinux,action_request
+Setup fail2ban,action_request
+Install ClamAV,action_request
+Deploy security policy,action_request
+Generate SSH keys,action_request
+Harden Linux server,action_request
+Secure Windows server,action_request
+Ubuntu 22.04 SSH hardening scripti oluştur,action_request
+Windows Server 2022 firewall kuralları yaz,action_request
+CentOS 8 SELinux configuration script,action_request
+Debian 11 AppArmor profili oluştur,action_request
+RHEL 9 security baseline script,action_request
+Fedora workstation hardening automation,action_request
+Arch Linux security configuration,action_request
+openSUSE Leap hardening script yaz,action_request
+Alpine Linux docker security script,action_request
+Kali Linux pentesting automation,action_request
+Parrot OS security tools kurulum scripti,action_request
+Ubuntu Server 20.04 CIS benchmark uygula,action_request
+Windows 10 Enterprise hardening GPO oluştur,action_request
+Windows 11 security baseline PowerShell script,action_request
+macOS Ventura security configuration script,action_request
+FreeBSD jail security hardening,action_request
+OpenBSD pf firewall rules oluştur,action_request
+NetBSD security configuration automation,action_request
+Solaris zone security hardening script,action_request
+AIX security baseline configuration,action_request
+HP-UX hardening automation script yaz,action_request
+ESXi host security configuration,action_request
+vCenter security hardening script,action_request
+Hyper-V security baseline PowerShell,action_request
+KVM host hardening script oluştur,action_request
+Proxmox VE security configuration,action_request
+XenServer security hardening automation,action_request
+Docker container security scanning script,action_request
+Kubernetes cluster hardening manifest,action_request
+OpenShift security policy yaml oluştur,action_request
+Rancher security baseline configuration,action_request
+ECS task security hardening,action_request
+EKS cluster security policy deploy,action_request
+AKS security configuration script,action_request
+GKE hardening terraform module yaz,action_request
+Istio security policy oluştur,action_request
+Linkerd mtls configuration,action_request
+Consul service mesh security script,action_request
+Envoy proxy security hardening,action_request
+NGINX security configuration generate,action_request
+Apache hardening script oluştur,action_request
+HAProxy security baseline,action_request
+Traefik security configuration yaml,action_request
+Caddy server hardening script,action_request
+Lighttpd security configuration,action_request
+IIS security hardening PowerShell script,action_request
+Tomcat security baseline configuration,action_request
+JBoss security hardening script,action_request
+WebLogic security configuration automation,action_request
+WebSphere security baseline script,action_request
+PostgreSQL security hardening sql,action_request
+MySQL database security configuration,action_request
+MariaDB security baseline script,action_request
+MongoDB security hardening configuration,action_request
+Redis security configuration script,action_request
+Elasticsearch cluster security hardening,action_request
+Cassandra security baseline configuration,action_request
+Neo4j security hardening script,action_request
+InfluxDB security configuration,action_request
+TimescaleDB security hardening,action_request
+Oracle database security baseline,action_request
+SQL Server security hardening script,action_request
+Azure SQL security configuration,action_request
+RDS security baseline terraform,action_request
+CloudSQL security hardening script,action_request
+AWS EC2 security group rules terraform,action_request
+Azure NSG security rules bicep,action_request
+GCP firewall rules terraform module,action_request
+AWS VPC security hardening cloudformation,action_request
+Azure Virtual Network security baseline,action_request
+GCP VPC security configuration script,action_request
+AWS IAM security policy json oluştur,action_request
+Azure RBAC security configuration,action_request
+GCP IAM security baseline terraform,action_request
+AWS S3 bucket security policy,action_request
+Azure Storage security hardening,action_request
+GCP Cloud Storage security configuration,action_request
+AWS Lambda security baseline SAM template,action_request
+Azure Functions security hardening,action_request
+GCP Cloud Functions security configuration,action_request
+AWS ECS security policy terraform,action_request
+Azure Container Instances security,action_request
+GCP Cloud Run security hardening,action_request
+AWS EKS security baseline eksctl,action_request
+Azure AKS security configuration bicep,action_request
+GCP GKE security hardening terraform,action_request
+AWS CloudTrail security configuration,action_request
+Azure Activity Log security baseline,action_request
+GCP Cloud Audit Logs configuration,action_request
+AWS GuardDuty enable terraform,action_request
+Azure Sentinel deployment script,action_request
+GCP Security Command Center configuration,action_request
+AWS Security Hub baseline terraform,action_request
+Azure Defender deployment bicep,action_request
+GCP SCC security findings automation,action_request
+Splunk security app deployment script,action_request
+ELK Stack security configuration docker-compose,action_request
+Graylog security baseline ansible playbook,action_request
+Wazuh manager deployment script,action_request
+OSSEC server configuration automation,action_request
+Suricata IDS rules deployment script,action_request
+Snort IDS configuration hardening,action_request
+Zeek NSM deployment automation,action_request
+Moloch full packet capture setup script,action_request
+Arkime deployment configuration,action_request
+TheHive incident response platform deploy,action_request
+Cortex analyzer deployment script,action_request
+MISP threat intelligence platform setup,action_request
+OpenCTI deployment docker-compose,action_request
+YETI threat intelligence configuration,action_request
+Volatility memory forensics automation script,action_request
+Autopsy digital forensics deployment,action_request
+Sleuth Kit forensics analysis script,action_request
+SIFT workstation configuration,action_request
+REMnux malware analysis setup,action_request
+Cuckoo Sandbox deployment automation,action_request
+CAPE Sandbox configuration script,action_request
+Any.Run API integration script,action_request
+VirusTotal API automation script,action_request
+Hybrid Analysis integration,action_request
+Joe Sandbox API client script,action_request
+Metasploit Framework penetration testing automation,action_request
+Cobalt Strike C2 infrastructure setup,action_request
+Empire C2 deployment script,action_request
+Covenant C2 configuration,action_request
+Mythic C2 framework setup,action_request
+Sliver C2 deployment automation,action_request
+PoshC2 infrastructure script,action_request
+Merlin C2 configuration,action_request
+Koadic C2 deployment,action_request
+Pupy RAT setup script,action_request
+Havoc C2 framework configuration,action_request
+Burp Suite Pro automation script,action_request
+OWASP ZAP security scanning automation,action_request
+Nikto web scanner deployment,action_request
+SQLMap automation script oluştur,action_request
+XSStrike XSS detection automation,action_request
+Commix command injection scanner,action_request
+SSRF Sheriff deployment script,action_request
+NoSQLMap automation configuration,action_request
+Wfuzz fuzzing automation script,action_request
+Ffuf web fuzzer deployment,action_request
+Gobuster directory bruteforce automation,action_request
+Feroxbuster deployment script,action_request
+Dirsearch automation configuration,action_request
+Amass subdomain enumeration automation,action_request
+Subfinder deployment script,action_request
+Assetfinder automation configuration,action_request
+Nuclei vulnerability scanner deployment,action_request
+Nmap security scanning automation script,action_request
+Masscan port scanning automation,action_request
+Rustscan deployment configuration,action_request
+Naabu port scanner automation,action_request
+HTTPx http probing automation,action_request
+Aquatone screenshot automation script,action_request
+EyeWitness deployment configuration,action_request
+Gowitness automation script,action_request
+WhatWeb fingerprinting automation,action_request
+Wappalyzer technology detection script,action_request
+Retire.js vulnerable library detection,action_request
+Safety Python dependency checker automation,action_request
+Snyk security scanning integration,action_request
+Trivy container security scanning,action_request
+Grype vulnerability scanner deployment,action_request
+Anchore container scanning automation,action_request
+Clair security scanner configuration,action_request
+Falco runtime security deployment,action_request
+AppArmor profile generation script,action_request
+SELinux policy module creation automation,action_request
+grsecurity kernel hardening configuration,action_request
+PaX security patches automation,action_request
+KSPP kernel hardening script,action_request
+Seccomp profile generation,action_request
+Landlock LSM configuration,action_request
+Yama LSM hardening script,action_request
+LoadPin kernel module configuration,action_request
+Integrity measurement architecture setup,action_request
+Audit daemon configuration hardening,action_request
+auditd rules deployment script,action_request
+rsyslog security configuration,action_request
+syslog-ng deployment automation,action_request
+journald security hardening configuration,action_request
+logrotate security policy script,action_request
+Logwatch deployment configuration,action_request
+AIDE file integrity monitoring setup,action_request
+Tripwire integrity checking automation,action_request
+OSSEC HIDS deployment script,action_request
+Samhain HIDS configuration,action_request
+rkhunter rootkit detection automation,action_request
+chkrootkit deployment script,action_request
+LMD malware detection configuration,action_request
+ClamAV antivirus automation script,action_request
+Lynis security auditing automation,action_request
+OpenSCAP compliance scanning script,action_request
+Scap Security Guide baseline application,action_request
+Tenable Nessus scanner automation,action_request
+OpenVAS vulnerability scanner deployment,action_request
+Greenbone Security Manager setup,action_request
+Qualys agent deployment script,action_request
+Rapid7 InsightVM agent automation,action_request
+Nexpose scanner configuration,action_request
+Acunetix web scanner automation,action_request
+Invicti security scanner integration,action_request
+Veracode SAST scanning automation,action_request
+Checkmarx SAST integration script,action_request
+SonarQube security rules configuration,action_request
+Semgrep SAST deployment automation,action_request
+Bandit Python SAST configuration,action_request
+Brakeman Rails security scanner,action_request
+FindSecBugs Java scanner automation,action_request
+ESLint security plugin configuration,action_request
+TSLint security rules deployment,action_request
+Gosec Go security scanner automation,action_request
+Staticcheck Go linter security rules,action_request
+Shellcheck shell script security,action_request
+PSScriptAnalyzer PowerShell security rules,action_request
+Ansible-lint security checks configuration,action_request
+Terraform security scanning tfsec,action_request
+Checkov IaC security scanning automation,action_request
+Terrascan deployment script,action_request
+KICS IaC security scanner configuration,action_request
+Bugün hava nasıl,out_of_scope
+Yemek tarifi ver,out_of_scope
+Hangi film izlemeliyim,out_of_scope
+Matematik problemi çöz,out_of_scope
+Hava durumu nasıl,out_of_scope
+Akşam yemeği önerisi,out_of_scope
+Film önerisi yap,out_of_scope
+Müzik öneri,out_of_scope
+Kitap tavsiyesi,out_of_scope
+Seyahat önerisi,out_of_scope
+Otel tavsiyesi,out_of_scope
+Restoran önerisi,out_of_scope
+Kahve tarifi,out_of_scope
+Pasta yapmak,out_of_scope
+Spor sonuçları,out_of_scope
+Futbol maçı skoru,out_of_scope
+Hisse senedi fiyatı,out_of_scope
+Döviz kuru,out_of_scope
+Kripto para fiyatı,out_of_scope
+Bitcoin ne kadar,out_of_scope
+Borsa kapanışı,out_of_scope
+Altın fiyatları,out_of_scope
+Emlak piyasası,out_of_scope
+Araba fiyatları,out_of_scope
+Telefon modelleri,out_of_scope
+Bilgisayar tavsiyesi,out_of_scope
+Oyun önerisi,out_of_scope
+PS5 oyunları,out_of_scope
+Xbox Game Pass,out_of_scope
+Steam indirimleri,out_of_scope
+Epic Games ücretsiz oyun,out_of_scope
+Netflix dizi önerisi,out_of_scope
+Amazon Prime video,out_of_scope
+Disney Plus içerik,out_of_scope
+YouTube video önerisi,out_of_scope
+TikTok trendleri,out_of_scope
+Instagram gönderisi,out_of_scope
+Twitter trending,out_of_scope
+Facebook marketplace,out_of_scope
+LinkedIn iş ilanları,out_of_scope
+Reddit popular,out_of_scope
+Discord sunucuları,out_of_scope
+Telegram kanalları,out_of_scope
+WhatsApp durumu,out_of_scope
+Snapchat filtreleri,out_of_scope
+BeReal zamanı,out_of_scope
+Clubhouse odaları,out_of_scope
+Aşk hayatı,out_of_scope
+İlişki tavsiyesi,out_of_scope
+Flört teknikleri,out_of_scope
+Evlilik önerisi,out_of_scope
+Boşanma süreci,out_of_scope
+Çocuk eğitimi,out_of_scope
+Hamilelik takvibi,out_of_scope
+Bebek isimleri,out_of_scope
+Sağlık tavsiyesi,out_of_scope
+İlaç kullanımı,out_of_scope
+Diyet programı,out_of_scope
+Kilo verme yöntemleri,out_of_scope
+Fitness programı,out_of_scope
+Yoga dersleri,out_of_scope
+Meditasyon teknikleri,out_of_scope
+Uyku düzeni,out_of_scope
+Rüya tabiri,out_of_scope
+Burç yorumu,out_of_scope
+Astroloji haritası,out_of_scope
+Numeroloji hesabı,out_of_scope
+Tarot falı,out_of_scope
+Kahve falı,out_of_scope
+El falı,out_of_scope
+Yıldız falı,out_of_scope
+Kristal güçleri,out_of_scope
+Enerji temizliği,out_of_scope
+Çakra dengesi,out_of_scope
+Reiki healing,out_of_scope
+Feng shui uygulaması,out_of_scope
+Vaastu shastra,out_of_scope
+Mandala çizimi,out_of_scope
+Mantra okuma,out_of_scope
+Kundalini awakening,out_of_scope
+Third eye opening,out_of_scope
+Astral projection,out_of_scope
+Lucid dreaming,out_of_scope
+Law of attraction,out_of_scope
+Manifestation teknikleri,out_of_scope
+Positive affirmations,out_of_scope
+Mindfulness pratikleri,out_of_scope
+Breathwork exercises,out_of_scope
+Pranayama teknikleri,out_of_scope
+Tai chi hareketleri,out_of_scope
+Qigong pratiği,out_of_scope
+Aikido teknikleri,out_of_scope
+Judo hareketi,out_of_scope
+Karate kata,out_of_scope
+Taekwondo kick,out_of_scope
+Muay Thai training,out_of_scope
+Boxing combinations,out_of_scope
+MMA techniques,out_of_scope
+BJJ submissions,out_of_scope
+Wrestling takedowns,out_of_scope
+Parkour moves,out_of_scope
+Freerunning tricks,out_of_scope
+Skateboard tricks,out_of_scope
+BMX stunts,out_of_scope
+Snowboard techniques,out_of_scope
+Surf waves,out_of_scope
+Scuba diving tips,out_of_scope
+Paragliding spots,out_of_scope
+Rock climbing routes,out_of_scope
+Mountaineering gear,out_of_scope
+Camping equipment,out_of_scope
+Hiking trails,out_of_scope
+Backpacking tips,out_of_scope
+Travel destinations,out_of_scope
+Vacation packages,out_of_scope
+Flight tickets,out_of_scope
+Hotel booking,out_of_scope
+Airbnb listing,out_of_scope
+Hostel recommendations,out_of_scope
+Car rental,out_of_scope
+Train schedule,out_of_scope
+Bus timings,out_of_scope
+Ferry routes,out_of_scope
+Cruise packages,out_of_scope
+Tour operators,out_of_scope
+Travel insurance,out_of_scope
+Visa requirements,out_of_scope
+Passport renewal,out_of_scope
+Currency exchange,out_of_scope
+Local cuisine,out_of_scope
+Street food,out_of_scope
+Fine dining,out_of_scope
+Merhaba arkadaşlar,greeting
+Selamün aleyküm ve rahmetullah,greeting
+İyi geceler,greeting
+Güle güle uyu,greeting
+İyi uykular,greeting
+Hoş geldin aramıza,greeting
+Safa geldin,greeting
+Hoş bulduk seni,greeting
+Nasılsınız hepiniz,greeting
+İyi misin,greeting
+Ne haber,greeting
+Ne var ne yok,greeting
+Naber,greeting
+Nasıl gidiyor işler,greeting
+Her şey yolunda mı,greeting
+Keyifler nasıl,greeting
+Moraller bozuk mu,greeting
+Hayat nasıl,greeting
+Gün nasıl geçiyor,greeting
+Yeni bir gün yeni umutlar,greeting
+Şimdilik hoşçakal,farewell
+Yarın görüşürüz,farewell
+Haftaya görüşmek üzere,farewell
+Gelecek hafta görüşürüz,farewell
+Ayın sonunda tekrar,farewell
+Önümüzdeki toplantıda,farewell
+Demo günü görüşelim,farewell
+Sprint bitiminde,farewell
+Release sonrası konuşalım,farewell
+Deployment tamamlandıktan sonra,farewell
+Rollback sonrası,farewell
+Hotfix bitince,farewell
+Patch Tuesday sonrası,farewell
+Maintenance window bitiminde,farewell
+Change request onaylandıktan sonra,farewell
+CAB meeting sonrası,farewell
+Post-mortem toplantısında,farewell
+RCA tamamlandıktan sonra,farewell
+Incident kapatıldıktan sonra,farewell
+Problem çözüldükten sonra,farewell
+Workaround uygulandıktan sonra,farewell
+Escalation sonrası konuşuruz,farewell
+Service restored olunca,farewell
+Systems back online olunca,farewell
+Degraded performance düzelince,farewell
+Latency issues çözülünce,farewell
+Throughput iyileşince,farewell
+Error rate düşünce,farewell
+False positive temizlenince,farewell
+Alert tuning bitince,farewell
+Rule optimization tamamlanınca,farewell
+Baseline update sonrası,farewell
+Threat intel update gelince,farewell
+IOC refresh tamamlanınca,farewell
+Signature update sonrası,farewell
+Policy update bitince,farewell
+Teşekkürler gerçekten,thanks
+Çok müteşekkirim,thanks
+Son derece minnettar,thanks
+Yardımın çok değerli,thanks
+Çok işime yaradı,thanks
+Tam zamanında geldi,thanks
+Çok kıymetli,thanks
+Paha biçilmez yardım,thanks
+Altın değerinde bilgi,thanks
+Harika açıklama teşekkürler,thanks
+Net ve anlaşılır sağol,thanks
+Tam aradığım cevap thanks,thanks
+Kritik yardım teşekkürler,thanks

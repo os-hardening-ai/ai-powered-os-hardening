@@ -13,7 +13,9 @@
       "Bash(python -m pip_audit:*)",
       "Bash(pip install:*)",
       "Bash(pip_audit:*)",
-      "Bash(python tests/test_dataset.py:*)"
+      "Bash(python tests/test_dataset.py:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

@@ -28,7 +28,7 @@ from datetime import datetime
 
 from .context import RequestContext
 from .layers.safety_classifier import SafetyClassifier, SafetyResult
-from .layers.intent_detector import IntentDetector, Intent
+from .layers.hybrid_intent_detector import HybridIntentDetector, HybridIntent
 from .layers.pattern_responder import PatternResponderHandler, PatternResponse
 from .layers.info_pipeline import InfoPipeline, InfoQueryResult
 from .layers.action_pipeline import ActionPipeline, ActionQueryResult
@@ -45,7 +45,7 @@ class PipelineResult:
     answer: str
     layer_path: str  # e.g., "1→2→3A" (safety→intent→pattern)
     safety: SafetyResult
-    intent: Intent
+    intent: HybridIntent
     total_time_s: float
     estimated_cost: float
     metadata: dict  # Additional info for debugging
@@ -105,7 +105,7 @@ class SecurePipelineV2:
         )
 
         # Layer 2: Intent Detection
-        self.intent_detector = IntentDetector(debug=debug)
+        self.intent_detector = HybridIntentDetector(use_ml=True, debug=debug)
 
         # Layer 3A: Pattern Responder
         self.pattern_handler = PatternResponderHandler(debug=debug)
