@@ -90,29 +90,29 @@ curl -X POST http://localhost:8000/api/chat \
 
 ```bash
 # Basit sohbet örneği
-python examples/simple_chat.py
+python llm/examples/simple_chat.py
 
 # Script oluşturma örnekleri
-python examples/script_generation.py
+python llm/examples/script_generation.py
 
 # Bilgi soruları örnekleri
-python examples/info_queries.py
+python llm/examples/info_queries.py
 
 # Farklı OS tipleri
-python examples/different_os_types.py
+python llm/examples/different_os_types.py
 ```
 
 ### Test Etme
 
 ```bash
 # Tek soruluk chat testi
-python tests/integration/test_single_turn_chat.py
+python llm/tests/integration/test_single_turn_chat.py
 
 # Tüm 50 test case ile değerlendirme
-python tests/pipeline_evaluator.py
+python llm/tests/pipeline_evaluator.py
 
 # Tüm testleri çalıştır
-python tests/run_all_tests.py
+python llm/tests/run_all_tests.py
 ```
 
 ---
@@ -156,7 +156,18 @@ ai-powered-os-hardening/
 │   │   ├── action_pipeline.py            # Layer 3C: Action
 │   │   ├── zt_enrichment.py              # Zero Trust enrichment
 │   │   └── output_validator.py           # Output validation
-│   ├── ml_intent_detector.py             # ML training & inference
+│   ├── examples/         # Usage examples
+│   │   ├── simple_chat.py
+│   │   ├── script_generation.py
+│   │   ├── info_queries.py
+│   │   └── different_os_types.py
+│   ├── tests/            # Test suite
+│   │   ├── integration/  # Integration tests
+│   │   ├── unit/         # Unit tests
+│   │   ├── test_dataset.py       # 50 test cases
+│   │   ├── pipeline_evaluator.py # Automated evaluation
+│   │   └── run_all_tests.py      # Test runner
+│   ├── ml_intent_detector.py     # ML training & inference
 │   ├── pipeline_v2.py    # Main 4-layer pipeline
 │   └── models.py         # LLM model configuration
 ├── core/                  # RAG core (vector DB, embeddings)
@@ -167,17 +178,6 @@ ai-powered-os-hardening/
 ├── models/                # Trained ML models
 │   ├── intent_model.joblib               # Logistic Regression
 │   └── intent_vectorizer.joblib          # TF-IDF
-├── tests/
-│   ├── integration/      # Integration tests
-│   ├── unit/             # Unit tests
-│   ├── test_dataset.py   # 50 test cases
-│   ├── pipeline_evaluator.py  # Automated evaluation
-│   └── run_all_tests.py  # Test runner
-├── examples/             # Usage examples
-│   ├── simple_chat.py
-│   ├── script_generation.py
-│   ├── info_queries.py
-│   └── different_os_types.py
 ├── docs/                 # Türkçe dokümantasyon
 │   ├── 01_PROJE_OZETI.md
 │   ├── 02_PIPELINE_VE_ROUTELAR.md

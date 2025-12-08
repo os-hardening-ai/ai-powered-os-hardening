@@ -26,7 +26,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from llm.eval.test_dataset import TEST_DATASET, get_test_cases_by_tag
+from llm.tests.test_dataset import TEST_DATASET, get_test_cases_by_tag
 from llm.pipeline_v2 import SecurityPipeline
 from llm.context import RequestContext
 from llm.models import get_llm_clients

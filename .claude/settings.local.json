@@ -20,7 +20,12 @@
       "Bash(rmdir:*)",
       "Bash(nul)",
       "Bash(mv:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(for file in script_generation.py info_queries.py different_os_types.py)",
+      "Bash(do sed -i \"s|sys.path.insert(0, os.path.join(os.path.dirname(__file__), ''..''))|sys.path.insert(0, os.path.join(os.path.dirname(__file__), ''../..''))|g\" \"$file\")",
+      "Bash(done)",
+      "Bash(curl:*)",
+      "Bash(pip uninstall:*)"
     ],
     "deny": [],
     "ask": []

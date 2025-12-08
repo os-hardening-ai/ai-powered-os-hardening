@@ -6,8 +6,8 @@ import requests
 import sys
 import os
 
-# src modülünü import edebilmek için
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Project root'u path'e ekle
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.config_manager import ConfigManager
 
