@@ -37,6 +37,11 @@ class InfoQueryResult:
     model_used: str = "unknown"
     response_time_s: float = 0.0
     estimated_cost: float = 0.0
+    rag_sources: list = None  # RAG source metadata
+
+    def __post_init__(self):
+        if self.rag_sources is None:
+            self.rag_sources = []
 
 
 class InfoPipeline:
@@ -123,16 +128,33 @@ class InfoPipeline:
 
         # RAG retrieval (if needed)
         rag_chunks = 0
+        rag_sources = []
         if use_rag and self.rag_builder:
             try:
+                # Get formatted context for LLM
                 rag_context = self.rag_builder.retrieve_context(ctx.user_question)
+
+                # Get raw results for metadata
+                raw_results = self.rag_builder.retrieve_raw(ctx.user_question)
+
                 if rag_context:
                     ctx.retrieved_context = rag_context
                     rag_chunks = len(rag_context.split("\n\n")) if rag_context else 0
                     self.stats["rag_used_count"] += 1
 
+                    # Extract source metadata
+                    for result in raw_results:
+                        metadata = result.get("metadata", {})
+                        rag_sources.append({
+                            "score": result.get("score", 0.0),
+                            "source": metadata.get("source", "CIS Benchmark"),
+                            "section": metadata.get("section", "N/A"),
+                            "text_preview": result.get("text", "")[:200] + "..."  # First 200 chars
+                        })
+
                     if self.debug:
                         print(f"[InfoPipeline] RAG retrieved {rag_chunks} chunks")
+                        print(f"[InfoPipeline] RAG sources: {len(rag_sources)}")
             except Exception as e:
                 if self.debug:
                     print(f"[InfoPipeline] RAG failed: {e}")
@@ -171,6 +193,7 @@ class InfoPipeline:
             model_used=model_used,
             response_time_s=response_time,
             estimated_cost=estimated_cost,
+            rag_sources=rag_sources,
         )
 
     def _should_use_rag(self, question: str, complexity: str) -> bool:

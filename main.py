@@ -16,6 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from api.router_rag import router as rag_router
 from api.router_chat import router as chat_router
 from api.router_health import router as health_router
+from api.router_analytics import router as analytics_router
 from api.security import (
     RateLimitMiddleware,
     RateLimitConfig,
@@ -200,6 +201,9 @@ def create_app() -> FastAPI:
 
     # Health check
     app.include_router(health_router)
+
+    # Advanced analytics
+    app.include_router(analytics_router, prefix="/api", tags=["monitoring"])
 
     # ── Metrics Endpoint ──
     @app.get("/metrics", tags=["monitoring"])

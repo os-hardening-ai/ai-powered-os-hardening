@@ -322,6 +322,7 @@ class SecurePipelineV2:
                 "rag_used": info_result.used_rag,
                 "rag_chunks": info_result.rag_chunks,
                 "model": info_result.model_used,
+                "rag_sources": info_result.rag_sources,  # Add RAG sources to metadata
             }
         )
 
