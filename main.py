@@ -22,17 +22,39 @@ import uvicorn
 DESCRIPTION = """
 ## AI-Powered OS Hardening API
 
-**Bilgisayar Mühendisliği Bitirme Projesi**
+**Bilgisayar Muhendisligi Bitirme Projesi**
 
-RAG (Retrieval Augmented Generation) + LLM tabanlı işletim sistemi güvenlik sıkılaştırma asistanı.
+RAG (Retrieval Augmented Generation) + LLM tabanli isletim sistemi guvenlik sikilaştirma asistani.
+
+### 4-Layer Security Pipeline
+
+**Layer 1: Safety Classification**
+* LLM-based threat detection
+* Categories: safe_defensive, safe_educational, ambiguous, unsafe_offensive, unsafe_spam
+
+**Layer 2: Intent Detection**
+* Pattern-based routing (no LLM calls)
+* Intent types: smalltalk, info_request, action_request, out_of_scope
+
+**Layer 3: Routing**
+* 3A - Pattern Responder: Instant responses for greetings/thanks (0ms, $0)
+* 3B - Info Pipeline: Smart RAG + complexity-based model selection
+* 3C - Action Pipeline: Script generation with strict validation
+* OUT_OF_SCOPE: Polite rejection for non-security topics
+
+**Layer 4: Generation**
+* Adaptive model selection (Groq Llama 8B, GPT-4o-mini, GPT-4o)
+* Smart RAG triggering (skip generic, use specific)
+* CoT reasoning for complex queries
 
 ### Ozellikler
 
-* **RAG Search**: CIS Benchmark dokümanlarından anlamsal arama
-* **LLM Chat**: RAG + LLM entegre güvenlik danışmanlığı
-* **Adaptive Routing**: Task karmaşıklığına göre otomatik model seçimi
-* **Multi-Provider**: Groq (ücretsiz), OpenAI, Ollama desteği
-* **Source Attribution**: Hangi kaynaklardan yanıt üretildiğini gösterir
+* **RAG Search**: CIS Benchmark dokumanllarindan anlamsal arama
+* **LLM Chat**: RAG + LLM entegre guvenlik danipmanligi
+* **Adaptive Routing**: Task karmasikligina gore otomatik model secimi
+* **Multi-Provider**: Groq (ucretsiz), OpenAI, Ollama destegi
+* **Source Attribution**: Hangi kaynaklardan yanit uretildigini gosterir
+* **Out-of-Scope Handling**: Non-security topics politely rejected
 
 ### Guvenlik
 

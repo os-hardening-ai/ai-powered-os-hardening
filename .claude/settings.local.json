@@ -7,7 +7,20 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(python -m main:*)"
+      "Bash(python -m main:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(python -m pip_audit:*)",
+      "Bash(pip install:*)",
+      "Bash(pip_audit:*)",
+      "Bash(python tests/test_dataset.py:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(nul)",
+      "Bash(mv:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
