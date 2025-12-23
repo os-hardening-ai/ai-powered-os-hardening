@@ -114,11 +114,14 @@ test_output/
 test_rag_query.py
 
 # Large model files (if any)
-models/
+# Note: llm/models/ contains Python code, not ML models
+# Only ignore ML model binary files
 *.pt
 *.pth
 *.onnx
 *.pb
+*.h5
+*.safetensors
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
