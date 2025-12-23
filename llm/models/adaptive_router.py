@@ -12,10 +12,7 @@ from dataclasses import dataclass
 from typing import Literal, Callable
 from enum import Enum
 
-try:
-    from ..context import RequestContext, IntentType
-except ImportError:
-    from context import RequestContext, IntentType
+from llm.core.context import RequestContext, IntentType
 
 
 # Type alias
