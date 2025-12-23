@@ -117,7 +117,7 @@ pluggy==1.6.0
 portalocker==3.2.0
 propcache==0.3.1
 proto-plus==1.26.1
-protobuf==4.25.8
+protobuf>=4.25.0,<7.0.0
 psutil==7.0.0
 py-cpuinfo==9.0.0
 py-serializable==2.1.0
