@@ -31,9 +31,7 @@
       "Bash(taskkill:*)",
       "Bash(dir /s /b __pycache__ 2)",
       "Bash(find:*)",
-      "Bash(git reset:*)",
-      "Bash(tree:*)",
-      "Bash(dir:*)"
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
