@@ -1,22 +1,32 @@
 # llm/__init__.py
 """
-LLM Pipeline Module
+LLM Pipeline Module - Reorganized Structure
 
-Bu modül optimized LLM pipeline ve ilgili bileşenleri içerir.
+Yapı:
+- core/: Ana LLM işlevleri, Models, Layers
+- ml/: Machine Learning (intent detection, eval)
+- testing/: Test ve validation
+- monitoring/: Logging, metrics, prompts
 """
 
 __version__ = "0.2.0"
 
-# Public API exports
-from .models import get_llm_clients, llm_small, llm_large
-from .pipeline_optimized import OptimizedPipeline, run_optimized_pipeline_with_retry
-from .context import RequestContext
+# Core imports
+from .core.pipeline_optimized import OptimizedPipeline, run_optimized_pipeline_with_retry
+from .core.context import RequestContext
+from .core.config import *
+from .core.models import get_llm_clients
+
+# ML imports
+from .ml.ml_intent_detector import *
 
 __all__ = [
-    "get_llm_clients",
-    "llm_small",
-    "llm_large",
+    "core",
+    "ml",
+    "testing",
+    "monitoring",
     "OptimizedPipeline",
     "run_optimized_pipeline_with_retry",
     "RequestContext",
+    "get_llm_clients",
 ]

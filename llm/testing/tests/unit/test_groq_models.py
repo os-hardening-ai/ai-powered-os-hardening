@@ -16,7 +16,7 @@ def test_groq_small_model():
     print("="*60)
 
     try:
-        from llm.models.groq_client import get_small_groq_llm
+        from llm.core.models.groq_client import get_small_groq_llm
 
         # Get client
         llm = get_small_groq_llm()
@@ -47,7 +47,7 @@ def test_groq_large_model():
     print("="*60)
 
     try:
-        from llm.models.groq_client import get_large_groq_llm
+        from llm.core.models.groq_client import get_large_groq_llm
 
         # Get client
         llm = get_large_groq_llm()
@@ -78,8 +78,8 @@ def test_pipeline_integration():
     print("="*60)
 
     try:
-        from llm.models import get_llm_clients
-        from llm.config import CONFIG
+        from llm.core.models import get_llm_clients
+        from llm.core.config import CONFIG
 
         print(f"\n[CONFIG] Active Provider: {CONFIG.llm_provider}")
         print(f"[CONFIG] Small Model: {CONFIG.groq_small_model}")

@@ -19,7 +19,7 @@ from typing import Callable, Optional, List
 from dataclasses import dataclass
 import json
 
-from llm.context import RequestContext
+from llm.core.context import RequestContext
 
 
 LLMCallable = Callable[[str], str]
