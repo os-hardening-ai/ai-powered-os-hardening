@@ -31,7 +31,10 @@
       "Bash(taskkill:*)",
       "Bash(dir /s /b __pycache__ 2)",
       "Bash(find:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(start http://localhost:8000/docs)",
+      "Bash(start \"c:\\Users\\Asus\\OneDrive\\Documenti\\rag_bitirme\\ai-powered-os-hardening\\test_swagger.html\")",
+      "Bash(start http://localhost:8000/redoc)"
     ],
     "deny": [],
     "ask": []
