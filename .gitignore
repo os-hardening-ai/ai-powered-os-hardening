@@ -1,17 +1,133 @@
-# Python cache
+# ====================================
+# Python
+# ====================================
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
+.Python
 
-# Virtual environment (çok büyük)
+# Virtual environments
+venv/
+env/
+ENV/
 llm/venv/
+.venv
 
-# IDE
+# ====================================
+# IDE & Editors
+# ====================================
 .claude/
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-# Logs
+# ====================================
+# Environment & Secrets
+# ====================================
+.env
+.env.local
+.env.*.local
+*.key
+credentials.json
+secrets/
+
+# ====================================
+# Logs & Debug
+# ====================================
 *.log
 logs/
+*.pid
+*.seed
+*.pid.lock
+
+# ====================================
+# Testing & Coverage
+# ====================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+coverage.xml
+*.cover
+
+# ====================================
+# Build & Distribution
+# ====================================
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+wheels/
+
+# ====================================
+# Database & Cache
+# ====================================
+*.db
+*.sqlite
+*.sqlite3
+data/chroma_db/
+cache/
+.cache/
+
+# ====================================
+# Temporary Files
+# ====================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+nul
+
+# ====================================
+# OS Specific
+# ====================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# ====================================
+# Project Specific
+# ====================================
+# Test outputs
+test_output/
+*.test.log
+
+# Generated files
+test_rag_query.py
+
+# Large model files (if any)
+models/
+*.pt
+*.pth
+*.onnx
+*.pb
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Documentation builds
+docs/_build/
+site/
