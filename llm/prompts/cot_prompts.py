@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional
 import re
 
-from ..context import RequestContext
+from llm.core.context import RequestContext
 from .few_shot_examples import FEW_SHOT_EXAMPLES
 
 

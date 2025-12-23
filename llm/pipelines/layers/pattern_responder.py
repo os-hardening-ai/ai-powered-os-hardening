@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Optional
 from dataclasses import dataclass
 
-from ..utils.local_responder import LocalResponder
+from llm.utils.local_responder import LocalResponder
 
 
 @dataclass

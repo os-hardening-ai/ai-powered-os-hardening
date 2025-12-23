@@ -17,11 +17,11 @@ from typing import Callable, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..context import RequestContext, SafetyResult
-from ..utils.question_classifier import classify_question
-from ..prompts.simple_prompts import get_prompt_for_complexity
-from ..prompts.cot_prompts import CoTSecurityAnalyzer
-from ..config import CONFIG
+from llm.core.context import RequestContext, SafetyResult
+from llm.utils.question_classifier import classify_question
+from llm.prompts.simple_prompts import get_prompt_for_complexity
+from llm.prompts.cot_prompts import CoTSecurityAnalyzer
+from llm.core.config import CONFIG
 
 # Type alias
 LLMCallable = Callable[[str], str]
@@ -355,7 +355,7 @@ def handle_info_query(
         )
         print(result.answer)
     """
-    from ..context import RequestContext
+    from llm.core.context import RequestContext
 
     if context is None:
         context = RequestContext(user_question=question)
@@ -419,7 +419,7 @@ if __name__ == "__main__":
         print(f"Question: {question}")
         print(f"Expected: complexity={expected_complexity}, RAG={expected_rag}")
 
-        from ..context import RequestContext
+        from llm.core.context import RequestContext
         ctx = RequestContext(user_question=question)
 
         result = pipeline.handle(ctx)

@@ -18,10 +18,10 @@ from typing import Callable, Optional, List
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..context import RequestContext
-from ..prompts.cot_prompts import CoTSecurityAnalyzer
-from ..utils.parameter_inference import ParameterInferenceEngine
-from ..config import CONFIG
+from llm.core.context import RequestContext
+from llm.prompts.cot_prompts import CoTSecurityAnalyzer
+from llm.utils.parameter_inference import ParameterInferenceEngine
+from llm.core.config import CONFIG
 from .zt_enrichment import ZeroTrustEnricher, ZTEnrichment
 from .output_validator import OutputValidator, ValidationResult
 
@@ -425,7 +425,7 @@ def handle_action_request(
         else:
             print(result.script)  # Show generated script
     """
-    from ..context import RequestContext
+    from llm.core.context import RequestContext
 
     if context is None:
         context = RequestContext(user_question=question)
@@ -485,7 +485,7 @@ echo "SSH hardening complete!"
     print("TEST 1: Missing Parameters")
     print("="*70)
 
-    from ..context import RequestContext
+    from llm.core.context import RequestContext
 
     ctx_incomplete = RequestContext(
         user_question="SSH hardening scripti yaz",
