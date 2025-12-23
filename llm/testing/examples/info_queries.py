@@ -1,10 +1,10 @@
 """
-Script Generation Example
--------------------------
-Shows how to generate hardening scripts for different scenarios
+Information Query Examples
+--------------------------
+Shows how to ask informational questions about security concepts
 
 Usage:
-    python examples/script_generation.py
+    python examples/info_queries.py
 """
 
 import sys
@@ -19,15 +19,15 @@ if sys.platform == 'win32':
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from llm.models import get_llm_clients
-from llm.pipeline_v2 import SecurePipelineV2
-from llm.context import RequestContext
+from llm.core.models import get_llm_clients
+from llm.core.pipeline_v2 import SecurePipelineV2
+from llm.core.context import RequestContext
 
 
-def example_ssh_hardening():
-    """Example: SSH hardening script"""
+def example_what_is_ssh():
+    """Example: What is SSH?"""
     print("\n" + "="*70)
-    print("[EXAMPLE 1] SSH Hardening Script")
+    print("[EXAMPLE 1] What is SSH?")
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
@@ -39,16 +39,12 @@ def example_ssh_hardening():
     )
 
     ctx = RequestContext(
-        user_question="Ubuntu 22.04 için SSH hardening scripti oluştur",
+        user_question="SSH nedir ve nasıl çalışır?",
         os="ubuntu_22_04",
-        role="admin",
-        security_level="high"
+        role="user"
     )
 
     print(f"Input: {ctx.user_question}")
-    print(f"OS: {ctx.os}")
-    print(f"Role: {ctx.role}")
-    print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -56,16 +52,16 @@ def example_ssh_hardening():
     print("[RESULT]")
     print(f"Layer Path: {result.layer_path}")
     print(f"Cost: ${result.estimated_cost:.4f}")
-    print("\n[GENERATED SCRIPT]")
+    print("\n[ANSWER]")
     print("-"*70)
     print(result.answer)
     print("-"*70 + "\n")
 
 
-def example_firewall_rules():
-    """Example: Firewall configuration"""
+def example_zero_trust():
+    """Example: Zero Trust Architecture"""
     print("\n" + "="*70)
-    print("[EXAMPLE 2] Firewall Rules")
+    print("[EXAMPLE 2] Zero Trust Architecture")
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
@@ -77,16 +73,12 @@ def example_firewall_rules():
     )
 
     ctx = RequestContext(
-        user_question="Windows Server 2022 için temel firewall kuralları oluştur",
-        os="windows_server_2022",
-        role="admin",
-        security_level="medium"
+        user_question="Zero Trust Architecture nedir? Temel prensipleri nelerdir?",
+        os="ubuntu_22_04",
+        role="user"
     )
 
     print(f"Input: {ctx.user_question}")
-    print(f"OS: {ctx.os}")
-    print(f"Role: {ctx.role}")
-    print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -94,16 +86,22 @@ def example_firewall_rules():
     print("[RESULT]")
     print(f"Layer Path: {result.layer_path}")
     print(f"Cost: ${result.estimated_cost:.4f}")
-    print("\n[GENERATED SCRIPT]")
+    print("\n[ANSWER]")
     print("-"*70)
     print(result.answer)
-    print("-"*70 + "\n")
+    print("-"*70)
+
+    if hasattr(result, 'rag_sources') and result.rag_sources:
+        print("\n[SOURCES]")
+        for i, source in enumerate(result.rag_sources[:3], 1):
+            print(f"  {i}. {source.get('source', 'Unknown')} (Score: {source.get('score', 0):.2f})")
+    print()
 
 
-def example_rdp_hardening():
-    """Example: RDP hardening"""
+def example_cis_benchmarks():
+    """Example: CIS Benchmarks"""
     print("\n" + "="*70)
-    print("[EXAMPLE 3] RDP Hardening")
+    print("[EXAMPLE 3] CIS Benchmarks")
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
@@ -115,16 +113,12 @@ def example_rdp_hardening():
     )
 
     ctx = RequestContext(
-        user_question="Windows 10 için RDP güvenlik ayarları scripti yaz",
-        os="windows_10",
-        role="admin",
-        security_level="high"
+        user_question="CIS Benchmarks nedir? Ubuntu için hangi kuralları içerir?",
+        os="ubuntu_22_04",
+        role="user"
     )
 
     print(f"Input: {ctx.user_question}")
-    print(f"OS: {ctx.os}")
-    print(f"Role: {ctx.role}")
-    print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -132,16 +126,16 @@ def example_rdp_hardening():
     print("[RESULT]")
     print(f"Layer Path: {result.layer_path}")
     print(f"Cost: ${result.estimated_cost:.4f}")
-    print("\n[GENERATED SCRIPT]")
+    print("\n[ANSWER]")
     print("-"*70)
     print(result.answer)
     print("-"*70 + "\n")
 
 
-def example_with_zt_enrichment():
-    """Example: Script with Zero Trust enrichment"""
+def example_firewall_concepts():
+    """Example: Firewall concepts"""
     print("\n" + "="*70)
-    print("[EXAMPLE 4] Script with Zero Trust Enrichment")
+    print("[EXAMPLE 4] Firewall Concepts")
     print("="*70)
 
     llm_small, llm_large = get_llm_clients()
@@ -153,16 +147,12 @@ def example_with_zt_enrichment():
     )
 
     ctx = RequestContext(
-        user_question="Debian 11 için kullanıcı erişim kontrolü scripti oluştur",
-        os="debian_11",
-        role="admin",
-        security_level="critical"
+        user_question="Firewall stateful ve stateless arasındaki fark nedir?",
+        os="ubuntu_22_04",
+        role="user"
     )
 
     print(f"Input: {ctx.user_question}")
-    print(f"OS: {ctx.os}")
-    print(f"Role: {ctx.role}")
-    print(f"Security Level: {ctx.security_level}")
     print("\n[PROCESSING]...\n")
 
     result = pipeline.run(ctx)
@@ -170,32 +160,59 @@ def example_with_zt_enrichment():
     print("[RESULT]")
     print(f"Layer Path: {result.layer_path}")
     print(f"Cost: ${result.estimated_cost:.4f}")
+    print("\n[ANSWER]")
+    print("-"*70)
+    print(result.answer)
+    print("-"*70 + "\n")
 
-    if hasattr(result, 'zt_enrichment') and result.zt_enrichment:
-        print("\n[ZERO TRUST ENRICHMENT]")
-        print(f"Principles: {', '.join(result.zt_enrichment.zt_principles)}")
-        print(f"Standards: {', '.join(result.zt_enrichment.standards[:3])}...")
-        print(f"Impact Level: {result.zt_enrichment.impact_level}")
-        print(f"Rollback: {result.zt_enrichment.rollback_approach[:100]}...")
 
-    print("\n[GENERATED SCRIPT]")
+def example_nist_standards():
+    """Example: NIST standards"""
+    print("\n" + "="*70)
+    print("[EXAMPLE 5] NIST Standards")
+    print("="*70)
+
+    llm_small, llm_large = get_llm_clients()
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        debug=False
+    )
+
+    ctx = RequestContext(
+        user_question="NIST 800-207 standardı neyi kapsar?",
+        os="ubuntu_22_04",
+        role="user"
+    )
+
+    print(f"Input: {ctx.user_question}")
+    print("\n[PROCESSING]...\n")
+
+    result = pipeline.run(ctx)
+
+    print("[RESULT]")
+    print(f"Layer Path: {result.layer_path}")
+    print(f"Cost: ${result.estimated_cost:.4f}")
+    print("\n[ANSWER]")
     print("-"*70)
     print(result.answer)
     print("-"*70 + "\n")
 
 
 def main():
-    """Run all script generation examples"""
+    """Run all information query examples"""
     print("\n" + "="*70)
-    print("SCRIPT GENERATION EXAMPLES")
+    print("INFORMATION QUERY EXAMPLES")
     print("="*70)
-    print("\nDemonstrates script generation for various scenarios\n")
+    print("\nDemonstrates asking informational questions about security\n")
 
     examples = [
-        ("SSH Hardening", example_ssh_hardening),
-        ("Firewall Rules", example_firewall_rules),
-        ("RDP Hardening", example_rdp_hardening),
-        ("Zero Trust Enrichment", example_with_zt_enrichment)
+        ("SSH Basics", example_what_is_ssh),
+        ("Zero Trust", example_zero_trust),
+        ("CIS Benchmarks", example_cis_benchmarks),
+        ("Firewall Concepts", example_firewall_concepts),
+        ("NIST Standards", example_nist_standards)
     ]
 
     print("Available examples:")

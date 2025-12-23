@@ -24,9 +24,9 @@ if sys.platform == 'win32':
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from llm.models import get_llm_clients
-from llm.pipeline_v2 import SecurePipelineV2
-from llm.context import RequestContext
+from llm.core.models import get_llm_clients
+from llm.core.pipeline_v2 import SecurePipelineV2
+from llm.core.context import RequestContext
 
 
 def test_single_turn_smalltalk():

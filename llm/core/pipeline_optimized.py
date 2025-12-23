@@ -20,10 +20,10 @@ from datetime import datetime
 
 from .context import RequestContext, SafetyResult
 from .models.adaptive_router import AdaptiveModelRouter, ModelSpec
-from .prompts.cot_prompts import CoTSecurityAnalyzer
-from .prompts.simple_prompts import get_prompt_for_complexity
-from .utils.question_classifier import classify_question
-from .utils.local_responder import get_local_response
+from ..monitoring.prompts.cot_prompts import CoTSecurityAnalyzer
+from ..monitoring.prompts.simple_prompts import get_prompt_for_complexity
+from ..ml.utils.question_classifier import classify_question
+from ..ml.utils.local_responder import get_local_response
 from .config import CONFIG
 
 # RAG Integration
