@@ -22,6 +22,16 @@ from api.security import (
     RateLimitConfig,
     SecurityHeadersMiddleware,
 )
+from api.middleware import (
+    RequestIDMiddleware,
+    ResponseMetadataMiddleware,
+    ProviderHeadersMiddleware,
+)
+from api.errors import (
+    api_error_handler,
+    generic_error_handler,
+    APIError,
+)
 from api.metrics import (
     MetricsMiddleware,
     metrics_collector,
@@ -408,14 +418,27 @@ def create_app() -> FastAPI:
         },
     )
 
+    # Register error handlers
+    app.add_exception_handler(APIError, api_error_handler)
+    app.add_exception_handler(Exception, generic_error_handler)
+
     # Middleware stack (order matters - applied in reverse order)
     # 1. Security headers (applied last, affects all responses)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    # 2. Metrics collection (tracks all requests)
+    # 2. Provider headers (add LLM provider info to responses)
+    app.add_middleware(ProviderHeadersMiddleware)
+
+    # 3. Response metadata (processing time, version)
+    app.add_middleware(ResponseMetadataMiddleware, version="1.0.0")
+
+    # 4. Request ID tracking (generates/accepts request IDs)
+    app.add_middleware(RequestIDMiddleware)
+
+    # 5. Metrics collection (tracks all requests)
     app.add_middleware(MetricsMiddleware, collector=metrics_collector)
 
-    # 3. Rate limiting (100 requests per minute per IP)
+    # 6. Rate limiting (100 requests per minute per IP)
     rate_limit_config = RateLimitConfig(
         max_requests=100,
         window_seconds=60,

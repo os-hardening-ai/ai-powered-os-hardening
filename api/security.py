@@ -103,12 +103,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         is_allowed, error_msg = self.limiter.is_allowed(client_ip)
 
         if not is_allowed:
+            # Calculate retry_after in seconds
+            retry_after = self.limiter.config.ban_duration_seconds if client_ip in self.limiter.banned_ips else self.limiter.config.window_seconds
+
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={
-                    "error": "Rate limit exceeded",
-                    "message": error_msg,
-                    "client_ip": client_ip,
+                    "error": {
+                        "code": "RATE_LIMITED",
+                        "message": error_msg,
+                        "type": "rate_limit_error",
+                        "details": {"retry_after": retry_after}
+                    }
+                },
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Limit": str(self.limiter.config.max_requests),
+                    "X-RateLimit-Remaining": "0",
                 }
             )
 

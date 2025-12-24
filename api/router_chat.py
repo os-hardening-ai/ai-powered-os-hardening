@@ -20,6 +20,12 @@ from llm.clients import get_llm_clients
 # Import security utilities
 from api.security import validate_chat_input, sanitize_output
 
+# Import error handling
+from api.errors import APIError, ErrorCode
+
+# Import streaming support
+from api.streaming import stream_chat_response, dummy_token_generator
+
 router = APIRouter()
 
 
@@ -59,6 +65,8 @@ class ChatRequest(BaseModel):
     use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı")
     rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20)
     rag_min_score: float = Field(0.7, description="Minimum relevance score", ge=0.0, le=1.0)
+    stream: bool = Field(False, description="Enable streaming response (SSE)")
+    timeout: Optional[int] = Field(None, description="Request timeout in seconds", ge=1, le=300)
 
     @field_validator("question")
     @classmethod
@@ -185,7 +193,82 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+        # Use standardized error handling
+        raise APIError(
+            status_code=500,
+            error_code=ErrorCode.PIPELINE_ERROR,
+            message=f"Pipeline execution failed: {str(e)}",
+            details={"stage": "pipeline_execution"}
+        )
+
+
+@router.post("/chat/stream")
+async def chat_stream(payload: ChatRequest):
+    """
+    Streaming version of /chat endpoint using Server-Sent Events (SSE).
+
+    Returns token-by-token streaming response for better user experience.
+
+    Response format (SSE):
+        event: metadata
+        data: {"intent": "info_request", "rag_used": true}
+
+        event: message
+        data: {"token": "SSH "}
+
+        event: message
+        data: {"token": "güvenliği "}
+
+        event: done
+        data: {"total_tokens": 150}
+    """
+    try:
+        # LLM clients
+        llm_small, llm_large = _get_llm_clients()
+
+        # Request context
+        ctx = RequestContext(
+            user_question=payload.question,
+            os=payload.os,
+            role=payload.role,
+            security_level=payload.security_level,  # type: ignore
+            zt_maturity=payload.zt_maturity,  # type: ignore
+        )
+
+        # Pipeline (non-streaming for now - streaming LLM support would require changes)
+        pipeline = SecurePipelineV2(
+            llm_ultra_fast=llm_small,
+            llm_small=llm_small,
+            llm_large=llm_large,
+            debug=False,
+        )
+
+        result = pipeline.run(ctx)
+
+        # Stream the answer token by token
+        async def token_generator():
+            # Split answer into words and stream
+            words = (result.answer or "No response").split()
+            for word in words:
+                yield word + " "
+
+        # Prepare metadata
+        metadata = {
+            "intent": result.intent.type if result.intent else None,
+            "safety": result.safety.category if result.safety else None,
+            "rag_used": payload.use_rag,
+            "layer_path": result.layer_path,
+        }
+
+        return await stream_chat_response(token_generator(), metadata=metadata)
+
+    except Exception as e:
+        raise APIError(
+            status_code=500,
+            error_code=ErrorCode.PIPELINE_ERROR,
+            message=f"Streaming pipeline failed: {str(e)}",
+            details={"stage": "streaming"}
+        )
 
 
 @router.get("/health")
