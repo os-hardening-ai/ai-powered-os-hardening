@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import os
+import asyncio
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, HTTPException
@@ -134,6 +135,9 @@ async def chat(payload: ChatRequest) -> ChatResponse:
     4. Uygun pipeline'a yonlendirir
     5. Cevap + kaynak bilgilerini dondurur
     """
+    # Set timeout (default: 60s for complex RAG queries)
+    timeout_seconds = payload.timeout or 60
+
     try:
         # LLM clients
         llm_small, llm_large = _get_llm_clients()
@@ -156,7 +160,19 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             debug=False,
         )
 
-        result = pipeline.run(ctx)
+        # Run with timeout
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(pipeline.run, ctx),
+                timeout=timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            raise APIError(
+                status_code=504,
+                error_code=ErrorCode.TIMEOUT,
+                message=f"Request timeout after {timeout_seconds} seconds. Try a simpler query or increase timeout.",
+                details={"timeout": timeout_seconds, "suggestion": "increase_timeout_or_simplify_query"}
+            )
 
         # RAG kaynaklarini parse et (eger varsa - metadata'dan)
         rag_sources: List[RAGSource] = []
@@ -222,6 +238,9 @@ async def chat_stream(payload: ChatRequest):
         event: done
         data: {"total_tokens": 150}
     """
+    # Set timeout (default: 60s for streaming)
+    timeout_seconds = payload.timeout or 60
+
     try:
         # LLM clients
         llm_small, llm_large = _get_llm_clients()
@@ -243,7 +262,19 @@ async def chat_stream(payload: ChatRequest):
             debug=False,
         )
 
-        result = pipeline.run(ctx)
+        # Run with timeout
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(pipeline.run, ctx),
+                timeout=timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            raise APIError(
+                status_code=504,
+                error_code=ErrorCode.TIMEOUT,
+                message=f"Streaming request timeout after {timeout_seconds} seconds",
+                details={"timeout": timeout_seconds}
+            )
 
         # Stream the answer token by token
         async def token_generator():

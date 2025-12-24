@@ -100,4 +100,76 @@ except Exception as e:
     llm_large = lambda x: ""  # type: ignore[assignment]
 
 
-__all__ = ["get_llm_clients", "llm_small", "llm_large"]
+def get_llm_clients_with_fallback() -> Tuple[LLMCallable, LLMCallable]:
+    """
+    Get LLM clients with automatic provider fallback.
+
+    Returns small and large models that automatically fallback to secondary
+    providers if primary fails (Groq → OpenAI → Ollama).
+
+    Returns:
+        (llm_small, llm_large): Both support automatic fallback
+    """
+    from .fallback_handler import FallbackHandler
+
+    handler = FallbackHandler()
+
+    # Register providers in priority order
+    try:
+        handler.register_provider(
+            name="groq",
+            client_factory=lambda: _get_groq_clients()[0],  # small model
+            priority=1,
+            enabled=True
+        )
+    except:
+        pass  # Groq not available
+
+    try:
+        handler.register_provider(
+            name="openai",
+            client_factory=lambda: _get_openai_clients()[0],  # small model
+            priority=2,
+            enabled=False  # Disabled by default (paid)
+        )
+    except:
+        pass
+
+    try:
+        handler.register_provider(
+            name="ollama",
+            client_factory=lambda: _get_ollama_clients()[0],  # small model
+            priority=3,
+            enabled=True
+        )
+    except:
+        pass
+
+    # Create small model with fallback
+    def llm_small_with_fallback(prompt: str) -> str:
+        response, _ = handler.call_with_fallback(prompt, verbose=False)
+        return response
+
+    # Similar for large model
+    handler_large = FallbackHandler()
+    try:
+        handler_large.register_provider("groq", lambda: _get_groq_clients()[1], 1)
+    except:
+        pass
+    try:
+        handler_large.register_provider("openai", lambda: _get_openai_clients()[1], 2, enabled=False)
+    except:
+        pass
+    try:
+        handler_large.register_provider("ollama", lambda: _get_ollama_clients()[1], 3)
+    except:
+        pass
+
+    def llm_large_with_fallback(prompt: str) -> str:
+        response, _ = handler_large.call_with_fallback(prompt, verbose=False)
+        return response
+
+    return llm_small_with_fallback, llm_large_with_fallback
+
+
+__all__ = ["get_llm_clients", "get_llm_clients_with_fallback", "llm_small", "llm_large"]
