@@ -202,7 +202,7 @@ class MLIntentDetector:
             max_iter=1000,
             C=1.0,  # Regularization strength
             solver='lbfgs',  # Fast solver
-            multi_class='multinomial',  # Softmax for multi-class
+            # Note: multi_class='multinomial' is now default in sklearn 1.5+
             random_state=random_state,
             n_jobs=-1  # Use all CPU cores
         )
