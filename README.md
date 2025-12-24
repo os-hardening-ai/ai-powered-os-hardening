@@ -221,7 +221,8 @@ ai-powered-os-hardening/
 │   ├── 08_TEST_DOKUMANTASYONU.md         # Turkish: Testing
 │   ├── 09_GELECEK_IYILESTIRMELER.md      # Turkish: Future improvements
 │   ├── 10_ARCHITECTURE_ANALYSIS.md       # English: Architecture analysis
-│   └── 11_PERFORMANCE_ANALYSIS.md        # English: Performance benchmarks
+│   ├── 11_PERFORMANCE_ANALYSIS.md        # English: Performance benchmarks
+│   └── 12_FRONTEND_INTEGRATION.md        # English: Frontend integration guide
 ├── data/                        # Training datasets & CIS Benchmarks
 ├── models/                      # Trained ML models
 ├── main.py                      # API entry point
@@ -250,6 +251,7 @@ All comprehensive documentation is available in Turkish in the `docs/` folder:
 ### Analysis Reports (English)
 10. **[Architecture Analysis](docs/10_ARCHITECTURE_ANALYSIS.md)** - System architecture and 12 identified weaknesses
 11. **[Performance Analysis](docs/11_PERFORMANCE_ANALYSIS.md)** - Comprehensive performance benchmarks
+12. **[Frontend Integration](docs/12_FRONTEND_INTEGRATION.md)** - React, Vue, JS examples with SSE streaming
 
 ### Quick Links
 - 🚀 [Quick Start](docs/03_KURULUM_VE_KULLANIM.md#adım-1-repository-clone)
