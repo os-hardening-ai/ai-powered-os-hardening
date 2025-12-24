@@ -1,0 +1,54 @@
+text,intent
+merhaba,greeting
+selam,greeting
+hello,greeting
+hi there,greeting
+good morning,greeting
+hey,greeting
+howdy,greeting
+greetings,greeting
+görüşürüz,farewell
+bye,farewell
+goodbye,farewell
+see you,farewell
+hoşçakal,farewell
+take care,farewell
+teşekkürler,thanks
+thanks,thanks
+thank you,thanks
+çok sağol,thanks
+appreciate it,thanks
+yardım,help
+help me,help
+can you help,help
+nasıl yapabilirim,help
+SSH hardening nasıl yapılır,info_request
+Ubuntu firewall nedir,info_request
+CIS benchmark nedir,info_request
+zero trust maturity nedir,info_request
+güvenlik seviyesi nedir,info_request
+password policy önerileri,info_request
+sistem güvenliği nasıl sağlanır,info_request
+firewall konfigürasyonu,info_request
+what is SSH,info_request
+explain firewall,info_request
+tell me about security,info_request
+how does encryption work,info_request
+SSH portunu değiştir,action_request
+firewall kuralı ekle,action_request
+kullanıcı oluştur,action_request
+servis başlat,action_request
+log dosyasını kontrol et,action_request
+sistem güncellemesi yap,action_request
+create user account,action_request
+configure firewall,action_request
+enable SSH,action_request
+install package,action_request
+hava durumu,out_of_scope
+futbol maçı,out_of_scope
+yemek tarifi,out_of_scope
+film önerisi,out_of_scope
+müzik çal,out_of_scope
+joke tell me,out_of_scope
+weather forecast,out_of_scope
+movie recommendation,out_of_scope

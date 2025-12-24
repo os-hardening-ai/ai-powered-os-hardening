@@ -101,11 +101,11 @@ class MLIntentDetector:
         self.label_encoder = None
         self.is_trained = False
 
-        # Default paths
+        # Default paths - models are in llm/ml/models/
         if model_path is None:
-            model_path = Path(__file__).parent.parent / "models" / "intent_model.joblib"
+            model_path = Path(__file__).parent / "models" / "intent_model.joblib"
         if vectorizer_path is None:
-            vectorizer_path = Path(__file__).parent.parent / "models" / "intent_vectorizer.joblib"
+            vectorizer_path = Path(__file__).parent / "models" / "intent_vectorizer.joblib"
 
         self.model_path = Path(model_path)
         self.vectorizer_path = Path(vectorizer_path)
@@ -391,8 +391,10 @@ if __name__ == "__main__":
     print("ML INTENT DETECTOR - TRAINING")
     print("="*70)
 
-    # Paths
-    dataset_path = Path(__file__).parent.parent / "data" / "intent_training_dataset.csv"
+    # Paths - dataset is at project_root/data/intent_training_dataset.csv
+    # This file is at: project_root/llm/ml/intent_detector.py
+    project_root = Path(__file__).parent.parent.parent
+    dataset_path = project_root / "data" / "intent_training_dataset.csv"
 
     # Create detector
     detector = MLIntentDetector(debug=True)

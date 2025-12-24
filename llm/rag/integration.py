@@ -9,14 +9,16 @@ from typing import List, Dict, Any
 import sys
 import os
 
-# Add parent directory to path for imports
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+# Add project root to path for imports
+# This file is at: project_root/llm/rag/integration.py
+# We need to add project_root to sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 try:
-    from core.embeddings.embeddings import get_embedding_client
-    from core.vector_store.vector_store import get_vector_store
+    from core.embeddings import get_embedding_client
+    from core.vector_store import get_vector_store
     RAG_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import RAG dependencies: {e}")
