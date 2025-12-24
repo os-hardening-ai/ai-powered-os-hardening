@@ -31,11 +31,43 @@ import uvicorn
 
 # API Documentation metadata
 DESCRIPTION = """
-## 🛡️ AI-Powered OS Hardening API
+# 🛡️ AI-Powered OS Hardening API
 
-**Computer Engineering Graduation Project - Istanbul Technical University**
+## Proje Hakkında / About This Project
 
-Advanced security hardening assistant powered by RAG (Retrieval Augmented Generation) and Large Language Models.
+**Marmara Üniversitesi - Bilgisayar Mühendisliği Bitirme Projesi**
+**Computer Engineering Graduation Project - Marmara University**
+
+👥 **Geliştiriciler / Developers:** Engin, Mert, Tankut
+📅 **Akademik Yıl / Academic Year:** 2024-2025
+
+### 🎯 Projenin Amacı / Project Objective
+
+Bu proje, işletim sistemi güvenlik sıkılaştırma (OS hardening) süreçlerini otomatikleştirmek ve yapay zeka destekli bir danışmanlık sistemi sunmak amacıyla geliştirilmiştir. **RAG (Retrieval Augmented Generation)** ve **Büyük Dil Modelleri (LLM)** kullanarak, güvenlik profesyonellerine ve sistem yöneticilerine akıllı, bağlama duyarlı güvenlik önerileri sunar.
+
+This project automates OS hardening processes and provides an AI-powered security consultation system. Using **RAG** and **Large Language Models**, it delivers intelligent, context-aware security recommendations to security professionals and system administrators.
+
+### 💡 Neden Bu Projeyi Yaptık? / Why We Built This
+
+**Tespit Edilen Problemler:**
+- ⏱️ Manuel güvenlik sıkılaştırma süreçleri zaman alıcı ve hata yapmaya açık
+- 📖 CIS Benchmark gibi kapsamlı dokümanlarda bilgi bulmak zahmetli
+- 🔧 Her platform için farklı komutlar ve yapılandırmalar öğrenmek zor
+- 📊 Güvenlik standartlarına uyum sürekli güncel bilgi gerektiriyor
+
+**Sunduğumuz Çözüm:**
+- 🤖 **AI-destekli otomatik script üretimi** - Platform-specific güvenlik scriptleri
+- 📚 **CIS Benchmark RAG entegrasyonu** - Anında dokümantasyon erişimi
+- 🎯 **Akıllı intent tanıma** - %90.48 doğrulukla kullanıcı niyetini anlama
+- ⚡ **Hızlı yanıt süreleri** - 2-4 saniyede kapsamlı güvenlik önerileri
+
+### 🔬 Teknik Yenilikler / Technical Innovations
+
+1. **Hybrid ML Intent Detection** - Pattern + ML model (%90.48 test accuracy)
+2. **Smart RAG Integration** - CIS Benchmark semantic search
+3. **4-Layer Security Pipeline** - Safety → Intent → Routing → Generation
+4. **Adaptive Model Selection** - Task complexity-based LLM routing
+5. **Multi-Provider Support** - Groq (free), OpenAI, Ollama
 
 ---
 
