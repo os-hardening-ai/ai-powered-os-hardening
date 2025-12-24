@@ -13,6 +13,7 @@ env/
 ENV/
 llm/venv/
 .venv
+test_venv/
 
 # ====================================
 # IDE & Editors
