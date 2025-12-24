@@ -111,9 +111,6 @@ $RECYCLE.BIN/
 test_output/
 *.test.log
 
-# Generated files
-test_rag_query.py
-
 # Large model files (if any)
 # Note: llm/models/ contains Python code, not ML models
 # Only ignore ML model binary files
