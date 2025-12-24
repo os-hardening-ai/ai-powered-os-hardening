@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import List, Optional, Literal, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ─────────────────────────────────────────────
@@ -162,9 +162,10 @@ class RequestContext(BaseModel):
     request_id: Optional[str] = None
     extra: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        arbitrary_types_allowed = True
-        validate_assignment = True
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True
+    )
     
     # ─────────────────────────────────────────────
     # Helper metodlar

@@ -15,13 +15,15 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 try:
-    from core.embeddings import get_embedding_client
-    from core.vector_store import get_vector_store
+    from core.embeddings.embeddings import get_embedding_client
+    from core.vector_store.vector_store import get_vector_store
+    RAG_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import RAG dependencies: {e}")
     print("[WARNING] RAG functionality will be limited")
     get_embedding_client = None  # type: ignore
     get_vector_store = None  # type: ignore
+    RAG_AVAILABLE = False
 
 
 class RAGContextBuilder:

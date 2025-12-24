@@ -9,12 +9,12 @@ Run with:
 from __future__ import annotations
 
 import pytest
-from steps.safety_classifier import (
+from llm.pipelines.layers.safety_classifier import (
     _parse_safety_response,
     _build_safety_prompt,
     run_safety_classifier,
 )
-from context import RequestContext
+from llm.core.context import RequestContext
 
 
 class TestParseSafetyResponse:

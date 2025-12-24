@@ -13,8 +13,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import LLM modules (now llm is importable as a package)
-from llm.context import RequestContext
-from llm.pipeline_v2 import SecurePipelineV2
+from llm.core.context import RequestContext
+from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.models import get_llm_clients
 
 # Import security utilities
