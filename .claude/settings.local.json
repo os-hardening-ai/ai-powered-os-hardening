@@ -10,7 +10,8 @@
       "Bash(pip-audit:*)",
       "Bash(pip_audit_results.json 2)",
       "Bash(git merge:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

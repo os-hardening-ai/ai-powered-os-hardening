@@ -3,7 +3,8 @@
 ## Proje Adı
 **AI-Powered OS Hardening - RAG + LLM Tabanlı İşletim Sistemi Güvenlik Sıkılaştırma Asistanı**
 
-*Bilgisayar Mühendisliği Bitirme Projesi*
+*Marmara Üniversitesi - Bilgisayar Mühendisliği Bitirme Projesi*
+**Geliştiriciler:** Engin, Mert, Tankut | **Akademik Yıl:** 2024-2025
 
 ## Proje Amacı
 CIS Benchmark dokümanlarını kullanarak işletim sistemi güvenlik yapılandırmalarını analiz eden ve öneriler sunan yapay zeka asistanı. RAG (Retrieval-Augmented Generation) ve LLM (Large Language Model) teknolojilerini birleştirerek güvenlik uzmanlarına hızlı, doğru ve güvenilir bilgi sağlar.
