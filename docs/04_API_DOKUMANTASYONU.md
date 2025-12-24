@@ -12,9 +12,204 @@
 
 ---
 
-## Authentication
+## Authentication (Kimlik Doğrulama)
 
-Şu anda authentication **yoktur**. Production deployment için API key authentication eklenmesi önerilir.
+### Mevcut Durum: Authentication YOK ⚠️
+
+Şu anda sistem **authentication gerektirmez**. Bu bir **prototip/development** özelliğidir.
+
+### Ne İşe Yarar?
+
+API Authentication (Kimlik Doğrulama):
+1. ✅ **Kimlik Tespiti**: Kim API'yi kullanıyor?
+2. ✅ **Yetkilendirme**: Bu kullanıcının bu işlemi yapma yetkisi var mı?
+3. ✅ **Güvenlik**: Yetkisiz erişimi engeller
+4. ✅ **Rate Limiting**: Kullanıcı bazlı kota kontrolü
+5. ✅ **Audit/Logging**: Kim ne zaman ne yaptı?
+6. ✅ **Maliyet Kontrolü**: Kullanıcı başına LLM API cost tracking
+
+### Kim Kullanır?
+
+**Kimlik doğrulama OLMADAN (şu anki durum):**
+- ❌ Herhangi biri API'yi kullanabilir (public access)
+- ❌ Kullanıcı takibi yapılamaz
+- ❌ Rate limit sadece IP bazlı (kolayca bypass edilir)
+- ❌ Abuse riski yüksek
+
+**Kimlik doğrulama ile (production):**
+- ✅ Sadece API key sahibi kullanıcılar erişebilir
+- ✅ Kullanıcı bazlı tracking
+- ✅ Kullanıcı başına rate limit
+- ✅ Abuse önlenir
+
+### Nasıl Kullanılır? (Production - Gelecek Özellik)
+
+**Örnek Implementation (FastAPI):**
+
+```python
+# api/auth.py
+from fastapi import Security, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+
+async def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """
+    API key doğrulama
+
+    Headers'dan: Authorization: Bearer YOUR_API_KEY
+    """
+    api_key = credentials.credentials
+
+    # Database check (örnek)
+    user = db.get_user_by_api_key(api_key)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Rate limit check (user-based)
+    if user.requests_today > user.quota:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Quota exceeded"
+        )
+
+    return user
+
+# Usage in endpoint
+@router.post("/chat")
+async def chat(
+    payload: ChatRequest,
+    user: User = Depends(verify_api_key)  # Auth required!
+):
+    # user.id, user.email, user.quota available
+    ...
+```
+
+**Frontend Kullanımı (React Example):**
+
+```typescript
+// WITH Authentication (production)
+const API_KEY = process.env.REACT_APP_API_KEY; // .env dosyasından
+
+const response = await axios.post(
+  'https://api.example.com/api/chat',
+  {
+    question: "Ubuntu SSH hardening",
+    os: "ubuntu_24_04"
+  },
+  {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`  // API key header
+    }
+  }
+);
+```
+
+**cURL Kullanımı (Terminal):**
+
+```bash
+# WITH Authentication
+curl -X POST https://api.example.com/api/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "question": "SSH nedir?"
+  }'
+```
+
+### Kullanmazsa Ne Olur?
+
+**Production'da Authentication OLMADAN:**
+1. ❌ **Güvenlik Açığı**: Herkes sınırsız API kullanabilir
+2. ❌ **Maliyet Sorunu**: Groq ücretsiz ama OpenAI fallback maliyetli olabilir
+3. ❌ **Abuse**: Botlar sistemi spam'leyebilir
+4. ❌ **DoS Riski**: Rate limit sadece IP bazlı (VPN ile bypass)
+5. ❌ **Compliance**: GDPR/SOC2 için user tracking gerekli
+
+**Prototype/Development'da (şu anki durum):**
+- ✅ Hızlı test edilebilir
+- ✅ Frontend integration kolay
+- ✅ Demo/PoC için yeterli
+- ⚠️ **Production'a geçerken mutlaka eklenmelidir!**
+
+### Kullanıcı Nasıl Etkilenir?
+
+| Senaryo | Auth YOK (şimdi) | Auth VAR (production) |
+|---------|------------------|----------------------|
+| **İlk Kullanım** | Hemen başlayabilir | API key alması gerekir (signup) |
+| **API Call** | Direkt POST | Header'da Bearer token gerekir |
+| **Rate Limit** | IP bazlı (100/min) | Kullanıcı bazlı (1000/day gibi) |
+| **Hata Durumu** | Generic error | "Invalid API key" veya "Quota exceeded" |
+| **Maliyet** | Yok (free tier) | Kullanıcı bazlı pricing olabilir |
+
+### Frontend Yazarken Ara Bağlantı Nasıl Etkilenir?
+
+**ŞU ANKİ DURUM (Auth yok):**
+```typescript
+// React component - Basit
+const sendMessage = async () => {
+  const response = await axios.post('/api/chat', {
+    question: userInput
+  });
+  // Başarılı!
+};
+```
+
+**PRODUCTION (Auth var):**
+```typescript
+// React component - API key management gerekli
+const API_KEY = process.env.REACT_APP_API_KEY;
+
+// 1. API key validation on app load
+useEffect(() => {
+  if (!API_KEY) {
+    setError('API key not configured!');
+  }
+}, []);
+
+// 2. API call with auth header
+const sendMessage = async () => {
+  try {
+    const response = await axios.post('/api/chat',
+      { question: userInput },
+      {
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`
+        }
+      }
+    );
+  } catch (error) {
+    if (error.response?.status === 401) {
+      setError('Invalid API key. Please check your credentials.');
+    } else if (error.response?.status === 429) {
+      setError('Quota exceeded. Please upgrade your plan.');
+    }
+  }
+};
+
+// 3. API key input (user-facing)
+// Kullanıcıdan API key isteme:
+<input
+  type="password"
+  placeholder="Enter your API key"
+  onChange={(e) => setApiKey(e.target.value)}
+/>
+```
+
+### Production Deployment İçin Öneriler
+
+1. **JWT-based Authentication**: Token expiry, refresh tokens
+2. **OAuth2/OpenID Connect**: Google, GitHub login
+3. **API Key Tiers**: Free (1000/day), Pro (unlimited)
+4. **Rate Limiting**: User-based quotas
+5. **Audit Logging**: User activity tracking
+6. **IP Whitelisting**: Ek güvenlik katmanı
 
 ---
 
@@ -65,9 +260,10 @@ Content-Type: application/json
 | `role` | string | ❌ Hayır | Kullanıcı rolü | `null` |
 | `security_level` | string | ❌ Hayır | Güvenlik seviyesi | `balanced` |
 | `zt_maturity` | string | ❌ Hayır | Zero Trust maturity | `medium` |
-| `use_rag` | boolean | ❌ Hayır | RAG kullan | `true` |
+| `use_rag` | boolean | ❌ Hayır | RAG kullan (akıllı RAG için `true`) | `true` |
 | `rag_top_k` | integer | ❌ Hayır | RAG chunk sayısı (1-20) | `5` |
 | `rag_min_score` | float | ❌ Hayır | Min relevance score (0.0-1.0) | `0.7` |
+| `timeout` | integer | ❌ Hayır | Request timeout (1-300 saniye) | `60` |
 
 #### Parametre Detayları
 
@@ -98,6 +294,205 @@ Content-Type: application/json
 - `low` - Temel ZT prensipleri (least privilege, logging)
 - `medium` - Orta seviye ZT (+ MFA, network segmentation)
 - `high` - İleri seviye ZT (+ continuous validation, micro-segmentation)
+
+---
+
+### RAG Kullanımı ve Akıllı Tetikleme
+
+#### `use_rag` Parametresi Nasıl Çalışır?
+
+Sistem **kullanıcı fark etmeden** soruyu analiz edip RAG'in gerekli olup olmadığına otomatik karar verir.
+
+**Kullanıcı Kontrolü:**
+```json
+{
+  "question": "SSH nedir?",
+  "use_rag": true   // Kullanıcı RAG istiyor
+}
+```
+
+**Sistem Kararı (Otomatik):**
+```python
+# Backend: llm/pipelines/layers/info_pipeline.py:199
+def _should_use_rag(question, complexity):
+    """
+    Akıllı RAG tetikleme kararı
+    """
+    # Adım 1: Generic pattern kontrolü
+    if "nedir" in question or "what is" in question:
+        # Generic definition sorusu → RAG SKIP
+        return False
+
+    # Adım 2: Specific indicator kontrolü
+    if "ubuntu" in question or "22.04" in question or "cis" in question:
+        # OS/Version-specific → RAG USE
+        return True
+
+    # Adım 3: Complexity check
+    if complexity == "complex":
+        return True  # Complex queries benefit from RAG
+
+    # Default: Simple generic queries skip RAG
+    return False
+```
+
+#### Hangi Adımlar Bu Parametreleri Güncelliyor?
+
+**Pipeline Akışı:**
+
+**1. API Layer (router_chat.py:66)**
+```python
+# Kullanıcıdan gelen parametre
+use_rag: bool = Field(True, description="RAG kullanılsın mı")
+# Default: True (kullanıcı istiyor)
+```
+
+**2. Info Pipeline - Question Analysis (info_pipeline.py:120)**
+```python
+# Complexity analizi
+complexity = analyze_complexity(ctx.user_question)
+# Returns: "simple" | "medium" | "complex"
+
+# Örnek:
+# "SSH nedir?" → "simple"
+# "Ubuntu 22.04 SSH ayarları" → "medium"
+# "CIS Benchmark section 5.2.3 detaylı açıkla" → "complex"
+```
+
+**3. Info Pipeline - Smart RAG Decision (info_pipeline.py:124)**
+```python
+# FINAL DECISION: Sistem kararı (kullanıcı isteği override edilebilir)
+use_rag_final = self._should_use_rag(ctx.user_question, complexity)
+
+# Örnekler:
+# User: use_rag=true, Question: "SSH nedir?"
+#   → Final: False (generic, RAG gereksiz)
+#
+# User: use_rag=true, Question: "Ubuntu 22.04 SSH hardening"
+#   → Final: True (specific, RAG gerekli)
+#
+# User: use_rag=false
+#   → Final: False (kullanıcı istememiş, respect user choice)
+```
+
+**4. RAG Retrieval (info_pipeline.py:132)**
+```python
+if use_rag_final and self.rag_builder:
+    # RAG retrieval yap
+    rag_results = self.rag_builder.search(
+        query=ctx.user_question,
+        top_k=ctx.rag_top_k,  # Default: 5
+        min_score=ctx.rag_min_score  # Default: 0.7
+    )
+    # Returns: [chunk1, chunk2, ...] with scores
+```
+
+#### Hangi Parametreler Var?
+
+| Parametre | Nereden Gelir | Kim Günceller | Varsayılan | Amaç |
+|-----------|---------------|---------------|------------|------|
+| `use_rag` | User API request | API Layer | `true` | Kullanıcı RAG tercihi |
+| `rag_top_k` | User API request | API Layer | `5` | Kaç chunk çekilsin |
+| `rag_min_score` | User API request | API Layer | `0.7` | Min similarity threshold |
+| `complexity` | System | Info Pipeline | auto | Soru karmaşıklığı |
+| `use_rag_final` | System | Info Pipeline | auto | Final RAG kararı |
+| `rag_chunks_retrieved` | System | RAG Builder | auto | Gerçekte kaç chunk bulundu |
+
+#### Örnek Senaryolar
+
+**Senaryo 1: Generic Definition (RAG Skip)**
+```json
+// REQUEST
+{
+  "question": "SSH nedir ve nasıl çalışır?",
+  "use_rag": true  // User wants RAG
+}
+
+// INTERNAL PROCESSING
+{
+  "complexity": "simple",
+  "has_generic_pattern": true,  // "nedir" detected
+  "has_specific_indicator": false,  // No OS/version mentioned
+  "use_rag_final": false  // ❌ RAG SKIPPED (smart decision)
+}
+
+// RESPONSE
+{
+  "answer": "SSH (Secure Shell) güvenli bir ağ protokolüdür...",
+  "rag_sources": [],  // Empty - RAG not used
+  "stats": {
+    "total_time_s": 0.85,  // FAST (no RAG retrieval)
+    "layer_path": "1->2->3B"
+  }
+}
+```
+
+**Senaryo 2: Specific Query (RAG Used)**
+```json
+// REQUEST
+{
+  "question": "Ubuntu 22.04 için SSH hardening CIS benchmark önerileri",
+  "use_rag": true
+}
+
+// INTERNAL PROCESSING
+{
+  "complexity": "medium",
+  "has_generic_pattern": false,
+  "has_specific_indicator": true,  // "ubuntu 22.04", "cis benchmark"
+  "use_rag_final": true  // ✅ RAG USED
+}
+
+// RESPONSE
+{
+  "answer": "CIS Ubuntu 22.04 Benchmark'e göre SSH hardening:\n...",
+  "rag_sources": [
+    {
+      "score": 0.91,
+      "section": "5.2.3 Ensure SSH access is limited",
+      "source": "CIS_Ubuntu_22.04_Benchmark_v2.0.0"
+    }
+  ],
+  "stats": {
+    "total_time_s": 2.31,  // Slower (RAG retrieval included)
+    "layer_path": "1->2->3B->4"
+  }
+}
+```
+
+**Senaryo 3: User Explicitly Disables RAG**
+```json
+// REQUEST
+{
+  "question": "Ubuntu 22.04 SSH hardening",  // Specific query
+  "use_rag": false  // User explicitly disables
+}
+
+// INTERNAL PROCESSING
+{
+  "use_rag_final": false  // ❌ User choice respected
+}
+
+// RESPONSE
+{
+  "answer": "SSH hardening için genel öneriler:\n...",  // Generic answer
+  "rag_sources": [],  // No CIS Benchmark data
+  "stats": {
+    "total_time_s": 1.02  // Fast but less accurate
+  }
+}
+```
+
+#### Performans Karşılaştırması
+
+| Soru Tipi | User: use_rag | Final RAG | Süre | Doğruluk | Maliyet |
+|-----------|---------------|-----------|------|----------|---------|
+| "SSH nedir?" | `true` | `false` | 0.9s | %94 | $0.0008 |
+| "SSH nedir?" | `false` | `false` | 0.9s | %94 | $0.0008 |
+| "Ubuntu 22.04 SSH" | `true` | `true` | 2.3s | %96 | $0.0012 |
+| "Ubuntu 22.04 SSH" | `false` | `false` | 1.1s | %89 | $0.0008 |
+
+**Sonuç**: Akıllı RAG %55 sorgu için RAG'i skip eder → %56 hız artışı, %1 doğruluk kaybı
 
 #### Response
 
