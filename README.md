@@ -174,7 +174,7 @@ print(f"Time: {result['stats']['total_time_s']}s")
 └─────────────────────────────────────────────────────────────┘
 ```
 
-For complete architecture details, see [docs/ARCHITECTURE_ANALYSIS.md](docs/ARCHITECTURE_ANALYSIS.md)
+For complete architecture details, see [docs/10_ARCHITECTURE_ANALYSIS.md](docs/10_ARCHITECTURE_ANALYSIS.md)
 
 ---
 
@@ -210,20 +210,18 @@ ai-powered-os-hardening/
 │   ├── integration/            # Integration tests
 │   ├── system/                 # System tests
 │   └── README.md               # Test documentation
-├── docs/                        # Documentation (Turkish)
-│   ├── 01_PROJE_OZETI.md
-│   ├── 02_PIPELINE_VE_ROUTELAR.md
-│   ├── 03_KURULUM_VE_KULLANIM.md
-│   ├── 04_API_DOKUMANTASYONU.md
-│   ├── 05_TEKNOLOJILER.md
-│   ├── 06_LLM_UYGULAMALARI.md
-│   ├── 07_RAG_SISTEMI.md
-│   ├── 08_TEST_DOKUMANTASYONU.md
-│   ├── 09_PERFORMANS_ANALIZI.md
-│   ├── 10_GELECEK_IYILESTIRMELER.md
-│   ├── ARCHITECTURE_ANALYSIS.md
-│   ├── PERFORMANCE_ANALYSIS.md
-│   └── README.md
+├── docs/                        # Documentation
+│   ├── 01_PROJE_OZETI.md                 # Turkish: Project overview
+│   ├── 02_PIPELINE_VE_ROUTELAR.md        # Turkish: Pipeline & routes
+│   ├── 03_KURULUM_VE_KULLANIM.md         # Turkish: Setup & usage
+│   ├── 04_API_DOKUMANTASYONU.md          # Turkish: API docs
+│   ├── 05_TEKNOLOJILER.md                # Turkish: Technologies
+│   ├── 06_LLM_UYGULAMALARI.md            # Turkish: LLM applications
+│   ├── 07_RAG_SISTEMI.md                 # Turkish: RAG system
+│   ├── 08_TEST_DOKUMANTASYONU.md         # Turkish: Testing
+│   ├── 09_GELECEK_IYILESTIRMELER.md      # Turkish: Future improvements
+│   ├── 10_ARCHITECTURE_ANALYSIS.md       # English: Architecture analysis
+│   └── 11_PERFORMANCE_ANALYSIS.md        # English: Performance benchmarks
 ├── data/                        # Training datasets & CIS Benchmarks
 ├── models/                      # Trained ML models
 ├── main.py                      # API entry point
@@ -247,18 +245,18 @@ All comprehensive documentation is available in Turkish in the `docs/` folder:
 6. **[LLM Applications](docs/06_LLM_UYGULAMALARI.md)** - ML intent detection, prompt engineering
 7. **[RAG System](docs/07_RAG_SISTEMI.md)** - Retrieval-augmented generation details
 8. **[Testing](docs/08_TEST_DOKUMANTASYONU.md)** - Test methodology and results
-9. **[Performance Analysis](docs/09_PERFORMANS_ANALIZI.md)** - Detailed performance metrics
-10. **[Future Improvements](docs/10_GELECEK_IYILESTIRMELER.md)** - Roadmap and enhancements
+9. **[Future Improvements](docs/09_GELECEK_IYILESTIRMELER.md)** - Roadmap and enhancements
 
 ### Analysis Reports (English)
-- **[Architecture Analysis](docs/ARCHITECTURE_ANALYSIS.md)** - System architecture and 12 identified weaknesses
-- **[Performance Analysis](docs/PERFORMANCE_ANALYSIS.md)** - Comprehensive performance benchmarks
+10. **[Architecture Analysis](docs/10_ARCHITECTURE_ANALYSIS.md)** - System architecture and 12 identified weaknesses
+11. **[Performance Analysis](docs/11_PERFORMANCE_ANALYSIS.md)** - Comprehensive performance benchmarks
 
 ### Quick Links
 - 🚀 [Quick Start](docs/03_KURULUM_VE_KULLANIM.md#adım-1-repository-clone)
 - 📖 [API Usage](docs/04_API_DOKUMANTASYONU.md#1-chat-api)
 - 🧪 [Test Results](tests/README.md)
-- 📊 [Performance Metrics](docs/PERFORMANCE_ANALYSIS.md)
+- 📊 [Performance Metrics](docs/11_PERFORMANCE_ANALYSIS.md)
+- 🏗️ [Architecture](docs/10_ARCHITECTURE_ANALYSIS.md)
 
 ---
 
@@ -453,7 +451,7 @@ For detailed test documentation, see [tests/README.md](tests/README.md)
 | Script generation | $0.0025 | 9% | $6.75 |
 | **TOTAL** | **$0.0004 avg** | **100%** | **$16.50/month** |
 
-For comprehensive performance analysis, see [docs/PERFORMANCE_ANALYSIS.md](docs/PERFORMANCE_ANALYSIS.md)
+For comprehensive performance analysis, see [docs/11_PERFORMANCE_ANALYSIS.md](docs/11_PERFORMANCE_ANALYSIS.md)
 
 ---
 
@@ -476,7 +474,7 @@ For comprehensive performance analysis, see [docs/PERFORMANCE_ANALYSIS.md](docs/
 3. **IP Whitelisting** (P1)
 4. **DDoS Protection** (P1)
 
-For security analysis and recommendations, see [docs/ARCHITECTURE_ANALYSIS.md](docs/ARCHITECTURE_ANALYSIS.md)
+For security analysis and recommendations, see [docs/10_ARCHITECTURE_ANALYSIS.md](docs/10_ARCHITECTURE_ANALYSIS.md)
 
 ---
 
@@ -537,7 +535,7 @@ docker run -p 6333:6333 qdrant/qdrant
 
 **Slow RAG Queries**:
 ```bash
-# Solution: Add Redis cache (see docs/ARCHITECTURE_ANALYSIS.md #2)
+# Solution: Add Redis cache (see docs/10_ARCHITECTURE_ANALYSIS.md #2)
 ```
 
 ---
