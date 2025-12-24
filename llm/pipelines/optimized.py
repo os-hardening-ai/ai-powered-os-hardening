@@ -19,7 +19,7 @@ from typing import Callable, Optional
 from datetime import datetime
 
 from llm.core.context import RequestContext, SafetyResult
-from llm.models.adaptive_router import AdaptiveModelRouter, ModelSpec
+from llm.clients.adaptive_router import AdaptiveModelRouter, ModelSpec
 from llm.prompts.cot_prompts import CoTSecurityAnalyzer
 from llm.prompts.simple_prompts import get_prompt_for_complexity
 from llm.utils.question_classifier import classify_question

@@ -31,113 +31,330 @@ import uvicorn
 
 # API Documentation metadata
 DESCRIPTION = """
-## AI-Powered OS Hardening API
+## 🛡️ AI-Powered OS Hardening API
 
-**Bilgisayar Muhendisligi Bitirme Projesi**
+**Computer Engineering Graduation Project - Istanbul Technical University**
 
-RAG (Retrieval Augmented Generation) + LLM tabanli isletim sistemi guvenlik sikilaştirma asistani.
+Advanced security hardening assistant powered by RAG (Retrieval Augmented Generation) and Large Language Models.
 
-### 4-Layer Security Pipeline
+---
 
-**Layer 1: Safety Classification**
-* LLM-based threat detection
-* Categories: safe_defensive, safe_educational, ambiguous, unsafe_offensive, unsafe_spam
+### 🎯 Core Architecture
 
-**Layer 2: Intent Detection**
-* Pattern-based routing (no LLM calls)
-* Intent types: smalltalk, info_request, action_request, out_of_scope
+#### **4-Layer Security Pipeline**
 
-**Layer 3: Routing**
-* 3A - Pattern Responder: Instant responses for greetings/thanks (0ms, $0)
-* 3B - Info Pipeline: Smart RAG + complexity-based model selection
-* 3C - Action Pipeline: Script generation with strict validation
-* OUT_OF_SCOPE: Polite rejection for non-security topics
+##### **Layer 1: Safety Classification**
+- LLM-based threat detection and content filtering
+- Categories:
+  - ✅ `safe_defensive` - Defensive security operations
+  - ✅ `safe_educational` - Learning and training content
+  - ⚠️ `ambiguous` - Requires additional context
+  - ❌ `unsafe_offensive` - Potentially harmful content
+  - ❌ `unsafe_spam` - Spam or irrelevant content
+- Fast pre-filtering before pipeline execution
 
-**Layer 4: Generation**
-* Adaptive model selection (Groq Llama 8B, GPT-4o-mini, GPT-4o)
-* Smart RAG triggering (skip generic, use specific)
-* CoT reasoning for complex queries
+##### **Layer 2: Intent Detection**
+- **Hybrid ML + Pattern-based** intent classification
+- **ML Model Performance:**
+  - 📊 **Test Accuracy: 90.48%**
+  - 📊 **Cross-Validation Mean: 82.10%**
+  - 📊 Training Dataset: 1677 examples
+  - ⚡ Latency: ~5-10ms per prediction
+  - 💰 Cost: $0 (no API calls)
+- Intent Categories:
+  - 🤝 `greeting` - User greetings and pleasantries
+  - 👋 `farewell` - Goodbyes and closing statements
+  - 🙏 `thanks` - Expressions of gratitude
+  - ❓ `help` - Assistance requests
+  - 📚 `info_request` - Information and explanation queries
+  - ⚙️ `action_request` - Script generation and configuration
+  - 🚫 `out_of_scope` - Non-security related topics
 
-### Ozellikler
+##### **Layer 3: Intelligent Routing**
+- **3A - Pattern Responder**
+  - Instant responses for greetings/thanks
+  - ⚡ Latency: ~0ms
+  - 💰 Cost: $0
+- **3B - Info Pipeline**
+  - RAG-enhanced information retrieval
+  - Complexity-based model selection
+  - CIS Benchmark document search
+- **3C - Action Pipeline**
+  - Security script generation
+  - Strict validation and safety checks
+  - Platform-specific templates
+- **OUT_OF_SCOPE Handler**
+  - Polite rejection for non-security topics
+  - Context-aware explanations
 
-* **RAG Search**: CIS Benchmark dokumanllarindan anlamsal arama
-* **LLM Chat**: RAG + LLM entegre guvenlik danipmanligi
-* **Adaptive Routing**: Task karmasikligina gore otomatik model secimi
-* **Multi-Provider**: Groq (ucretsiz), OpenAI, Ollama destegi
-* **Source Attribution**: Hangi kaynaklardan yanit uretildigini gosterir
-* **Out-of-Scope Handling**: Non-security topics politely rejected
+##### **Layer 4: Adaptive Generation**
+- **Dynamic Model Selection:**
+  - 🚀 Groq Llama 3.1 8B (fast, free)
+  - 🎯 Groq Llama 3.3 70B (complex queries)
+  - 🔧 Configurable fallback chain
+- **Smart RAG Integration:**
+  - Semantic search over CIS Benchmarks
+  - Automatic relevance filtering
+  - Source attribution
+- **Chain-of-Thought (CoT) Reasoning**
+  - Step-by-step problem decomposition
+  - Enhanced accuracy for complex scenarios
 
-### Guvenlik
+---
 
-**Rate Limiting:**
-* 100 requests/dakika per IP
-* 5 dakika ban süresi (rate limit ihlali)
-* Otomatik IP tracking ve blocking
+### ✨ Key Features
 
-**Input Validation:**
-* Max 5000 karakter input uzunluğu
-* Empty input kontrolü
-* Field-level validation (Pydantic)
+#### **🔍 RAG-Powered Search**
+- Semantic search over CIS Benchmark documents
+- Vector similarity using sentence transformers
+- Configurable relevance thresholds
+- Multi-source aggregation
 
-**Security Headers:**
-* X-Content-Type-Options: nosniff
-* X-Frame-Options: DENY
-* X-XSS-Protection: enabled
-* Strict-Transport-Security (HSTS)
-* Content-Security-Policy
-* Permissions-Policy
+#### **💬 Intelligent Chat Interface**
+- RAG + LLM integrated security consulting
+- Context-aware conversation flow
+- Multi-turn dialogue support
+- Source attribution and transparency
 
-**Output Sanitization:**
-* LLM prompt leakage koruması
-* System instruction filtering
+#### **🎛️ Adaptive Intelligence**
+- Task complexity-based model selection
+- Automatic routing optimization
+- Cost-performance trade-offs
+- Graceful degradation
 
-**CORS ve Host Protection:**
-* CORS middleware (yapılandırılabilir origins)
-* Trusted host validation
-* GZip compression
+#### **🔌 Multi-Provider Support**
+- **Groq** (Free, ultra-fast)
+  - Llama 3.1 8B Instant
+  - Llama 3.3 70B Versatile
+- **OpenAI** (Premium quality)
+  - GPT-4o-mini
+  - GPT-4o
+- **Ollama** (Local, private)
+  - Self-hosted models
+  - No API costs
 
-### Performance Monitoring
+#### **📊 Source Transparency**
+- Every response cites sources
+- CIS Benchmark section references
+- Confidence scores
+- Retrieval relevance metrics
 
-**Real-time Metrics:**
-* Request latency tracking (avg, min, max, p50, p95, p99)
-* Error rate monitoring
-* Token usage statistics
-* LLM provider breakdown
+#### **🚫 Smart Scope Management**
+- Out-of-scope topic detection
+- Polite rejection with explanations
+- Context-aware redirection
+- Educational guidance
 
-**Benchmarks:**
-* Response time: ~2-4 saniye (avg)
-* Throughput: 500+ token/saniye (Groq)
-* 24 saat metrics retention
-* Endpoint: `/metrics`
+---
 
-**Monitoring Endpoints:**
-* `/metrics` - Aggregated performance metrics
-* `/metrics/errors` - Recent error logs
-* `/metrics/slow` - Slowest requests
+### 🔒 Security & Protection
 
-### Dokumantasyon
+#### **🚦 Rate Limiting**
+- **100 requests/minute** per IP address
+- **5-minute ban** period for violations
+- Automatic IP tracking and blocking
+- Sliding window algorithm
+- Configurable thresholds
 
-* OpenAPI/Swagger UI: `/docs`
-* ReDoc: `/redoc`
-* Health Check: `/health`
+#### **✅ Input Validation**
+- **Maximum length:** 5000 characters
+- Empty input detection
+- Field-level validation (Pydantic)
+- SQL injection prevention
+- XSS filtering
+- Command injection protection
+
+#### **🛡️ Security Headers**
+```
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+X-XSS-Protection: 1; mode=block
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Content-Security-Policy: default-src 'self'
+Permissions-Policy: geolocation=(), microphone=(), camera=()
+```
+
+#### **🧹 Output Sanitization**
+- LLM prompt leakage protection
+- System instruction filtering
+- Sensitive data masking
+- Response validation
+
+#### **🌐 CORS & Host Protection**
+- Configurable CORS origins
+- Trusted host validation
+- GZip compression
+- Request timeout enforcement
+
+#### **📝 Audit Logging**
+- All requests logged
+- Error tracking
+- Performance metrics
+- Security event monitoring
+
+---
+
+### 📈 Performance Monitoring
+
+#### **⏱️ Real-time Metrics**
+- Request latency tracking (avg, min, max, p50, p95, p99)
+- Error rate monitoring
+- Token usage statistics
+- LLM provider breakdown
+- Success/failure rates
+
+#### **🎯 Performance Benchmarks**
+- **Average Response Time:** 2-4 seconds
+- **Throughput:** 500+ tokens/second (Groq)
+- **Concurrent Requests:** Up to 100
+- **Metrics Retention:** 24 hours
+- **Uptime Target:** 99.9%
+
+#### **📊 Monitoring Endpoints**
+| Endpoint | Purpose |
+|----------|---------|
+| `/metrics` | Aggregated performance statistics |
+| `/metrics/errors` | Recent error logs and diagnostics |
+| `/metrics/slow` | Slowest request analysis |
+| `/health` | Service health status |
+| `/analytics/summary` | Usage analytics dashboard |
+
+---
+
+### 📚 API Documentation
+
+#### **Interactive Documentation**
+- **Swagger UI:** [`/docs`](/docs) - Try API endpoints interactively
+- **ReDoc:** [`/redoc`](/redoc) - Beautiful API documentation
+- **OpenAPI Spec:** `/openapi.json` - Machine-readable API schema
+
+#### **Health & Status**
+- **Health Check:** [`/health`](/health) - Service status verification
+- **Version Info:** Included in all responses
+
+---
+
+### 🚀 Quick Start
+
+#### **1. RAG Search Example**
+```bash
+curl -X POST "http://localhost:8000/rag/search" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "query": "SSH hardening best practices",
+    "top_k": 3
+  }'
+```
+
+#### **2. Chat Query Example**
+```bash
+curl -X POST "http://localhost:8000/chat/query" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "question": "Ubuntu 22.04 SSH portunu nasıl değiştiririm?",
+    "use_rag": true
+  }'
+```
+
+#### **3. Health Check Example**
+```bash
+curl "http://localhost:8000/health"
+```
+
+---
+
+### 📞 Support & Resources
+
+- **Project Repository:** GitHub
+- **Documentation:** `/docs` endpoint
+- **Issue Tracker:** GitHub Issues
+- **Version:** v1.0.0
+
 """
 
 TAGS_METADATA = [
     {
         "name": "chat",
-        "description": "**RAG + LLM entegre endpoint**. Kullanıcı sorusunu RAG ile zenginleştirip LLM'e gönderir.",
+        "description": """
+## 💬 Chat - RAG + LLM Integrated Endpoints
+
+**Primary Interface** for security consultations and hardening assistance.
+
+### Features:
+- 🔍 **RAG-Enhanced Responses** - Enriched with CIS Benchmark context
+- 🤖 **ML Intent Detection** - 90.48% accuracy, 7 intent categories
+- 🎯 **Adaptive Routing** - Complexity-based model selection
+- 📊 **Source Attribution** - Every answer cites sources
+- ⚡ **Fast Responses** - 2-4 second average latency
+
+### Use Cases:
+- Security configuration questions
+- Best practice inquiries
+- Hardening script generation
+- Compliance guidance
+- Threat mitigation strategies
+        """,
     },
     {
         "name": "rag",
-        "description": "**Sadece RAG arama**. Vector database'den semantik arama (backward compatibility).",
+        "description": """
+## 🔍 RAG - Retrieval Augmented Generation
+
+**Direct semantic search** over CIS Benchmark knowledge base.
+
+### Features:
+- 📚 **Vector Search** - Sentence transformer embeddings
+- 🎯 **Relevance Filtering** - Configurable similarity thresholds
+- 📄 **Multi-Document Support** - Ubuntu, Debian, RHEL, Windows
+- 🔗 **Source Metadata** - Section references and scores
+
+### Use Cases:
+- Quick document lookups
+- Specific section retrieval
+- Compliance reference checks
+- Backward compatibility with old clients
+        """,
     },
     {
         "name": "health",
-        "description": "**Sistem sağlık kontrolleri**. API durumu, bağımlılıklar, metrikler.",
+        "description": """
+## ❤️ Health - System Status & Diagnostics
+
+**Real-time service health** monitoring and diagnostics.
+
+### Endpoints:
+- ✅ `/health` - Overall system status
+- 🔍 `/health/detailed` - Component-level health
+- 🧪 `/health/dependencies` - External service status
+
+### Checks:
+- API availability
+- LLM provider connectivity
+- RAG system functionality
+- Database connections
+- Memory usage
+        """,
     },
     {
         "name": "monitoring",
-        "description": "**Performance monitoring**. Request metrics, latency stats, error rates.",
+        "description": """
+## 📊 Monitoring - Performance Analytics
+
+**Comprehensive metrics** and performance tracking.
+
+### Endpoints:
+- 📈 `/metrics` - Aggregated statistics
+- ❌ `/metrics/errors` - Error logs and diagnostics
+- 🐌 `/metrics/slow` - Slow request analysis
+- 📊 `/analytics/summary` - Usage dashboard
+
+### Metrics Tracked:
+- Request latency (p50, p95, p99)
+- Token usage and costs
+- Error rates and types
+- Provider distribution
+- User interaction patterns
+        """,
     },
 ]
 

@@ -18,20 +18,25 @@ Güvenlik odaklı mimari tasarladık:
 - **Katman 4 - Generation**: RAG + LLM ile yanıt üretir
 
 ### 2. Makine Öğrenmesi Tabanlı Intent Detection
-- **Dataset**: 1,230 etiketli örnek (7 intent kategorisi)
-- **Model**: Logistic Regression + LinearSVM kombinasyonu
-- **TF-IDF Vektörizasyon**: 544 özellik, n-gram (1-3)
-- **Performans**: %85.37 CV doğruluğu, %82.52 test doğruluğu
-- **Hybrid Approach**: Pattern matching (hız) + ML (doğruluk) kombinasyonu
+- **Dataset**: **1,677 etiketli örnek** (7 intent kategorisi) - Konuşma dili varyasyonları ile zenginleştirilmiş
+- **Model**: Logistic Regression (primary) + LinearSVM (secondary) ensemble
+- **TF-IDF Vektörizasyon**: 677 özellik, n-gram (1-3), sublinear TF scaling
+- **Performans**:
+  - 🎯 **Test Accuracy: %90.48** (target: %90+ achieved!)
+  - 📊 **Cross-Validation Mean: %82.10** (±3.46%)
+  - ⚡ **Latency: ~5-10ms** per prediction
+  - 💰 **Cost: $0** (no API calls)
+- **Hybrid Approach**: ML prediction (primary) + Pattern fallback (reliability)
+- **Model Location**: `llm/ml/models/` (intent_model.joblib, intent_vectorizer.joblib)
 
-Intent Kategorileri:
-- `greeting`: Selamlaşma (200 örnek)
-- `farewell`: Veda (150 örnek)
-- `thanks`: Teşekkür (100 örnek)
-- `help`: Yardım istekleri (92 örnek)
-- `info_request`: Bilgi soruları (325 örnek)
-- `action_request`: Script/yapılandırma istekleri (231 örnek)
-- `out_of_scope`: Güvenlik dışı konular (132 örnek)
+Intent Kategorileri (Dataset Distribution):
+- `greeting`: Selamlaşma (~240 örnek) - Çok dilli varyasyonlar
+- `farewell`: Veda (~170 örnek) - Farklı vedalaşma tarzları
+- `thanks`: Teşekkür (~120 örnek) - Değişik minnet ifadeleri
+- `help`: Yardım istekleri (~110 örnek) - Acil ve normal destek talepleri
+- `info_request`: Bilgi soruları (~480 örnek) - Teknik soru varyasyonları
+- `action_request`: Script/yapılandırma istekleri (~390 örnek) - Platform-spesifik talepler
+- `out_of_scope`: Güvenlik dışı konular (~167 örnek) - Reddedilecek konular
 
 ### 3. RAG (Retrieval-Augmented Generation) Sistemi
 - CIS Benchmark dokümanlarından semantik arama
@@ -40,10 +45,12 @@ Intent Kategorileri:
 - Top-K retrieval (varsayılan: 5 chunk, min score: 0.7)
 - Alakalı güvenlik dokümanlarını otomatik bulma
 
-### 4. Multi-LLM Desteği
-- **Groq** (ücretsiz, hızlı): llama-3.3-70b-versatile, llama-3.1-8b-instant
-- **OpenAI**: GPT-4, GPT-3.5-turbo
+### 4. Multi-LLM Provider Desteği
+- **LLM Clients**: `llm/clients/` modülü (renamed from `llm/models/` for clarity)
+- **Groq** (ücretsiz, ultra-hızlı): llama-3.3-70b-versatile, llama-3.1-8b-instant
+- **OpenAI**: GPT-4o, GPT-4o-mini, GPT-3.5-turbo
 - **Ollama**: Yerel model desteği (llama2, mistral, etc.)
+- **HuggingFace**: Inference API desteği
 
 ### 5. Zero Trust Enrichment
 - Otomatik Zero Trust prensipleri ekleme

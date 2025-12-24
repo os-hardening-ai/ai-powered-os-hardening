@@ -23,7 +23,7 @@ Security-first pipeline implementations for OS hardening assistant.
 
 ```python
 from llm.pipelines.secure_v2 import run_secure_pipeline_v2
-from llm.models import get_llm_clients
+from llm.clients import get_llm_clients
 
 llm_ultra_fast, llm_small, llm_large = get_llm_clients()
 

@@ -1229,3 +1229,450 @@ Harika açıklama teşekkürler,thanks
 Net ve anlaşılır sağol,thanks
 Tam aradığım cevap thanks,thanks
 Kritik yardım teşekkürler,thanks
+Selamlar dostum,greeting
+Hoş geldiniz,greeting
+Merhaba ekip,greeting
+İyi akşamlar size,greeting
+Günaydın dostlar,greeting
+Selam millet,greeting
+Hey arkadaşlar,greeting
+Herkese merhabalar,greeting
+İyi günler dilerim,greeting
+Gününüz güzel geçsin,greeting
+Kendine iyi bak dostum,farewell
+İyi şanslar,farewell
+Allah'a emanet ol,farewell
+Sevgiler güle güle,farewell
+Hoşçakal kardeşim,farewell
+Başarılar dilerim görüşürüz,farewell
+İyi akşamlar tekrar görüşmek üzere,farewell
+Hayırlı işler bye,farewell
+Görüşmek dileğiyle,farewell
+Sağlıcakla kalın,farewell
+Çok teşekkür ederim yardımın için,thanks
+Minnettarım gerçekten,thanks
+Süpersin teşekkürler,thanks
+Mükemmel bilgi sağol,thanks
+Harika yardım thanks,thanks
+Değerli bilgi için teşekkürler,thanks
+İyi ki varsın sağol,thanks
+Efsanesin thanks a lot,thanks
+Perfect thank you so much,thanks
+Amazing help teşekkürler,thanks
+Yardıma acilen ihtiyacım var,help
+Destek alabilir miyim,help
+Yardımcı olur musunuz lütfen,help
+Bir konuda takıldım help,help
+Sorunum var çözemiyorum,help
+Assistance needed please,help
+Can you assist me,help
+Need urgent support,help
+Yardım et bana,help
+Desteğe ihtiyaç var,help
+Firewall ne demek,info_request
+SELinux nasıl aktif edilir,info_request
+AppArmor ne işe yarar,info_request
+Zero trust nedir açıklar mısın,info_request
+MFA authentication nasıl çalışır,info_request
+TLS handshake explain,info_request
+CSRF saldırısı nedir,info_request
+XSS vulnerability nedir,info_request
+SQL injection nasıl önlenir,info_request
+SIEM nedir açıkla,info_request
+IDS ve IPS farkı,info_request
+Penetration testing nedir,info_request
+Vulnerability assessment nasıl yapılır,info_request
+Security audit checklist,info_request
+Compliance requirements neler,info_request
+GDPR nedir açıkla,info_request
+PCI DSS standartları,info_request
+ISO 27001 nedir,info_request
+NIST framework açıkla,info_request
+CIS controls nedir,info_request
+Debian firewall kuralı ekle,action_request
+CentOS SSH config hardening script,action_request
+RHEL password policy ayarla,action_request
+Fedora selinux enable script,action_request
+Ubuntu fail2ban kur,action_request
+Kali Linux penetration test scripti,action_request
+Windows firewall rules PowerShell,action_request
+macOS security configuration,action_request
+Docker container güvenlik scripti,action_request
+Kubernetes security policy oluştur,action_request
+AWS IAM policy json yaz,action_request
+Azure security baseline script,action_request
+GCP firewall rules terraform,action_request
+PostgreSQL hardening configuration,action_request
+MySQL security script oluştur,action_request
+MongoDB authentication enable,action_request
+Redis security configuration,action_request
+NGINX SSL configuration script,action_request
+Apache hardening automation,action_request
+Ansible security playbook yaz,action_request
+Terraform AWS security module,action_request
+Splunk security monitoring setup,action_request
+ELK stack security config,action_request
+Prometheus alerting rules,action_request
+Grafana dashboard security,action_request
+Bugün hava güzel mi,out_of_scope
+Yemek yapma tarifi,out_of_scope
+Film tavsiyesi ver bana,out_of_scope
+Müzik öner dinleyeyim,out_of_scope
+Kitap önerisi lazım,out_of_scope
+Spor sonuçları nedir,out_of_scope
+Borsa kapanışı bugün,out_of_scope
+Döviz kurları güncel,out_of_scope
+Kripto para fiyatları,out_of_scope
+Restoran önerisi ver,out_of_scope
+Otel tavsiyesi yap,out_of_scope
+Tatil yeri öner,out_of_scope
+Araba tavsiyesi,out_of_scope
+Telefon modeli öner,out_of_scope
+Oyun önerisi ver,out_of_scope
+Netflix dizi tavsiyesi,out_of_scope
+YouTube video öner,out_of_scope
+Instagram gönderisi,out_of_scope
+Twitter trending,out_of_scope
+Aşk hayatı tavsiyesi,out_of_scope
+İlişki önerisi ver,out_of_scope
+Sağlık tavsiyesi,out_of_scope
+Diyet programı öner,out_of_scope
+Fitness egzersizi,out_of_scope
+Burç yorumu yap,out_of_scope
+Tarot falı bak,out_of_scope
+Rüya tabiri,out_of_scope
+Kahve falı oku,out_of_scope
+Crystal healing,out_of_scope
+Meditation techniques,out_of_scope
+Yardımcı olabilir misiniz acil,help
+Support lazım hemen,help
+Assistance gerekli,help
+Problem var çözüm lazım,help
+Help me with this issue,help
+Urgent help needed now,help
+Can someone assist,help
+Need immediate support,help
+Takıldım yardım eder misin,help
+Destek ekibi yardım,help
+SSH configuration öğrenmek istiyorum,info_request
+Firewall kuralları nasıl yazılır,info_request
+İnce ayar yapmak istiyorum SSH,action_request
+Güvenlik duvarı yapılandır benim için,action_request
+Script oluştur firewall için,action_request
+Automation script yaz hardening,action_request
+Konfigürasyon dosyası hazırla,action_request
+Security baseline uygula,action_request
+Sistem sıkılaştırma scripti yaz,action_request
+Güvenlik politikası oluştur bana,action_request
+TLS certificate nasıl kurulur,info_request
+PKI infrastructure nedir,info_request
+Certificate authority açıkla,info_request
+Digital signature nasıl çalışır,info_request
+Encryption at rest nedir,info_request
+VPN tunnel configuration,info_request
+IPSec protokolü nedir,info_request
+OpenVPN setup guide,info_request
+WireGuard nasıl kurulur,info_request
+Site-to-site VPN nedir,info_request
+Load balancer security,info_request
+WAF nedir açıkla,info_request
+DDoS protection nasıl sağlanır,info_request
+Rate limiting nedir,info_request
+API gateway security,info_request
+OAuth2 flow açıkla,info_request
+SAML authentication nedir,info_request
+SSO implementation nasıl yapılır,info_request
+Multi-factor authentication types,info_request
+Biometric authentication security,info_request
+Port 22 değiştir SSH,action_request
+ufw enable et Ubuntu,action_request
+iptables rule ekle,action_request
+SELinux enforce mode yap,action_request
+fail2ban jail configuration,action_request
+ClamAV scan automation,action_request
+Rootkit detection script,action_request
+AIDE file integrity monitoring,action_request
+Auditd rules oluştur,action_request
+Rsyslog remote logging setup,action_request
+Splunk forwarder kur,action_request
+Wazuh agent deploy et,action_request
+Suricata IDS rules ekle,action_request
+Snort signature oluştur,action_request
+Zeek script yaz network monitoring,action_request
+Ansible playbook security automation,action_request
+Chef cookbook security hardening,action_request
+Puppet manifest security policy,action_request
+SaltStack state file hardening,action_request
+Terraform module security baseline,action_request
+CloudFormation template security,action_request
+ARM template Azure security,action_request
+Helm chart security values,action_request
+Kustomize overlay security,action_request
+ArgoCD application security,action_request
+Matematik problemi çöz,out_of_scope
+Fizik sorusu sor,out_of_scope
+Kimya deneyi,out_of_scope
+Biyoloji konusu,out_of_scope
+Tarih bilgisi,out_of_scope
+Coğrafya sorusu,out_of_scope
+Edebiyat eseri,out_of_scope
+Felsefe tartışması,out_of_scope
+Psikoloji tavsiyesi,out_of_scope
+Sosyoloji konusu,out_of_scope
+Ekonomi analizi,out_of_scope
+İş dünyası stratejisi,out_of_scope
+Pazarlama önerisi,out_of_scope
+Satış tekniği,out_of_scope
+Liderlik tavsiyeleri,out_of_scope
+Motivasyon sözleri,out_of_scope
+Kariyer planlama,out_of_scope
+Maaş pazarlığı,out_of_scope
+İş görüşmesi ipuçları,out_of_scope
+Özgeçmiş hazırlama,out_of_scope
+Container orchestration security,info_request
+Microservices security best practices,info_request
+Service mesh güvenliği,info_request
+API security testing,info_request
+GraphQL security considerations,info_request
+REST API authentication methods,info_request
+Webhook security validation,info_request
+Message queue security,info_request
+Event-driven architecture security,info_request
+Serverless security risks,info_request
+Lambda function security,info_request
+Cloud storage encryption,info_request
+Database encryption methods,info_request
+Backup security practices,info_request
+Disaster recovery security,info_request
+Business continuity planning,info_request
+Incident response procedures,info_request
+Forensics investigation steps,info_request
+Malware analysis techniques,info_request
+Threat hunting metodları,info_request
+Log analysis best practices,info_request
+SIEM correlation rules,info_request
+Security metrics KPIs,info_request
+Vulnerability management process,info_request
+Patch management strategy,info_request
+Change management security,info_request
+Configuration management security,info_request
+Asset inventory tracking,info_request
+Network segmentation design,info_request
+Zero trust implementation,info_request
+Least privilege principle,info_request
+Defense in depth strategy,info_request
+Security by design approach,info_request
+Secure coding practices,info_request
+Code review security checklist,info_request
+Static code analysis tools,info_request
+Dynamic application security testing,info_request
+Security regression testing,info_request
+Continuous security monitoring,info_request
+DevSecOps pipeline integration,info_request
+Docker security scan configuration,action_request
+Kubernetes RBAC policy oluştur,action_request
+Istio security policy yaml,action_request
+Linkerd authorization policy,action_request
+Consul ACL configuration,action_request
+Vault secret management setup,action_request
+HashiCorp Boundary configuration,action_request
+Teleport access control,action_request
+OAuth2 proxy deployment,action_request
+Keycloak realm configuration,action_request
+Okta integration script,action_request
+Auth0 rule oluştur,action_request
+AWS Cognito user pool setup,action_request
+Azure AD B2C policy,action_request
+Google Identity Platform config,action_request
+LDAP authentication setup,action_request
+Kerberos configuration script,action_request
+RADIUS server setup,action_request
+TACACS+ authentication,action_request
+Certificate-based auth setup,action_request
+Mutual TLS configuration,action_request
+API key rotation script,action_request
+Token management automation,action_request
+Session management security,action_request
+Cookie security flags set,action_request
+CORS policy configuration,action_request
+CSP header ayarla,action_request
+HSTS enable script,action_request
+X-Frame-Options set,action_request
+X-Content-Type-Options configure,action_request
+Referrer-Policy ayarla,action_request
+Permissions-Policy setup,action_request
+Feature-Policy configure,action_request
+SameSite cookie attribute,action_request
+HttpOnly flag enable,action_request
+Secure flag set cookies,action_request
+Input validation regex,action_request
+Output encoding functions,action_request
+SQL injection prevention,action_request
+XSS filter implementation,action_request
+CSRF token generation,action_request
+Path traversal mitigation,action_request
+Command injection prevention,action_request
+SSRF protection implementation,action_request
+XXE prevention configuration,action_request
+Deserialization security,action_request
+Buffer overflow protection,action_request
+Race condition mitigation,action_request
+Integer overflow checks,action_request
+Memory leak detection,action_request
+Resource exhaustion prevention,action_request
+Denial of service mitigation,action_request
+Rate limiting implementation,action_request
+Throttling mechanism setup,action_request
+Circuit breaker pattern,action_request
+Bulkhead pattern implementation,action_request
+Retry policy configuration,action_request
+Timeout settings optimization,action_request
+Connection pooling security,action_request
+DNS security configuration,action_request
+DNSSEC implementation,action_request
+Zero trust nedir açıklar mısın,info_request
+Zero trust modelini anlatır mısın,info_request
+Bana zero trust hakkında bilgi ver,info_request
+Zero trust mimarisini öğrenmek istiyorum,info_request
+Zero trust yaklaşımı nedir,info_request
+Zero trust prensibi nasıl çalışır,info_request
+Firewall açıkla bana,info_request
+Firewall hakkında bilgi verir misin,info_request
+Güvenlik duvarı nedir anlat,info_request
+Firewall nasıl çalışır söyler misin,info_request
+Güvenlik duvarının görevini açıklar mısın,info_request
+SSH protokolünü anlat,info_request
+SSH nedir bana açıkla,info_request
+SSH hakkında bilgi ver,info_request
+Secure shell protokolü nasıl çalışır,info_request
+SSH'ı öğrenmek istiyorum,info_request
+MFA nedir söyler misin,info_request
+Multi-factor authentication açıkla,info_request
+Çok faktörlü kimlik doğrulama nedir,info_request
+MFA nasıl çalışır anlat,info_request
+MFA hakkında bilgi verir misin,info_request
+SSL/TLS nedir açıkla,info_request
+TLS protokolünü anlat bana,info_request
+SSL sertifikası hakkında bilgi ver,info_request
+TLS handshake nasıl olur,info_request
+SSL/TLS farkını söyler misin,info_request
+VPN nedir açıklar mısın,info_request
+VPN nasıl çalışır anlat,info_request
+Sanal özel ağ hakkında bilgi ver,info_request
+VPN türlerini öğrenmek istiyorum,info_request
+VPN protokollerini açıkla,info_request
+IDS nedir söyle bana,info_request
+Intrusion detection system anlat,info_request
+Saldırı tespit sistemi hakkında bilgi ver,info_request
+IDS nasıl çalışır açıkla,info_request
+IDS ve IPS farkını anlat,info_request
+SIEM nedir açıklar mısın,info_request
+Security information event management anlat,info_request
+SIEM sistemini öğrenmek istiyorum,info_request
+SIEM nasıl çalışır söyle,info_request
+SIEM araçları hakkında bilgi ver,info_request
+Penetration test nedir,info_request
+Pentest açıkla bana,info_request
+Sızma testi hakkında bilgi ver,info_request
+Penetration testing nasıl yapılır,info_request
+Pentest adımlarını anlat,info_request
+Vulnerability assessment nedir,info_request
+Zafiyet değerlendirmesi açıkla,info_request
+Güvenlik açığı taraması hakkında bilgi ver,info_request
+Vulnerability scanning nasıl yapılır,info_request
+Zafiyet tespiti yöntemlerini anlat,info_request
+Ubuntu SSH güvenlik scripti yaz,action_request
+Ubuntu için SSH hardening scripti oluştur,action_request
+SSH sıkılaştırma scripti hazırla Ubuntu,action_request
+Bana Ubuntu SSH security scripti yaz,action_request
+Ubuntu SSH yapılandırma scripti oluştur,action_request
+Debian firewall kuralı ekle bana,action_request
+Debian için güvenlik duvarı kuralı yaz,action_request
+Firewall rule oluştur Debian,action_request
+Debian firewall yapılandırması yap,action_request
+Güvenlik duvarı scripti hazırla Debian,action_request
+CentOS SELinux aktif et,action_request
+CentOS için SELinux enable scripti yaz,action_request
+SELinux'u etkinleştir CentOS,action_request
+Bana CentOS SELinux scripti oluştur,action_request
+SELinux yapılandırma scripti hazırla,action_request
+RHEL password policy ayarla bana,action_request
+RHEL için parola politikası oluştur,action_request
+Password policy scripti yaz RHEL,action_request
+Şifre politikası yapılandır RHEL,action_request
+RHEL parola kuralları scripti hazırla,action_request
+Docker container security yap,action_request
+Docker güvenlik yapılandırması oluştur,action_request
+Container hardening scripti yaz,action_request
+Docker security baseline hazırla,action_request
+Konteyner güvenliği scripti oluştur,action_request
+Kubernetes RBAC policy yaz bana,action_request
+Kubernetes için role-based access control oluştur,action_request
+K8s RBAC yapılandırması hazırla,action_request
+Kubernetes yetkilendirme politikası yaz,action_request
+RBAC kuralları scripti oluştur K8s,action_request
+AWS IAM policy oluştur,action_request
+AWS için IAM politikası yaz,action_request
+IAM policy json hazırla AWS,action_request
+AWS yetkilendirme politikası oluştur,action_request
+Amazon IAM kuralları scripti yaz,action_request
+Terraform security module yaz,action_request
+Terraform için güvenlik modülü oluştur,action_request
+IaC security baseline hazırla Terraform,action_request
+Terraform güvenlik yapılandırması yaz,action_request
+Terraform hardening modülü oluştur,action_request
+Ansible security playbook hazırla,action_request
+Ansible için güvenlik otomasyon scripti yaz,action_request
+Security automation playbook oluştur Ansible,action_request
+Ansible hardening playbook hazırla,action_request
+Ansible güvenlik yapılandırması yaz,action_request
+NGINX SSL config yap,action_request
+NGINX için SSL yapılandırması oluştur,action_request
+NGINX TLS configuration scripti yaz,action_request
+Web sunucu SSL ayarları hazırla NGINX,action_request
+NGINX HTTPS yapılandırması oluştur,action_request
+PostgreSQL hardening yap,action_request
+PostgreSQL güvenlik sıkılaştırması oluştur,action_request
+Database security scripti yaz PostgreSQL,action_request
+PostgreSQL güvenlik yapılandırması hazırla,action_request
+Veritabanı hardening scripti oluştur PostgreSQL,action_request
+Merhaba nasıl gidiyor,greeting
+Selam işler nasıl,greeting
+Hey ne haber,greeting
+Günaydın nasılsınız,greeting
+İyi günler arkadaşlar,greeting
+Selamlar herkese,greeting
+Merhaba dostlar,greeting
+Hey millet nasılsınız,greeting
+Selam ekip,greeting
+İyi akşamlar hepinize,greeting
+Görüşürüz tekrar,farewell
+Hoşçakal sonra görüşürüz,farewell
+Bye bye görüşmek üzere,farewell
+Güle güle kendinize iyi bakın,farewell
+Hoşçakalın başarılar,farewell
+Görüşmek dileğiyle hoşçakal,farewell
+İyi günler tekrar görüşelim,farewell
+Elveda arkadaşlar,farewell
+Sağlıcakla kalın görüşürüz,farewell
+Güle güle iyi çalışmalar,farewell
+Teşekkürler çok yardımcı oldun,thanks
+Sağol gerçekten çok teşekkürler,thanks
+Thanks a lot yardımın için,thanks
+Minnettarım çok sağol,thanks
+Harika bilgi teşekkür ederim,thanks
+Süper yardım sağol,thanks
+Mükemmel açıklama teşekkürler,thanks
+Perfect sağol çok,thanks
+Çok işime yaradı teşekkürler,thanks
+Efsane yardım thanks,thanks
+Yardım eder misin lütfen,help
+Yardıma ihtiyacım var acil,help
+Destek gerekli bana,help
+Help me please yardım et,help
+Assistance lazım hemen,help
+Yardımcı olur musun,help
+Support gerekiyor acil,help
+Takıldım yardım lazım,help
+Problem var çözemiyorum yardım,help
+Desteğe ihtiyacım var,help

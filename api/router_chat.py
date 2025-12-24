@@ -15,7 +15,7 @@ if project_root not in sys.path:
 # Import LLM modules (now llm is importable as a package)
 from llm.core.context import RequestContext
 from llm.pipelines.secure_v2 import SecurePipelineV2
-from llm.models import get_llm_clients
+from llm.clients import get_llm_clients
 
 # Import security utilities
 from api.security import validate_chat_input, sanitize_output

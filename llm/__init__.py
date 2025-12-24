@@ -23,7 +23,7 @@ RAG + LLM tabanlı asistan işlevlerini sağlar.
 
 ```python
 from llm.core.config import CONFIG
-from llm.models import get_llm_clients
+from llm.clients import get_llm_clients
 from llm.pipelines.secure_v2 import SecurePipelineV2, run_secure_pipeline_v2
 from llm.core.context import RequestContext
 

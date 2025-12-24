@@ -8,7 +8,7 @@ from typing import Optional
 from llm.core.context import RequestContext
 from llm.pipelines.optimized import run_optimized_pipeline_with_retry
 from llm.core.config import CONFIG
-from llm.models import get_llm_clients
+from llm.clients import get_llm_clients
 from llm.core.session_store import global_session_store
 
 

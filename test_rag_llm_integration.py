@@ -5,7 +5,7 @@ Test RAG + LLM Integration
 Tests that RAG and ML models integrate successfully with LLM pipelines.
 """
 
-from llm.models import get_llm_clients
+from llm.clients import get_llm_clients
 from llm.pipelines.secure_v2 import run_secure_pipeline_v2
 from llm.rag.integration import get_rag_context_builder
 
