@@ -127,7 +127,7 @@ async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
         content={"error": exc.error_detail.dict()},
         headers={
             "X-Request-ID": exc.error_detail.request_id or "unknown",
-            "X-Error-Code": exc.error_detail.code.value,
+            "X-Error-Code": exc.error_detail.code,
         }
     )
 
@@ -156,7 +156,7 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
         content={"error": error_detail.dict()},
         headers={
             "X-Request-ID": request_id,
-            "X-Error-Code": ErrorCode.INTERNAL_ERROR.value,
+            "X-Error-Code": ErrorCode.INTERNAL_ERROR,
         }
     )
 

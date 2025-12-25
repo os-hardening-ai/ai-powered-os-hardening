@@ -56,18 +56,20 @@ class ChatRequest(BaseModel):
     security_level: str = Field(
         "balanced",
         description="Security level: minimal/balanced/strict",
-        pattern="^(minimal|balanced|strict)$"
+        pattern="^(minimal|balanced|strict)$",
+        examples=["balanced"]
     )
     zt_maturity: str = Field(
         "medium",
         description="Zero Trust maturity: low/medium/high",
-        pattern="^(low|medium|high)$"
+        pattern="^(low|medium|high)$",
+        examples=["medium"]
     )
-    use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı")
-    rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20)
-    rag_min_score: float = Field(0.7, description="Minimum relevance score", ge=0.0, le=1.0)
-    stream: bool = Field(False, description="Enable streaming response (SSE)")
-    timeout: Optional[int] = Field(None, description="Request timeout in seconds", ge=1, le=300)
+    use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı", examples=[True])
+    rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20, examples=[5])
+    rag_min_score: float = Field(0.7, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.7])
+    stream: bool = Field(False, description="Enable streaming response (SSE)", examples=[False])
+    timeout: Optional[int] = Field(60, description="Request timeout in seconds (default: 60s, max: 300s)", ge=1, le=300, examples=[60])
 
     @field_validator("question")
     @classmethod
