@@ -4,7 +4,7 @@
 **AI-Powered OS Hardening - RAG + LLM Tabanlı İşletim Sistemi Güvenlik Sıkılaştırma Asistanı**
 
 *Marmara Üniversitesi - Bilgisayar Mühendisliği Bitirme Projesi*
-**Geliştiriciler:** Engin, Mert, Tankut | **Akademik Yıl:** 2024-2025
+**Geliştiriciler:** Engin, Mert, Tankut | **Akademik Yıl:** 2024-2025 | **Tarih:** 2025-12-26
 
 ## Proje Amacı
 CIS Benchmark dokümanlarını kullanarak işletim sistemi güvenlik yapılandırmalarını analiz eden ve öneriler sunan yapay zeka asistanı. RAG (Retrieval-Augmented Generation) ve LLM (Large Language Model) teknolojilerini birleştirerek güvenlik uzmanlarına hızlı, doğru ve güvenilir bilgi sağlar.
@@ -267,3 +267,90 @@ ai-powered-os-hardening/
 ├── examples/                # Usage examples
 └── docs/                    # Documentation
 ```
+
+---
+
+## Hızlı Referans - Önemli Bilgiler
+
+### API Erişim
+- **Base URL**: http://localhost:8000
+- **Swagger UI**: http://localhost:8000/docs
+- **Metrics**: http://localhost:8000/metrics
+
+### Başlatma
+```bash
+# Virtual environment aktif et
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# API başlat
+python -m main
+```
+
+### Test Çalıştırma
+```bash
+# Tüm testler
+python -m pytest tests/
+
+# Pipeline evaluator (50 test case)
+python tests/pipeline_evaluator.py
+```
+
+### Önemli Dosyalar
+- **ML Model**: `models/intent_model.joblib` (50KB)
+- **Dataset**: `data/intent_training_dataset.csv` (1,677 örnek)
+- **Ana Pipeline**: `llm/pipeline_v2.py`
+- **API Router**: `api/router_chat.py`
+
+---
+
+## Detaylı Dokümantasyon Rehberi
+
+Bu doküman projenin **genel özetini** sunmaktadır. Detaylı bilgi için ilgili dokümanları inceleyiniz:
+
+### Mimari ve Teknik Detaylar
+- **[02_PIPELINE_VE_ROUTELAR.md](02_PIPELINE_VE_ROUTELAR.md)**: 4-katmanlı pipeline detayları, veri akışı
+- **[05_TEKNOLOJILER.md](05_TEKNOLOJILER.md)**: Kullanılan teknolojiler ve neden seçildikleri
+- **[06_LLM_UYGULAMALARI.md](06_LLM_UYGULAMALARI.md)**: ML intent detection, prompt engineering
+- **[07_RAG_SISTEMI.md](07_RAG_SISTEMI.md)**: RAG pipeline, embedding, vector search
+
+### Kullanım ve API
+- **[03_KURULUM_VE_KULLANIM.md](03_KURULUM_VE_KULLANIM.md)**: Adım adım kurulum, örnekler
+- **[04_API_DOKUMANTASYONU.md](04_API_DOKUMANTASYONU.md)**: API endpoint'ler, parametreler
+
+### Test ve İyileştirme
+- **[08_TEST_DOKUMANTASYONU.md](08_TEST_DOKUMANTASYONU.md)**: Test metodolojisi, sonuçlar
+- **[09_GELECEK_IYILESTIRMELER.md](09_GELECEK_IYILESTIRMELER.md)**: Roadmap, potansiyel özellikler
+
+### Analiz Raporları (İngilizce)
+- **[10_ARCHITECTURE_ANALYSIS.md](10_ARCHITECTURE_ANALYSIS.md)**: Sistem mimarisi, 12 tespit edilen zayıflık
+- **[11_PERFORMANCE_ANALYSIS.md](11_PERFORMANCE_ANALYSIS.md)**: Performans benchmark'ları
+- **[12_FRONTEND_INTEGRATION.md](12_FRONTEND_INTEGRATION.md)**: Frontend entegrasyon örnekleri
+
+---
+
+## Son Notlar
+
+**Proje Durumu**: Production Ready (%85)
+
+**Production Blocker**:
+- Authentication (P0 - CRITICAL) - Henüz implement edilmedi
+
+**Güçlü Yönler**:
+- ✅ Yüksek doğruluk (ML: %90.48, RAG: %94)
+- ✅ Düşük maliyet ($0.0004/query)
+- ✅ Hızlı yanıt (2.3s average)
+- ✅ Kapsamlı testler (%100 pipeline coverage)
+- ✅ Güvenli mimari (4-layer security)
+
+**Zayıf Yönler**:
+- ⚠️ Authentication yok (production blocker)
+- ⚠️ RAG embedding yavaş (2.1s - cache gerekli)
+- ⚠️ Single instance (load balancing yok)
+
+---
+
+**Daha Fazla Bilgi**:
+- **GitHub**: https://github.com/os-hardening-ai/ai-powered-os-hardening
+- **Swagger UI**: http://localhost:8000/docs (API çalışırken)
+- **Detaylı Dokümanlar**: `docs/` klasörü (12 doküman)
