@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Any
-
+from pydantic import BaseModel, Field
 
 
 @dataclass
@@ -24,11 +24,18 @@ class RulesConfig:
     path: str
     enabled: bool = True
 
+@dataclass
+class LateChunkingConfig(BaseModel):
+    enabled: bool = True
+    window_size: int = Field(3, ge=1, le=10)
+    coarse_k_factor: int = Field(3, ge=1, le=10)
+    fine_k: int = Field(10, ge=1, le=50)    
 
 @dataclass
 class RagConfig:
     source_documents: List[SourceDocumentConfig]
     rules: Dict[str, RulesConfig]
+    late_chunking: LateChunkingConfig = Field(default_factory=LateChunkingConfig)
 
 
 @dataclass

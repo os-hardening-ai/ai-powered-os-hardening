@@ -17,6 +17,7 @@ async def rag_search(
     Soru alır → embedding üretir → vector store'dan (Qdrant) top-k sonuçları döndürür.
     Artık default olarak late chunking kullanıyor.
     """
+    
     lc = payload.late_chunking  
 
     results = retriever.search(

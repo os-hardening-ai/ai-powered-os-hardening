@@ -27,7 +27,13 @@ class ConfigLoader:
         rules_dict = {
             key: RulesConfig(**val) for key, val in raw["rag"]["rules"].items()
         }
-        rag = RagConfig(source_documents=sd_list, rules=rules_dict)
+        late_chunking_raw = raw.get("rag", {}).get("late_chunking", {}) or {}
+
+        rag = RagConfig(
+            source_documents=sd_list,
+            rules=rules_dict,
+            late_chunking=late_chunking_raw
+        )
 
         embedding = EmbeddingConfig(**raw["embedding"])
         vector_store = VectorStoreConfig(**raw["vector_store"])

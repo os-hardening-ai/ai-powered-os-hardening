@@ -5,6 +5,12 @@
     "language": "tr"
   },
   "rag": {
+    "late_chunking": {
+      "enabled": false,
+      "window_size": 3,
+      "coarse_k_factor": 5,
+      "fine_k": 10
+    },
     "source_documents": [
       {
         "id": "cis_ubuntu_24_04",
