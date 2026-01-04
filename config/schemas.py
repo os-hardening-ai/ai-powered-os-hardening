@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Any
 from pydantic import BaseModel, Field
 
@@ -24,7 +24,6 @@ class RulesConfig:
     path: str
     enabled: bool = True
 
-@dataclass
 class LateChunkingConfig(BaseModel):
     enabled: bool = True
     window_size: int = Field(3, ge=1, le=10)
@@ -35,7 +34,7 @@ class LateChunkingConfig(BaseModel):
 class RagConfig:
     source_documents: List[SourceDocumentConfig]
     rules: Dict[str, RulesConfig]
-    late_chunking: LateChunkingConfig = Field(default_factory=LateChunkingConfig)
+    late_chunking: Dict[str, Any] | LateChunkingConfig | None = None
 
 
 @dataclass
