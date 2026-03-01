@@ -17,6 +17,7 @@ pandas==2.2.3
 beautifulsoup4==4.12.3
 
 # --- LLM / RAG ---
+groq
 openai==1.55.3
 tiktoken==0.8.0
 cohere==5.20.1
