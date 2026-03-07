@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta

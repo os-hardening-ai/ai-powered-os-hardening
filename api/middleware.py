@@ -10,7 +10,6 @@ Includes:
 from __future__ import annotations
 import uuid
 import time
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware

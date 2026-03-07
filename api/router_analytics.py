@@ -3,7 +3,6 @@ Advanced Analytics API Endpoints
 """
 
 from fastapi import APIRouter, Query
-from typing import Optional
 import sys
 import os
 

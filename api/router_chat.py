@@ -5,7 +5,7 @@ import os
 import asyncio
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
 # Add project root to path
@@ -25,7 +25,7 @@ from api.security import validate_chat_input, sanitize_output
 from api.errors import APIError, ErrorCode
 
 # Import streaming support
-from api.streaming import stream_chat_response, dummy_token_generator
+from api.streaming import stream_chat_response
 
 router = APIRouter()
 
