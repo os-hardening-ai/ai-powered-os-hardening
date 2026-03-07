@@ -48,14 +48,14 @@ class EmbeddingConfig:
 @dataclass
 class VectorStoreConfig:
     provider: Literal["faiss", "qdrant"]
-    index_path: str
-    metadata_path: str
     qdrant: Dict[str, Any]
+    index_path: Optional[str] = None   # FAISS only
+    metadata_path: Optional[str] = None  # FAISS only
 
 
 @dataclass
 class LlmConfig:
-    provider: Literal["dummy", "openai", "mistral", "novita"]
+    provider: Literal["groq", "openai", "ollama", "huggingface"]
     model_name: str
     api_key: Optional[str]
 
