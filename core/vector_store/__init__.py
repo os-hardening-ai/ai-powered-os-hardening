@@ -2,7 +2,6 @@ from config.config_loader import get_config
 from core.vector_store.base import IVectorStore
 from core.vector_store.vector_store import FaissVectorStore
 from core.vector_store.qdrant_store import QdrantVectorStore
-# from core.vector_store.qdrant_store import QdrantVectorStore  # ileride
 
 
 def get_vector_store() -> IVectorStore:

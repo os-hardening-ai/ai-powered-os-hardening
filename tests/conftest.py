@@ -5,9 +5,8 @@ Professional Test Suite - AI-Powered OS Hardening
 
 import pytest
 import sys
-import os
 from pathlib import Path
-from typing import Generator, Dict, Any
+from typing import Dict, Any
 from fastapi.testclient import TestClient
 
 # Add project root to path
@@ -27,16 +26,10 @@ def app():
 
 
 @pytest.fixture(scope="function")
-def client(app) -> Generator[TestClient, None, None]:
+def client(app) -> TestClient:
     """Test client for API testing (function-scoped)"""
     with TestClient(app) as test_client:
         yield test_client
-
-
-@pytest.fixture(scope="session")
-def base_url() -> str:
-    """Base URL for API"""
-    return "http://localhost:8000"
 
 
 # ============================================================================
@@ -63,51 +56,6 @@ def test_config() -> Dict[str, Any]:
         "rag_min_score": 0.7,
         "timeout": 60
     }
-
-
-# ============================================================================
-# LLM Client Fixtures
-# ============================================================================
-
-@pytest.fixture(scope="session")
-def llm_clients():
-    """LLM clients (small and large models)"""
-    from llm.clients import get_llm_clients
-    return get_llm_clients()
-
-
-@pytest.fixture(scope="session")
-def llm_small(llm_clients):
-    """Small LLM client for fast operations"""
-    return llm_clients[0]
-
-
-@pytest.fixture(scope="session")
-def llm_large(llm_clients):
-    """Large LLM client for complex operations"""
-    return llm_clients[1]
-
-
-# ============================================================================
-# RAG System Fixtures
-# ============================================================================
-
-@pytest.fixture(scope="session")
-def rag_retriever():
-    """RAG retriever instance"""
-    from core.retrieval.rag_retriever import RAGRetriever
-    return RAGRetriever()
-
-
-# ============================================================================
-# ML Model Fixtures
-# ============================================================================
-
-@pytest.fixture(scope="session")
-def intent_detector():
-    """ML Intent detector"""
-    from llm.ml.intent_detector import IntentDetector
-    return IntentDetector()
 
 
 # ============================================================================
@@ -172,70 +120,6 @@ def invalid_chat_requests() -> list[Dict[str, Any]]:
     ]
 
 
-# ============================================================================
-# Mock Fixtures
-# ============================================================================
-
-@pytest.fixture
-def mock_llm_response():
-    """Mock LLM response for testing"""
-    return {
-        "content": "This is a test response about SSH hardening.",
-        "model": "test-model",
-        "tokens": 50
-    }
-
-
-@pytest.fixture
-def mock_rag_results():
-    """Mock RAG search results"""
-    return [
-        {
-            "id": "cis_ubuntu_24_04-p100-c0",
-            "score": 0.85,
-            "text": "SSH configuration best practices include...",
-            "metadata": {"source": "CIS Benchmark", "section": "5.2"}
-        },
-        {
-            "id": "cis_ubuntu_24_04-p101-c0",
-            "score": 0.78,
-            "text": "Disable root login for enhanced security...",
-            "metadata": {"source": "CIS Benchmark", "section": "5.2.1"}
-        }
-    ]
-
-
-# ============================================================================
-# Cleanup Fixtures
-# ============================================================================
-
-@pytest.fixture(autouse=True)
-def cleanup_after_test():
-    """Auto cleanup after each test"""
-    yield
-    # Cleanup code here if needed (e.g., clear caches, reset state)
-
-
-# ============================================================================
-# Performance Testing Fixtures
-# ============================================================================
-
-@pytest.fixture
-def performance_thresholds() -> Dict[str, float]:
-    """Performance thresholds for various operations"""
-    return {
-        "pattern_response": 0.1,  # 100ms
-        "simple_info": 2.0,  # 2s
-        "complex_info": 5.0,  # 5s
-        "rag_search": 10.0,  # 10s
-        "action_request": 5.0,  # 5s
-    }
-
-
-# ============================================================================
-# Security Testing Fixtures
-# ============================================================================
-
 @pytest.fixture
 def malicious_inputs() -> list[str]:
     """Malicious inputs for security testing"""
@@ -255,16 +139,13 @@ def malicious_inputs() -> list[str]:
 
 def pytest_configure(config):
     """Pytest configuration hook"""
-    # Create reports directory if it doesn't exist
     reports_dir = Path("tests/reports")
     reports_dir.mkdir(exist_ok=True, parents=True)
 
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection"""
-    # Add markers to tests based on their location
     for item in items:
-        # Add markers based on test path
         if "unit" in str(item.fspath):
             item.add_marker(pytest.mark.unit)
         elif "integration" in str(item.fspath):
@@ -278,15 +159,12 @@ def pytest_collection_modifyitems(config, items):
         elif "performance" in str(item.fspath):
             item.add_marker(pytest.mark.performance)
 
-        # Add API marker for API tests
         if "api" in str(item.fspath) or "router" in str(item.nodeid):
             item.add_marker(pytest.mark.api)
 
-        # Add LLM marker for LLM tests
         if "llm" in str(item.fspath) or "pipeline" in str(item.nodeid):
             item.add_marker(pytest.mark.llm)
 
-        # Add RAG marker for RAG tests
         if "rag" in str(item.fspath) or "rag" in str(item.nodeid):
             item.add_marker(pytest.mark.rag)
 
