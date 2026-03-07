@@ -6,7 +6,7 @@ import asyncio
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationError
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -78,7 +78,9 @@ class ChatRequest(BaseModel):
         # Use security module for validation
         # check_injection=False because LLM providers (Groq, OpenAI) already handle this
         # We keep input length validation to prevent API quota abuse
-        validate_chat_input(v, max_length=5000, check_injection=False)
+        is_valid, error_message = validate_chat_input(v, max_length=5000, check_injection=False)
+        if not is_valid:
+            raise ValueError(error_message)
         return v.strip()
 
 

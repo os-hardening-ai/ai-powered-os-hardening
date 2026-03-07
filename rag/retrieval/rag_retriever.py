@@ -131,6 +131,7 @@ class RAGRetriever:
         window_size: int = 3,
         stride: int = 1,
         max_windows_per_chunk: int = 10,
+        min_score: float = 0.7,
     ) -> List[RagSearchResult]:
         """
         coarse_results: vector_store.search'ten gelen büyük chunk'lar.
@@ -203,7 +204,11 @@ class RAGRetriever:
         scored.sort(key=lambda x: x["score"], reverse=True)
 
         results: List[RagSearchResult] = []
-        for s in scored[:top_k_fine]:
+        for s in scored:
+            # Min score filtering
+            if s["score"] < min_score:
+                continue
+                
             results.append(
                 RagSearchResult(
                     id=str(s["id"]),
@@ -212,6 +217,11 @@ class RAGRetriever:
                     metadata=s["metadata"],
                 )
             )
+            
+            # Yeterli sonuç tuttuk
+            if len(results) >= top_k_fine:
+                break
+                
         return results
 
     # ==== 3) Dışarı açılan search: default late chunking ====
@@ -223,18 +233,31 @@ class RAGRetriever:
         coarse_k_factor: int = 3,
         window_size: int = 3,
         stride: int = 1,
+        min_score: float = 0.3,  # Minimum relevance score için threshold (default: 0.3)
     ) -> List[RagSearchResult]:
         """
         Varsayılan: late chunking açık.
         istersen use_late_chunking=False ile eski davranışa dönebilirsin.
+        
+        Args:
+            query: Arama sorgusu
+            top_k: Döndürülecek sonuç sayısı
+            use_late_chunking: Late chunking kullan mı?
+            coarse_k_factor: Koarse k faktörü
+            window_size: Pencere boyutu
+            stride: Pencere stride'ı
+            min_score: Minimum relevance score (default: 0.7)
         """
         # Query için embedding'i sadece 1 kez üret
         query_emb = self._embed_client.embed_query(query)
 
         if not use_late_chunking:
-            raw_results = self._vector_store.search(query_emb, top_k=top_k)
+            raw_results = self._vector_store.search(query_emb, top_k=top_k, min_score=min_score)
             results: List[RagSearchResult] = []
             for r in raw_results:
+                # Min score filtering
+                if float(r.get("score", 0.0)) < min_score:
+                    continue
                 results.append(
                     RagSearchResult(
                         id=str(r.get("id")),
@@ -247,9 +270,10 @@ class RAGRetriever:
 
         # Coarse k'i sınırla (çok büyümesin)
         coarse_k = max(top_k * coarse_k_factor, top_k)
-        coarse_k = min(coarse_k, 20)  # güvenlik: en fazla 20 büyük chunk
+        coarse_k = min(coarse_k, 20)  # güvenlik: en fazta 20 büyük chunk
 
-        raw_results = self._vector_store.search(query_emb, top_k=coarse_k)
+        # Coarse level'de daha düşük threshold (fine level'de yüksek tutacağız)
+        raw_results = self._vector_store.search(query_emb, top_k=coarse_k, min_score=max(min_score * 0.5, 0.0))
 
         fine_results = self._late_chunk_refine(
             query=query,
@@ -259,6 +283,7 @@ class RAGRetriever:
             window_size=window_size,
             stride=stride,
             max_windows_per_chunk=10,
+            min_score=min_score,
         )
         return fine_results
 

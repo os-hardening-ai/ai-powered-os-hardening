@@ -114,7 +114,7 @@ class QdrantVectorStore(IVectorStore):
                         raise
                     time.sleep(1 + attempt)
 
-    def search(self, query_emb: np.ndarray, top_k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query_emb: np.ndarray, top_k: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
         q = query_emb.astype("float32").tolist()
 
         # Bazı qdrant-client sürümlerinde `search` yok, yerine `query_points` var.
@@ -123,19 +123,23 @@ class QdrantVectorStore(IVectorStore):
             hits = self._client.search(
                 collection_name=self._collection,
                 query_vector=q,
-                limit=top_k,
+                limit=top_k * 2,  # Min_score filter için daha fazla getir
             )
         else:
             # Yeni Query API / farklı sürümler
             resp = self._client.query_points(
-                collection_name=self._collection, # Buraya direk manuelde arama yapmak istediğin collection adını yazabilirsin
+                collection_name=self._collection,
                 query=q,
-                limit=top_k,
+                limit=top_k * 2,
             )
             hits = resp.points
 
         results: List[Dict[str, Any]] = []
         for h in hits:
+            # Min score filtering
+            if h.score < min_score:
+                continue
+                
             payload = h.payload or {}
             text = payload.get("text", "")
             # chunk id'yi geri al (biz payload'a chunk_id koymuştuk)
@@ -155,5 +159,9 @@ class QdrantVectorStore(IVectorStore):
                     "metadata": metadata,
                 }
             )
+            
+            # Yeterli sonuç tuttuk
+            if len(results) >= top_k:
+                break
 
         return results

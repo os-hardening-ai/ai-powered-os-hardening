@@ -15,7 +15,7 @@ async def rag_search(
 ) -> RagSearchResponse:
     """
     Soru alır → embedding üretir → vector store'dan (Qdrant) top-k sonuçları döndürür.
-    Artık default olarak late chunking kullanıyor.
+    Varsayılan olarak late chunking ve min_score filtering kullanıyor.
     """
     
     lc = payload.late_chunking  
@@ -27,6 +27,7 @@ async def rag_search(
         coarse_k_factor=lc.coarse_k_factor,
         window_size=lc.window_size,
         stride=lc.stride,
+        min_score=payload.min_score,
     )
 
     return RagSearchResponse(

@@ -47,6 +47,7 @@ class RagSearchRequest(BaseModel):
     query: str = Field(..., description="Kullanıcının sorusu / arama cümlesi")
     top_k: int = Field(5, ge=1, le=20, description="Döndürülecek sonuç sayısı")
     source_id: str | None = Field(None, description="Opsiyonel source id filtresi")
+    min_score: float = Field(0.3, ge=0.0, le=1.0, description="Minimum relevance score threshold (default: 0.3)")
     late_chunking: LateChunkingOptions = Field(
         default_factory=late_chunking_default,  
         description="Late chunking yapılandırması"

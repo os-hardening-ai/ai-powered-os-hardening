@@ -118,7 +118,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+        # CSP: Allow Swagger UI and other essential external resources
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
@@ -137,13 +138,14 @@ DANGEROUS_PATTERNS = {
 }
 
 
-def validate_chat_input(user_input: str, max_length: int = 5000) -> tuple[bool, Optional[str]]:
+def validate_chat_input(user_input: str, max_length: int = 5000, check_injection: bool = True) -> tuple[bool, Optional[str]]:
     """
     Validate user input for chat requests.
     
     Args:
         user_input: The input string to validate
         max_length: Maximum allowed length of input
+        check_injection: Whether to check for injection patterns (default: True)
     
     Returns:
         Tuple of (is_valid, error_message)
@@ -155,11 +157,11 @@ def validate_chat_input(user_input: str, max_length: int = 5000) -> tuple[bool, 
     if len(user_input) > max_length:
         return False, f"Input exceeds maximum length of {max_length} characters"
     
-    # Check for dangerous patterns
-    user_input_upper = user_input.upper()
-    for pattern_name, pattern in DANGEROUS_PATTERNS.items():
-        if re.search(pattern, user_input, re.IGNORECASE):
-            return False, f"Input contains potentially dangerous content (detected: {pattern_name})"
+    # Check for dangerous patterns (only if check_injection is True)
+    if check_injection:
+        for pattern_name, pattern in DANGEROUS_PATTERNS.items():
+            if re.search(pattern, user_input, re.IGNORECASE):
+                return False, f"Input contains potentially dangerous content (detected: {pattern_name})"
     
     # Check for excessive special characters
     special_char_ratio = sum(1 for c in user_input if not c.isalnum() and c.isascii() and c != ' ') / len(user_input)
