@@ -35,16 +35,14 @@
   },
   "vector_store": {
     "provider": "qdrant",
-    "index_path": "data/indexes/ubuntu_24_04/faiss.index",
-    "metadata_path": "data/indexes/ubuntu_24_04/metadata.json",
     "qdrant": {
       "url": "https://286d1f0c-9411-4842-b153-a571d8af4479.eu-west-2-0.aws.cloud.qdrant.io",
       "collection_name": "cis_ubuntu_24_04"
     }
   },
   "llm": {
-    "provider": "dummy",
-    "model_name": "gpt-4o-mini",
+    "provider": "groq",
+    "model_name": "llama-3.1-8b-instant",
     "api_key": null
   }
 }
