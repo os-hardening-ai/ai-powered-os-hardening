@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from api.schemas import RagSearchRequest, RagSearchResponse
-from core.retrieval.rag_retriever import RAGRetriever
+from rag.retrieval.rag_retriever import RAGRetriever
 
 router = APIRouter()
 

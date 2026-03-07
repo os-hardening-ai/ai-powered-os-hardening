@@ -4,7 +4,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from config.config_loader import get_config
-from core.embeddings.base import IEmbeddingClient
+from rag.embeddings.base import IEmbeddingClient
 
 
 class SentenceTransformersEmbeddingClient(IEmbeddingClient):

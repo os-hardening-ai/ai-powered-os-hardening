@@ -2,8 +2,8 @@ from __future__ import annotations
 import re
 from typing import List, Dict, Any
 import numpy as np
-from core.embeddings import get_embedding_client
-from core.vector_store import get_vector_store
+from rag.embeddings import get_embedding_client
+from rag.vector_store import get_vector_store
 from api.schemas import RagSearchResult
 
 def _is_junky_window(w: str) -> bool:
@@ -15,8 +15,8 @@ def _is_junky_window(w: str) -> bool:
     if not txt:
         return True
 
-    # Kısacık şeyleri at
-    if len(txt) < 40:
+    # Kısacık şeyleri at (kapak sayfası, başlık satırı vb.)
+    if len(txt) < 100:
         return True
 
     # Sadece URL listesi gibi görünenler
@@ -233,7 +233,7 @@ class RAGRetriever:
         coarse_k_factor: int = 3,
         window_size: int = 3,
         stride: int = 1,
-        min_score: float = 0.3,  # Minimum relevance score için threshold (default: 0.3)
+        min_score: float = 0.5,  # Minimum relevance score için threshold (default: 0.5)
     ) -> List[RagSearchResult]:
         """
         Varsayılan: late chunking açık.
@@ -246,7 +246,7 @@ class RAGRetriever:
             coarse_k_factor: Koarse k faktörü
             window_size: Pencere boyutu
             stride: Pencere stride'ı
-            min_score: Minimum relevance score (default: 0.7)
+            min_score: Minimum relevance score (default: 0.5)
         """
         # Query için embedding'i sadece 1 kez üret
         query_emb = self._embed_client.embed_query(query)

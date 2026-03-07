@@ -12,7 +12,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from qdrant_client.http.exceptions import ResponseHandlingException
 
 from config.config_loader import get_config
-from core.vector_store.base import IVectorStore
+from rag.vector_store.base import IVectorStore
 
 
 class QdrantVectorStore(IVectorStore):
@@ -85,7 +85,9 @@ class QdrantVectorStore(IVectorStore):
             points: List[PointStruct] = []
             for doc, vec in zip(batch_docs, batch_vecs):
                 # doc: {"id": ..., "text": ..., "metadata": {...}}
-                point_id = str(uuid.uuid4())
+                # chunk_id'den deterministik UUID: aynı chunk her run'da aynı point_id'ye map edilir
+                # → re-index gerçek upsert (güncelleme) yapar, duplicate oluşturmaz
+                point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(doc["id"])))
 
                 payload: Dict[str, Any] = {
                     "chunk_id": doc["id"],

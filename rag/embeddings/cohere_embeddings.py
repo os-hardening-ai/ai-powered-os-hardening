@@ -9,7 +9,7 @@ import numpy as np
 import cohere
 
 from config.config_loader import get_config
-from core.embeddings.base import IEmbeddingClient
+from rag.embeddings.base import IEmbeddingClient
 
 
 class CohereEmbeddingClient(IEmbeddingClient):

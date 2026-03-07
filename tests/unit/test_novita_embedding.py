@@ -1,4 +1,4 @@
-from core.embeddings import get_embedding_client
+from rag.embeddings import get_embedding_client
 
 if __name__ == "__main__":
     emb = get_embedding_client()

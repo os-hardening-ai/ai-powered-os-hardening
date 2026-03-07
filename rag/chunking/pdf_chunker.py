@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Dict, Any
 from pathlib import Path
-from core.chunking.base import IChunker, Chunk
+from rag.chunking.base import IChunker, Chunk
 import fitz  # PyMuPDF
 
 class SimplePdfChunker(IChunker):

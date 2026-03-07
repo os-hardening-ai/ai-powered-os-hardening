@@ -6,123 +6,146 @@ import re
 
 def parse_benchmark_from_filename(path: Path) -> Dict[str, Any]:
     """
-    Örnek dosya adı:
-      CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf
-
-    Hedef metadata (doküman-level):
-      - benchmark_product: "Ubuntu Linux"
-      - os_family: "linux" | "windows"
-      - os_version: "24.04" (veya "10", "11" vb.)
-      - benchmark_version: "1.0.0"
+    Ornek dosya adi: CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf
+    Doküman-level metadata: benchmark_product, os_family, os_version, benchmark_version
     """
-    name = path.stem  # uzantısız
+    name = path.stem
     parts = name.split("_")
     lower = name.lower()
-
     meta: Dict[str, Any] = {}
 
-    # ---- OS VERSION ----
-    # Önce x.y veya x.y.z formatını yakalamaya çalış
     version_matches = re.findall(r"\d+\.\d+(?:\.\d+)?", name)
     if version_matches:
         meta["os_version"] = version_matches[0]
     else:
-        # Olmazsa, plain integer (10, 11 vs) yakalamayı dene
         int_matches = re.findall(r"\b\d+\b", name)
         if int_matches:
             meta["os_version"] = int_matches[0]
 
-    # ---- BENCHMARK VERSION ----
-    # v1.0.0, v2.1.3 gibi
     bench_ver_match = re.search(r"v(\d+\.\d+\.\d+)", name, re.IGNORECASE)
     if bench_ver_match:
         meta["benchmark_version"] = bench_ver_match.group(1)
 
-    # ---- PRODUCT (Ubuntu Linux / Windows vs) ----
-    # CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0
-    # -> "Ubuntu Linux"
     benchmark_words = {"benchmark", "benchmarks"}
     product_tokens: List[str] = []
-
-    # İlk parça genelde vendor (CIS), o yüzden 1. indexten başlıyoruz
     for p in parts[1:]:
         pl = p.lower()
-        # Versiyon / benchmark kelimesi görünce product tarafı bitmiş say
         if re.match(r"\d+\.\d+(?:\.\d+)?", p) or pl in benchmark_words:
             break
         product_tokens.append(p)
-
     if product_tokens:
         product = " ".join(product_tokens).replace("-", " ")
         meta["benchmark_product"] = product
 
-    # ---- OS FAMILY ----
-    # Ürüne bak, yoksa dosya adına bak
     prod_lower = meta.get("benchmark_product", "").lower()
     check_str = prod_lower or lower
-
     if "ubuntu" in check_str or "linux" in check_str:
         meta["os_family"] = "linux"
     elif "windows" in check_str:
         meta["os_family"] = "windows"
-
     return meta
 
 
 def extract_profile_applicability(text: str) -> List[str]:
     """
-    Chunk içinden 'Profile Applicability' bloğunu çıkarır.
-
-    Örnek metin:
-
-      7.2.1 Ensure accounts in /etc/passwd use shadowed passwords
-      (Automated)
-      Profile Applicability:
-      •  Level 1 - Server
-      •  Level 1 - Workstation
-
-    Çıktı:
-      ["Level 1 - Server", "Level 1 - Workstation"]
+    Chunk icinden 'Profile Applicability' blogunu cikarir.
+    Cikti: ["Level 1 - Server", "Level 1 - Workstation"]
     """
-    lines = [l.strip() for l in text.splitlines()]
+    lines = [line.strip() for line in text.splitlines()]
     profiles: List[str] = []
     capture = False
-
     for line in lines:
-        lower = line.lower()
-
-        if "profile applicability" in lower:
+        if "profile applicability" in line.lower():
             capture = True
             continue
-
         if capture:
-            # Boş satır → block bitti
             if not line:
                 break
-
-            # Bullet (•, -, *) ile başlayan satırlar
-            if line.startswith(("•", "-", "*")):
-                cleaned = line.lstrip("•-*").strip()
+            if line.startswith(("\u2022", "-", "*")):
+                cleaned = line.lstrip("\u2022-*").strip()
                 if cleaned:
                     profiles.append(cleaned)
             else:
-                # Bullet değilse, muhtemelen başka bölüme geçmiştir
                 break
-
     return profiles
+
+
+def extract_section_info(text: str) -> Dict[str, Any]:
+    """
+    Chunk metninden CIS section numarasi, basligi ve degerlendirme statusunu cikarir.
+
+    Ornek:
+      '5.1.1 Ensure permissions on /etc/ssh/sshd_config are configured (Automated)'
+      -> section_id='5.1.1', section_title='Ensure ...', assessment_status='Automated'
+    """
+    meta: Dict[str, Any] = {}
+
+    # N.N.N Ensure ... veya N.N.N.N Ensure ... — en fazla 4 seviye
+    pattern = re.search(
+        r"(\d+(?:\.\d+){1,3})\s+(Ensure\s+[^\n(]+?)(?:\s*\((Automated|Manual)\))?(?:\n|$)",
+        text,
+        re.IGNORECASE,
+    )
+    if pattern:
+        meta["section_id"] = pattern.group(1)
+        meta["section_title"] = pattern.group(2).strip()
+        if pattern.group(3):
+            meta["assessment_status"] = pattern.group(3)
+
+    # section_id bulunamazsa assessment_status'u yine de cek
+    if "assessment_status" not in meta:
+        status_match = re.search(r"\((Automated|Manual)\)", text, re.IGNORECASE)
+        if status_match:
+            meta["assessment_status"] = status_match.group(1)
+
+    return meta
+
+
+def is_toc_or_frontmatter(text: str) -> bool:
+    """
+    Sayfanin TOC veya on bolum (kapak, terimler, icindekiler) olup olmadigini
+    tespit eder. Bu sayfalar indexe alinmamali.
+    """
+    lower = text.lower()
+    frontmatter_keywords = [
+        "table of contents",
+        "terms of use",
+        "acknowledgements",
+        "profile definitions",
+        "typographical conventions",
+        "recommendation definitions",
+        "important usage information",
+        "consensus guidance",
+        "intended audience",
+    ]
+    for kw in frontmatter_keywords:
+        if kw in lower:
+            return True
+    # TOC karakteristigi: nokta + sayi satirlari - 'Configure SSH ......... 521'
+    dotted_lines = re.findall(r"\.{4,}\s*\d+", text)
+    if len(dotted_lines) >= 4:
+        return True
+    return False
 
 
 def extract_cis_chunk_metadata(text: str) -> Dict[str, Any]:
     """
-    Tek bir chunk metninden CIS'e özel chunk-level metadata döner.
+    Tek bir chunk metninden CIS'e ozel chunk-level metadata doner.
 
-    Şema:
+    Sema:
       {
-        "profile_applicability": [ ... ] | None
+        "profile_applicability": ["Level 1 - Server", ...] | None,
+        "section_id":        "5.1.1" | None,
+        "section_title":     "Ensure ..." | None,
+        "assessment_status": "Automated" | "Manual" | None,
       }
     """
     profiles = extract_profile_applicability(text)
+    section = extract_section_info(text)
 
     return {
         "profile_applicability": profiles or None,
+        "section_id": section.get("section_id"),
+        "section_title": section.get("section_title"),
+        "assessment_status": section.get("assessment_status"),
     }

@@ -6,7 +6,7 @@ import faiss
 import json
 import numpy as np
 
-from core.vector_store.base import IVectorStore
+from rag.vector_store.base import IVectorStore
 
 
 class FaissVectorStore(IVectorStore):

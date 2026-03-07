@@ -3,9 +3,9 @@ from typing import List, Dict, Any
 import time 
 import numpy as np
 from config.config_loader import get_config
-from core.chunking import get_chunker
-from core.embeddings import get_embedding_client
-from core.vector_store import get_vector_store
+from rag.chunking import get_chunker
+from rag.embeddings import get_embedding_client
+from rag.vector_store import get_vector_store
 from config.schemas import IndexStats
 
 
@@ -34,6 +34,13 @@ class IndexPipeline:
         print(f"[IndexPipeline] {source_id} için chunklama başlatılıyor...")
         chunks = chunker.chunk(source_id=sd.id, path=sd.path)
         print(f"[IndexPipeline] {source_id} için {len(chunks)} chunk oluşturuldu.")
+
+        # Çok kısa chunk'ları (kapak sayfası, başlık satırı vb.) filtrele
+        min_chars = 100
+        before = len(chunks)
+        chunks = [c for c in chunks if len(c.text.strip()) >= min_chars]
+        if len(chunks) < before:
+            print(f"[IndexPipeline] {before - len(chunks)} kısa chunk (<{min_chars} char) filtrelendi.")
 
         if chunks and getattr(chunks[0], "embedding", None) is not None:
             print("[IndexPipeline] Chunk embedding bulundu, API çağrısı yapılmayacak.")

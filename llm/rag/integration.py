@@ -17,8 +17,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 try:
-    from core.embeddings import get_embedding_client
-    from core.vector_store import get_vector_store
+    from rag.embeddings import get_embedding_client
+    from rag.vector_store import get_vector_store
     RAG_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import RAG dependencies: {e}")

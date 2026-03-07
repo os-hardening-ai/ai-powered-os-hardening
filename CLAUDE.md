@@ -93,11 +93,11 @@ ai-powered-os-hardening/
 │   ├── examples/              # Usage examples
 │   ├── tests/                 # LLM-specific tests (pipeline_evaluator, etc.)
 │   └── archive/               # Deprecated step-based pipeline (do not use)
-├── core/                      # RAG core components
+├── rag/                      # RAG core components
 │   ├── chunking/
 │   │   ├── base.py
 │   │   ├── pdf_chunker.py
-│   │   └── Semantic_pdf_chunker.py
+│   │   └── semantic_pdf_chunker.py
 │   ├── embeddings/
 │   │   ├── base.py
 │   │   ├── embeddings.py
@@ -120,7 +120,8 @@ ai-powered-os-hardening/
 │   │   └── ubuntu_24_04_rules.yaml
 │   └── intent_training_dataset.csv   # 1677 examples across 7 intent categories
 ├── scripts/
-│   └── build_index_ubuntu.py   # Build Qdrant index from PDF
+│   ├── build_index.py          # Config-driven: tüm enabled source'ları indeksler
+│   └── start_api.py
 ├── src/
 │   └── config_manager.py
 ├── tests/                      # Main test suite
@@ -209,7 +210,7 @@ docker run -p 6333:6333 qdrant/qdrant
 ### Build RAG Index (first time or after PDF update)
 
 ```bash
-python scripts/build_index_ubuntu.py
+python scripts/build_index.py
 ```
 
 ---
@@ -397,9 +398,9 @@ Intent categories:
 ## RAG System
 
 ### Architecture
-- **Embeddings**: Novita `qwen/qwen3-embedding-8b` (4096 dimensions) via `core/embeddings/novita_embeddings.py`
-- **Vector Store**: Qdrant cloud (`core/vector_store/qdrant_store.py`)
-- **Chunking**: Semantic PDF chunking with sliding window (`core/chunking/`)
+- **Embeddings**: Novita `qwen/qwen3-embedding-8b` (4096 dimensions) via `rag/embeddings/novita_embeddings.py`
+- **Vector Store**: Qdrant cloud (`rag/vector_store/qdrant_store.py`)
+- **Chunking**: Semantic PDF chunking with sliding window (`rag/chunking/`)
 - **Source document**: `data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf`
 
 ### Smart RAG Triggering

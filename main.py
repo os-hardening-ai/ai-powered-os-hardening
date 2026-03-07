@@ -37,6 +37,7 @@ from api.metrics import (
     metrics_collector,
     format_metrics_summary,
 )
+from config.config_loader import get_config
 import uvicorn
 
 # API Documentation metadata
@@ -401,9 +402,10 @@ TAGS_METADATA = [
 ]
 
 def create_app() -> FastAPI:
+    cfg = get_config()
     app = FastAPI(
         title="AI-Powered OS Hardening API",
-        version="1.0.0",
+        version=cfg.app.version,
         description=DESCRIPTION,
         openapi_tags=TAGS_METADATA,
         docs_url="/docs",
@@ -430,7 +432,7 @@ def create_app() -> FastAPI:
     app.add_middleware(ProviderHeadersMiddleware)
 
     # 3. Response metadata (processing time, version)
-    app.add_middleware(ResponseMetadataMiddleware, version="1.0.0")
+    app.add_middleware(ResponseMetadataMiddleware, version=cfg.app.version)
 
     # 4. Request ID tracking (generates/accepts request IDs)
     app.add_middleware(RequestIDMiddleware)
@@ -438,10 +440,10 @@ def create_app() -> FastAPI:
     # 5. Metrics collection (tracks all requests)
     app.add_middleware(MetricsMiddleware, collector=metrics_collector)
 
-    # 6. Rate limiting (100 requests per minute per IP)
+    # 6. Rate limiting — config.json'dan okunur
     rate_limit_config = RateLimitConfig(
-        requests_per_minute=100,
-        requests_per_hour=2000,
+        requests_per_minute=cfg.api.rate_limit_requests,
+        requests_per_hour=cfg.api.rate_limit_requests * 20,
         burst_size=10
     )
     app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
@@ -455,14 +457,14 @@ def create_app() -> FastAPI:
         allowed_hosts=["*"]  # Production'da specific domains kullan
     )
 
-    # CORS middleware
+    # CORS middleware — origins config.json'dan okunur
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Production'da specific origins kullan
+        allow_origins=cfg.api.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
-        max_age=600,  # Preflight cache 10 dakika
+        max_age=600,
     )
 
     # RAG-only endpoint (backward compatibility)
@@ -584,8 +586,9 @@ def create_app() -> FastAPI:
 app = create_app()
 
 if __name__ == "__main__":
+    _cfg = get_config()
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000
+        host=_cfg.api.host,
+        port=_cfg.api.port,
     )

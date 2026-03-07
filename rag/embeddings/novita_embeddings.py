@@ -8,7 +8,7 @@ import numpy as np
 from openai import OpenAI, RateLimitError, APIError
 
 from config.config_loader import get_config
-from core.embeddings.base import IEmbeddingClient
+from rag.embeddings.base import IEmbeddingClient
 
 
 class NovitaEmbeddingClient(IEmbeddingClient):

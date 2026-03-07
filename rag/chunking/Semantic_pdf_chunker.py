@@ -7,13 +7,14 @@ import re
 import numpy as np
 import fitz  # PyMuPDF
 
-from core.chunking.base import IChunker, Chunk
-from core.embeddings import get_embedding_client
-from core.embeddings.base import IEmbeddingClient
+from rag.chunking.base import IChunker, Chunk
+from rag.embeddings import get_embedding_client
+from rag.embeddings.base import IEmbeddingClient
 
-from core.metadata.cis_benchmark_parser import (
+from rag.metadata.cis_benchmark_parser import (
     parse_benchmark_from_filename,
     extract_cis_chunk_metadata,
+    is_toc_or_frontmatter,
 )
 
 
@@ -73,6 +74,10 @@ class EmbeddingSemanticPdfChunker(IChunker):
             if not text:
                 continue
             text = text.strip()
+
+            # TOC ve on bolum sayfalarini atla
+            if is_toc_or_frontmatter(text):
+                continue
 
             paragraphs = self._split_paragraphs(text)
             if not paragraphs:
