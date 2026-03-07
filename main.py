@@ -440,9 +440,9 @@ def create_app() -> FastAPI:
 
     # 6. Rate limiting (100 requests per minute per IP)
     rate_limit_config = RateLimitConfig(
-        max_requests=100,
-        window_seconds=60,
-        ban_duration_seconds=300  # 5 min ban for violators
+        requests_per_minute=100,
+        requests_per_hour=2000,
+        burst_size=10
     )
     app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 

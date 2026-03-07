@@ -19,8 +19,8 @@ if sys.platform == 'win32':
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from llm.core.models import get_llm_clients
-from llm.core.pipeline_v2 import SecurePipelineV2
+from llm.clients import get_llm_clients
+from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.core.context import RequestContext
 
 

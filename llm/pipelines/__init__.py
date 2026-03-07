@@ -36,12 +36,9 @@ result = run_secure_pipeline_v2(
 ```
 """
 
-from .optimized import OptimizedPipeline, run_optimized_pipeline
 from .secure_v2 import SecurePipelineV2, run_secure_pipeline_v2, PipelineResult
 
 __all__ = [
-    "OptimizedPipeline",
-    "run_optimized_pipeline",
     "SecurePipelineV2",
     "run_secure_pipeline_v2",
     "PipelineResult",

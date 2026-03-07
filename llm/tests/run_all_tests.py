@@ -67,19 +67,14 @@ def run_pipeline_evaluation(debug=False):
 
     try:
         from tests import pipeline_evaluator
-        from llm.core.models import get_llm_clients
-        from llm.core.pipeline_v2 import SecurityPipeline
+        from llm.clients import get_llm_clients
+        from llm.pipelines.secure_v2 import SecurePipelineV2
 
         # Get LLM clients
         llm_small, llm_large = get_llm_clients()
 
         # Create pipeline
-        pipeline = SecurityPipeline(
-            llm_small=llm_small,
-            llm_large=llm_large,
-            use_rag=True,
-            debug=debug
-        )
+        pipeline = SecurePipelineV2()
 
         # Create evaluator
         evaluator = pipeline_evaluator.PipelineEvaluator(pipeline=pipeline, debug=debug)
