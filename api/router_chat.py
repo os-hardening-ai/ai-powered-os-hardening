@@ -20,6 +20,10 @@ from api.errors import APIError, ErrorCode
 # Import streaming support
 from api.streaming import stream_chat_response
 
+from log_manager import get_logger
+
+_conv_logger = get_logger("conversations")
+
 router = APIRouter()
 
 
@@ -60,7 +64,7 @@ class ChatRequest(BaseModel):
     )
     use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı", examples=[True])
     rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20, examples=[5])
-    rag_min_score: float = Field(0.7, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.7])
+    rag_min_score: float = Field(0.5, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.5])
     stream: bool = Field(False, description="Enable streaming response (SSE)", examples=[False])
     timeout: Optional[int] = Field(60, description="Request timeout in seconds (default: 60s, max: 300s)", ge=1, le=300, examples=[60])
 
@@ -82,7 +86,8 @@ class RAGSource(BaseModel):
     id: str
     score: float
     source: str
-    section: str
+    section: str = "N/A"
+    text: Optional[str] = Field(None, description="Chunk metni (ilk 500 karakter)")
 
 
 class ChatResponse(BaseModel):
@@ -156,8 +161,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
                 )
+                print(f"[RAG] Builder OK top_k={payload.rag_top_k} min_score={payload.rag_min_score}")
             except Exception as e:
-                print(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+                print(f"[RAG] Builder FAILED: {e}")
+        else:
+            print("[RAG] use_rag=False skipped")
 
         # Pipeline'i calistir (4-layer security pipeline)
         pipeline = SecurePipelineV2(
@@ -191,8 +199,9 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                         RAGSource(
                             id=f"source_{idx}",
                             score=source_data.get("score", 0.0),
-                            source=source_data.get("source", "Unknown"),
-                            section=source_data.get("section", "Unknown"),
+                            source=source_data.get("source") or "Unknown",
+                            section=source_data.get("section") or "N/A",
+                            text=source_data.get("text"),
                         )
                     )
             except Exception as e:
@@ -200,6 +209,14 @@ async def chat(payload: ChatRequest) -> ChatResponse:
 
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
+
+        # Log conversation (question + answer)
+        _conv_logger.info(
+            f"--- [{ctx.request_id}] intent={result.intent.type if result.intent else 'unknown'} "
+            f"path={result.layer_path} total={result.total_time_s:.3f}s ---"
+        )
+        _conv_logger.info(f"Q: {payload.question}")
+        _conv_logger.info(f"A: {sanitized_answer}")
 
         # Response olustur
         return ChatResponse(

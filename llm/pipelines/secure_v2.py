@@ -33,6 +33,9 @@ from llm.pipelines.layers.pattern_responder import PatternResponderHandler, Patt
 from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
 from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResult
 from llm.core.config import CONFIG
+from log_manager import get_logger
+
+_pipeline_logger = get_logger("pipeline_metrics")
 
 # Type alias
 LLMCallable = Callable[[str], str]
@@ -160,7 +163,9 @@ class SecurePipelineV2:
         if self.debug:
             print("\n[Layer 1] Safety Classification...")
 
+        layer1_start = datetime.now()
         safety_result = self.safety_classifier.classify(ctx.user_question)
+        layer1_time_s = (datetime.now() - layer1_start).total_seconds()
 
         if self.debug:
             print(f"  Category: {safety_result.category}")
@@ -195,7 +200,9 @@ class SecurePipelineV2:
         if self.debug:
             print("\n[Layer 2] Intent Detection...")
 
+        layer2_start = datetime.now()
         intent = self.intent_detector.detect(ctx.user_question)
+        layer2_time_s = (datetime.now() - layer2_start).total_seconds()
 
         if self.debug:
             print(f"  Type: {intent.type}")
@@ -205,6 +212,8 @@ class SecurePipelineV2:
         # ─────────────────────────────────────────────
         # LAYER 3: ROUTING
         # ─────────────────────────────────────────────
+
+        layer3_start = datetime.now()
 
         if intent.type == "out_of_scope":
             # Out-of-scope: Polite rejection
@@ -234,9 +243,21 @@ class SecurePipelineV2:
             result = self._handle_layer_3b(ctx, safety_result, intent)
             self.stats["info_responses"] += 1
 
+        layer3_time_s = (datetime.now() - layer3_start).total_seconds()
+
         # Update global stats
         self.stats["total_queries"] += 1
         self.stats["total_cost"] += result.estimated_cost
+
+        # Log pipeline metrics
+        rag_used = result.metadata.get("rag_used", False)
+        rag_chunks = result.metadata.get("rag_chunks", 0)
+        _pipeline_logger.info(
+            f"intent={intent.type} path={result.layer_path} "
+            f"layer1={layer1_time_s:.3f}s layer2={layer2_time_s:.3f}s "
+            f"layer3={layer3_time_s:.3f}s total={result.total_time_s:.3f}s "
+            f"rag={rag_used} chunks={rag_chunks} cost=${result.estimated_cost:.4f}"
+        )
 
         # Final logging
         if self.debug:

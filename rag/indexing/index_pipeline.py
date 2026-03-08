@@ -1,12 +1,15 @@
 from __future__ import annotations
 from typing import List, Dict, Any
-import time 
+import time
 import numpy as np
 from config.config_loader import get_config
 from rag.chunking import get_chunker
 from rag.embeddings import get_embedding_client
 from rag.vector_store import get_vector_store
 from config.schemas import IndexStats
+from log_manager import get_logger
+
+_index_logger = get_logger("build_index")
 
 
 class IndexPipeline:
@@ -28,6 +31,8 @@ class IndexPipeline:
             raise ValueError(f"Unknown source_id: {source_id}")
 
         chunker = get_chunker(sd.chunker)
+
+        _index_logger.info(f"source={source_id} status=start")
 
         t0 = time.perf_counter()
 
@@ -72,6 +77,11 @@ class IndexPipeline:
         print(f"[IndexPipeline] {source_id} için index güncellendi.")
         print(f"[IndexPipeline] İstatistikler -> chunks: {num_chunks}, "
               f"embed_time: {embed_time_sec:.2f}s, upsert_time: {upsert_time_sec:.2f}s")
+
+        _index_logger.info(
+            f"source={source_id} chunks={num_chunks} "
+            f"embed_time={embed_time_sec:.2f}s upsert_time={upsert_time_sec:.2f}s"
+        )
 
         return IndexStats(
             num_chunks=num_chunks,

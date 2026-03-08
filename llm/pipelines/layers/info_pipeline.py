@@ -120,8 +120,9 @@ class InfoPipeline:
         if self.debug:
             print(f"[InfoPipeline] Complexity: {complexity}")
 
-        # Smart RAG decision
-        use_rag = self._should_use_rag(ctx.user_question, complexity)
+        # RAG: rag_builder yalnızca API'dan use_rag=True geldiğinde set edilir,
+        # dolayısıyla rag_builder mevcutsa her zaman kullan.
+        use_rag = self.rag_builder is not None
 
         if self.debug:
             print(f"[InfoPipeline] RAG usage: {use_rag}")
@@ -129,6 +130,7 @@ class InfoPipeline:
         # RAG retrieval (if needed)
         rag_chunks = 0
         rag_sources = []
+        print(f"[InfoPipeline] use_rag={use_rag}, rag_builder={'SET' if self.rag_builder else 'NONE'}")
         if use_rag and self.rag_builder:
             try:
                 # Single embed call: get context string + raw results together
@@ -142,21 +144,32 @@ class InfoPipeline:
                     # Extract source metadata
                     for result in raw_results:
                         metadata = result.get("metadata", {})
+                        section_id = metadata.get("section_id") or ""
+                        section_title = metadata.get("section_title") or ""
+                        if section_id and section_title:
+                            section = f"{section_id} - {section_title}"
+                        elif section_id:
+                            section = section_id
+                        elif section_title:
+                            section = section_title
+                        else:
+                            section = "N/A"
+                        chunk_text = result.get("text", "")
                         rag_sources.append({
                             "score": result.get("score", 0.0),
-                            "source": metadata.get("benchmark_product", metadata.get("source_id", "CIS Benchmark")),
-                            "section": metadata.get("section_title", metadata.get("section_id", "N/A")),
-                            "text_preview": result.get("text", "")[:200] + "..."
+                            "source": metadata.get("benchmark_product") or metadata.get("source_id") or "CIS Benchmark",
+                            "section": section,
+                            "text": chunk_text[:500] if chunk_text else None,
                         })
 
-                    if self.debug:
-                        print(f"[InfoPipeline] RAG retrieved {rag_chunks} chunks")
-                        print(f"[InfoPipeline] RAG sources: {len(rag_sources)}")
+                    print(f"[InfoPipeline] RAG OK — {rag_chunks} chunks, {len(rag_sources)} sources")
+                else:
+                    print(f"[InfoPipeline] RAG returned empty — context={bool(rag_context)}, results={len(raw_results)}")
             except Exception as e:
-                if self.debug:
-                    print(f"[InfoPipeline] RAG failed: {e}")
+                print(f"[InfoPipeline] RAG ERROR: {e}")
         else:
             self.stats["rag_skipped_count"] += 1
+            print("[InfoPipeline] RAG skipped")
 
         # Route based on complexity
         if complexity == "simple":

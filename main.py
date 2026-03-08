@@ -26,6 +26,7 @@ from api.middleware import (
     RequestIDMiddleware,
     ResponseMetadataMiddleware,
     ProviderHeadersMiddleware,
+    RequestLogMiddleware,
 )
 from api.errors import (
     api_error_handler,
@@ -96,6 +97,9 @@ def create_app() -> FastAPI:
 
     # 4. Request ID tracking (generates/accepts request IDs)
     app.add_middleware(RequestIDMiddleware)
+
+    # 4b. Request logging — runs after RequestIDMiddleware so request_id is available
+    app.add_middleware(RequestLogMiddleware)
 
     # 5. Metrics collection (tracks all requests)
     app.add_middleware(MetricsMiddleware, collector=metrics_collector)

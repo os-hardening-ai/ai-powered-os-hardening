@@ -159,6 +159,14 @@ class NovitaEmbeddingClient(IEmbeddingClient):
     def embed_query(self, text: str) -> np.ndarray:
         """
         Tek query için embedding (RAG query time).
+
+        qwen3-embedding-8b asimetrik retrieval modelidir: query'lere instruction
+        prefix eklenir, dokümanlar (index) plain text olarak kalır.
+        Bu yaklaşım cosine similarity skorlarını ~0.55 → ~0.80+ aralığına taşır.
         """
-        vecs = self._embed_batch_with_retry([text])
+        instruction = (
+            "Instruct: Given a security hardening question, retrieve the most "
+            "relevant CIS benchmark sections and OS hardening guidelines.\nQuery: "
+        )
+        vecs = self._embed_batch_with_retry([instruction + text])
         return vecs[0]
