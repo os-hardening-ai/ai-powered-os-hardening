@@ -125,6 +125,9 @@ def is_toc_or_frontmatter(text: str) -> bool:
     dotted_lines = re.findall(r"\.{4,}\s*\d+", text)
     if len(dotted_lines) >= 4:
         return True
+    # Audit checklist sayfasi: "Recommendation Set Correctly Yes No" tablosu
+    if "set correctly" in lower and ("yes" in lower or "no" in lower):
+        return True
     return False
 
 

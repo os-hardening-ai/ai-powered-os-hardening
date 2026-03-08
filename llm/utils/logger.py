@@ -157,18 +157,3 @@ class ContextLogger:
 def create_context_logger(request_id: Optional[str] = None, session_id: Optional[str] = None) -> ContextLogger:
     """Create a context-aware logger"""
     return ContextLogger(request_id=request_id, session_id=session_id)
-
-
-if __name__ == "__main__":
-    # Test logging
-    logger = setup_logger("test", enable_debug=True, log_file="logs/test.log")
-
-    logger.debug("This is a debug message")
-    logger.info("This is an info message")
-    logger.warning("This is a warning message")
-    logger.error("This is an error message")
-
-    # Context logger
-    ctx_logger = ContextLogger(logger, request_id="req-001", session_id="sess-xyz")
-    ctx_logger.info("Processing pipeline step 1")
-    ctx_logger.warning("Potential issue detected")

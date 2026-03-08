@@ -30,7 +30,7 @@
     "enabled": true,
     "chunk_method": "semantic",
     "late_chunking": {
-      "enabled": true,
+      "enabled": false,
       "window_size": 3,
       "stride": 1,
       "coarse_k_factor": 3,
@@ -74,7 +74,7 @@
     "provider": "qdrant",
     "qdrant": {
       "url": "https://286d1f0c-9411-4842-b153-a571d8af4479.eu-west-2-0.aws.cloud.qdrant.io",
-      "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025",
+      "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025_benchmarks",
       "timeout": 120.0,
       "batch_size": 100
     }

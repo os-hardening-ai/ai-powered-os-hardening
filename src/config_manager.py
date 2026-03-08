@@ -197,15 +197,3 @@ class ConfigManager:
             os.remove(self.config_path)
         self.config = {}
         print("✅ Konfigürasyon sıfırlandı.")
-
-
-# CLI kullanımı için
-if __name__ == "__main__":
-    manager = ConfigManager()
-
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "reset":
-        manager.reset_config()
-    else:
-        config = manager.get_config()
-        manager.print_summary()

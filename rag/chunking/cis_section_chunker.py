@@ -38,8 +38,8 @@ class CISSectionChunker(IChunker):
     def __init__(
         self,
         embedding_client: IEmbeddingClient | None = None,
-        max_chars: int = 3500,
-        min_chars: int = 150,
+        max_chars: int = 15000,
+        min_chars: int = 500,
     ) -> None:
         self.max_chars = max_chars
         self.min_chars = min_chars

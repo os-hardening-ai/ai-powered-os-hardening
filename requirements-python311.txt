@@ -41,6 +41,7 @@ faiss-cpu==1.9.0.post1
 
 # --- PDF read (tekini seç: PyMuPDF yeter) ---
 PyMuPDF==1.24.14
+pymupdf4llm
 pytest==8.3.3
 pytest-asyncio==0.24.0
 rich==13.9.4

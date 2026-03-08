@@ -6,14 +6,12 @@ from __future__ import annotations
 
 import time
 import re
-from typing import Optional, Dict, Any
-from dataclasses import dataclass, field
+from typing import Optional, Dict
+from dataclasses import dataclass
 from collections import defaultdict
-from functools import wraps
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from pydantic import BaseModel
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -219,25 +217,3 @@ def sanitize_output(output: str, remove_sensitive: bool = True) -> str:
     return sanitized.strip()
 
 
-# ─────────────────────────────────────────────────────────────────
-# CORS and Trust Configuration
-# ─────────────────────────────────────────────────────────────────
-
-def get_cors_config() -> Dict[str, Any]:
-    """Get CORS configuration for the API."""
-    return {
-        "allow_origins": ["*"],  # In production, restrict this
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
-        "max_age": 600,
-    }
-
-
-def get_trusted_hosts() -> list[str]:
-    """Get list of trusted hosts."""
-    return [
-        "localhost",
-        "127.0.0.1",
-        "*.localhost",
-    ]

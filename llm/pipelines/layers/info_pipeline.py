@@ -131,15 +131,12 @@ class InfoPipeline:
         rag_sources = []
         if use_rag and self.rag_builder:
             try:
-                # Get formatted context for LLM
-                rag_context = self.rag_builder.retrieve_context(ctx.user_question)
+                # Single embed call: get context string + raw results together
+                rag_context, raw_results = self.rag_builder.retrieve_all(ctx.user_question)
 
-                # Get raw results for metadata
-                raw_results = self.rag_builder.retrieve_raw(ctx.user_question)
-
-                if rag_context:
+                if rag_context and raw_results:
                     ctx.retrieved_context = rag_context
-                    rag_chunks = len(rag_context.split("\n\n")) if rag_context else 0
+                    rag_chunks = len(raw_results)
                     self.stats["rag_used_count"] += 1
 
                     # Extract source metadata
@@ -147,9 +144,9 @@ class InfoPipeline:
                         metadata = result.get("metadata", {})
                         rag_sources.append({
                             "score": result.get("score", 0.0),
-                            "source": metadata.get("source", "CIS Benchmark"),
-                            "section": metadata.get("section", "N/A"),
-                            "text_preview": result.get("text", "")[:200] + "..."  # First 200 chars
+                            "source": metadata.get("benchmark_product", metadata.get("source_id", "CIS Benchmark")),
+                            "section": metadata.get("section_title", metadata.get("section_id", "N/A")),
+                            "text_preview": result.get("text", "")[:200] + "..."
                         })
 
                     if self.debug:
@@ -368,84 +365,3 @@ def handle_info_query(
     )
 
     return pipeline.handle(context)
-
-
-# ─────────────────────────────────────────────
-# Test & Examples
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    # Mock LLMs for testing
-    def mock_llm_small(prompt: str) -> str:
-        return "This is a SMALL model response (fast, cheap)."
-
-    def mock_llm_large(prompt: str) -> str:
-        return "This is a LARGE model response (powerful, expensive)."
-
-    # Mock RAG builder
-    class MockRAGBuilder:
-        def retrieve_context(self, question: str) -> Optional[str]:
-            if "ubuntu" in question.lower() or "ssh" in question.lower():
-                return "CIS Benchmark context:\n\n- SSH hardening steps...\n- Configure sshd_config..."
-            return None
-
-    print("="*70)
-    print("INFO PIPELINE - TEST")
-    print("="*70)
-
-    pipeline = InfoPipeline(
-        llm_small=mock_llm_small,
-        llm_large=mock_llm_large,
-        rag_builder=MockRAGBuilder(),
-        debug=True,
-    )
-
-    test_cases = [
-        # Generic (simple, no RAG)
-        ("Firewall nedir?", "simple", False),
-
-        # Specific (medium, with RAG)
-        ("Ubuntu 22.04'te SSH hardening nasıl yapılır?", "medium", True),
-
-        # Complex (complex, with RAG)
-        ("Zero Trust maturity level 3 için SSH, RDP ve firewall hardening scriptleri yaz", "complex", True),
-
-        # Generic educational (simple, no RAG)
-        ("SELinux nasıl çalışır?", "simple", False),
-    ]
-
-    for question, expected_complexity, expected_rag in test_cases:
-        print(f"\n{'─'*70}")
-        print(f"Question: {question}")
-        print(f"Expected: complexity={expected_complexity}, RAG={expected_rag}")
-
-        from llm.core.context import RequestContext
-        ctx = RequestContext(user_question=question)
-
-        result = pipeline.handle(ctx)
-
-        print(f"\n✅ RESULT:")
-        print(f"  Complexity: {result.complexity}")
-        print(f"  Model: {result.model_used}")
-        print(f"  RAG Used: {result.used_rag} (chunks: {result.rag_chunks})")
-        print(f"  Response Time: {result.response_time_s:.2f}s")
-        print(f"  Cost: ${result.estimated_cost:.4f}")
-        print(f"  Answer: {result.answer[:80]}...")
-
-        # Validation
-        complexity_ok = result.complexity == expected_complexity
-        rag_ok = result.used_rag == expected_rag
-
-        status = "✅ PASS" if (complexity_ok and rag_ok) else "⚠️ PARTIAL"
-        print(f"\nValidation: {status}")
-
-    print("\n" + "="*70)
-    print("STATISTICS")
-    print("="*70)
-    stats = pipeline.get_stats()
-    for key, value in stats.items():
-        print(f"  {key}: {value}")
-
-    print("\n" + "="*70)
-    print("TEST COMPLETE")
-    print("="*70)

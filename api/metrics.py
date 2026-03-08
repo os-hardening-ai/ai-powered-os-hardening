@@ -19,6 +19,10 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from collections import defaultdict, deque
 
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
+
 
 # ─────────────────────────────────────────────
 # Metrics Data Structures
@@ -219,11 +223,6 @@ metrics_collector = MetricsCollector(max_history_hours=24)
 # Middleware for Automatic Metrics Collection
 # ─────────────────────────────────────────────
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
-
-
 class MetricsMiddleware(BaseHTTPMiddleware):
     """
     Middleware to automatically collect request metrics.
@@ -309,34 +308,3 @@ def _format_dict(d: Dict[str, int]) -> str:
     return "\n".join(f"  {k}: {v}" for k, v in d.items())
 
 
-# ─────────────────────────────────────────────
-# Example Usage
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    # Simulate some requests
-    collector = MetricsCollector()
-
-    for i in range(100):
-        metric = RequestMetrics(
-            timestamp=datetime.now(),
-            endpoint="/api/chat",
-            method="POST",
-            status_code=200 if i < 95 else 500,
-            duration_ms=1000 + (i * 10),  # Simulated latency
-            llm_provider="groq",
-            llm_model="llama-3.1-8b-instant",
-            tokens_used=500,
-        )
-        collector.record(metric)
-
-    # Get aggregated metrics
-    agg_metrics = collector.get_aggregated_metrics()
-
-    # Print summary
-    print(format_metrics_summary(agg_metrics))
-
-    # Get slowest requests
-    print("\nSlowest Requests:")
-    for m in collector.get_slowest_requests(limit=5):
-        print(f"  {m.endpoint} - {m.duration_ms:.1f}ms")

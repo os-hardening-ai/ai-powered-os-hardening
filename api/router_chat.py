@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-import sys
-import os
 import asyncio
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field, field_validator, ValidationError
+from pydantic import BaseModel, Field, field_validator
 
-# Add project root to path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Import LLM modules (now llm is importable as a package)
 from llm.core.context import RequestContext
 from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.clients import get_llm_clients
+from llm.rag.integration import RAGContextBuilder
 
 # Import security utilities
 from api.security import validate_chat_input, sanitize_output
@@ -155,12 +148,23 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
 
+        # RAG builder — sadece use_rag=True ise baslat
+        rag_builder = None
+        if payload.use_rag:
+            try:
+                rag_builder = RAGContextBuilder(
+                    top_k=payload.rag_top_k,
+                    min_score=payload.rag_min_score,
+                )
+            except Exception as e:
+                print(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+
         # Pipeline'i calistir (4-layer security pipeline)
-        # SecurePipelineV2 requires ultra_fast, small, large models
         pipeline = SecurePipelineV2(
-            llm_ultra_fast=llm_small,  # Use small model for fast safety check
+            llm_ultra_fast=llm_small,
             llm_small=llm_small,
             llm_large=llm_large,
+            rag_builder=rag_builder,
             debug=False,
         )
 
@@ -258,11 +262,23 @@ async def chat_stream(payload: ChatRequest):
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
 
-        # Pipeline (non-streaming for now - streaming LLM support would require changes)
+        # RAG builder
+        rag_builder = None
+        if payload.use_rag:
+            try:
+                rag_builder = RAGContextBuilder(
+                    top_k=payload.rag_top_k,
+                    min_score=payload.rag_min_score,
+                )
+            except Exception as e:
+                print(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+
+        # Pipeline
         pipeline = SecurePipelineV2(
             llm_ultra_fast=llm_small,
             llm_small=llm_small,
             llm_large=llm_large,
+            rag_builder=rag_builder,
             debug=False,
         )
 
@@ -306,11 +322,3 @@ async def chat_stream(payload: ChatRequest):
         )
 
 
-@router.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "service": "chat_api",
-        "rag_available": True,  # RAG integration mevcut
-    }

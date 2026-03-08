@@ -76,7 +76,6 @@ class ResponseMetadataMiddleware(BaseHTTPMiddleware):
         # Add metadata headers
         response.headers["X-Process-Time-Ms"] = f"{process_time_ms:.2f}"
         response.headers["X-API-Version"] = self.version
-        response.headers["X-Content-Type-Options"] = "nosniff"  # Security
 
         return response
 

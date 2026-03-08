@@ -5,16 +5,7 @@ CIS benchmark dokümanlarından ilgili bilgileri getirip LLM'e context olarak su
 """
 
 from __future__ import annotations
-from typing import List, Dict, Any
-import sys
-import os
-
-# Add project root to path for imports
-# This file is at: project_root/llm/rag/integration.py
-# We need to add project_root to sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+from typing import List, Dict, Any, Tuple
 
 try:
     from rag.embeddings import get_embedding_client
@@ -49,84 +40,60 @@ class RAGContextBuilder:
         self._embed_client = get_embedding_client()
         self._vector_store = get_vector_store()
 
-    def retrieve_context(self, query: str) -> str:
+    def _search(self, query: str) -> List[Dict[str, Any]]:
+        """Embed query once and return score-filtered results."""
+        query_emb = self._embed_client.embed_query(query)
+        raw_results = self._vector_store.search(query_emb, top_k=self.top_k)
+        return [r for r in raw_results if r.get("score", 0.0) >= self.min_score]
+
+    def _format_context(self, filtered_results: List[Dict[str, Any]]) -> str:
+        """Format filtered results into LLM-ready context string."""
+        context_parts = []
+        for idx, result in enumerate(filtered_results, start=1):
+            text = result.get("text", "").strip()
+            score = result.get("score", 0.0)
+            metadata = result.get("metadata", {})
+
+            source = metadata.get("benchmark_product", metadata.get("source_id", "CIS Benchmark"))
+            section = metadata.get("section_title", metadata.get("section_id", "N/A"))
+
+            context_parts.append(
+                f"[Kaynak {idx}] (Relevance: {score:.2f})\n"
+                f"Doküman: {source}\n"
+                f"Bölüm: {section}\n"
+                f"İçerik:\n{text}\n"
+            )
+
+        return "\n" + "="*60 + "\n" + "\n".join(context_parts) + "="*60 + "\n"
+
+    def retrieve_all(self, query: str) -> Tuple[str, List[Dict[str, Any]]]:
         """
-        Query için RAG retrieval yapar ve LLM'e uygun context string döndürür.
+        Tek embed çağrısıyla hem context string hem raw results döndürür.
 
         Args:
             query: Kullanıcı sorusu
 
         Returns:
-            Formatted context string (LLM prompt'una eklenecek)
+            (context_str, raw_results) tuple
         """
         try:
-            # 1) Query'i embed et
-            query_emb = self._embed_client.embed_query(query)
-
-            # 2) Vector store'dan top-k sonuçları çek
-            raw_results = self._vector_store.search(query_emb, top_k=self.top_k)
-
-            # 3) Score filtreleme
-            filtered_results = [
-                r for r in raw_results
-                if r.get("score", 0.0) >= self.min_score
-            ]
-
-            if not filtered_results:
-                return self._get_fallback_message()
-
-            # 4) Context string oluştur
-            context_parts = []
-
-            for idx, result in enumerate(filtered_results, start=1):
-                text = result.get("text", "").strip()
-                score = result.get("score", 0.0)
-                metadata = result.get("metadata", {})
-
-                # Metadata'dan useful info çıkar
-                source = metadata.get("source", "CIS Benchmark")
-                section = metadata.get("section", "N/A")
-
-                context_parts.append(
-                    f"[Kaynak {idx}] (Relevance: {score:.2f})\n"
-                    f"Doküman: {source}\n"
-                    f"Bölüm: {section}\n"
-                    f"İçerik:\n{text}\n"
-                )
-
-            context = "\n" + "="*60 + "\n" + "\n".join(context_parts) + "="*60 + "\n"
-
-            return context
-
+            filtered = self._search(query)
+            if not filtered:
+                return self._get_fallback_message(), []
+            return self._format_context(filtered), filtered
         except Exception as e:
             print(f"[RAGContextBuilder] Error during retrieval: {e}")
-            return self._get_fallback_message()
+            return self._get_fallback_message(), []
+
+    def retrieve_context(self, query: str) -> str:
+        """Formatted context string döndürür (LLM prompt'una eklenecek)."""
+        context, _ = self.retrieve_all(query)
+        return context
 
     def retrieve_raw(self, query: str) -> List[Dict[str, Any]]:
-        """
-        Raw retrieval results döndürür (API response için).
-
-        Args:
-            query: Kullanıcı sorusu
-
-        Returns:
-            List of result dicts
-        """
-        try:
-            query_emb = self._embed_client.embed_query(query)
-            raw_results = self._vector_store.search(query_emb, top_k=self.top_k)
-
-            # Score filtreleme
-            filtered = [
-                r for r in raw_results
-                if r.get("score", 0.0) >= self.min_score
-            ]
-
-            return filtered
-
-        except Exception as e:
-            print(f"[RAGContextBuilder] Error during raw retrieval: {e}")
-            return []
+        """Raw retrieval results döndürür (API response için)."""
+        _, raw = self.retrieve_all(query)
+        return raw
 
     def _get_fallback_message(self) -> str:
         """
@@ -162,30 +129,3 @@ def get_rag_context_builder(
         _rag_builder = RAGContextBuilder(top_k=top_k, min_score=min_score)
 
     return _rag_builder
-
-
-# ─────────────────────────────────────────────
-# Test Code
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    # Test RAG context builder
-    builder = get_rag_context_builder(top_k=3, min_score=0.7)
-
-    test_queries = [
-        "SSH hardening nasıl yapılır?",
-        "Firewall konfigürasyonu nedir?",
-        "Password policy önerileri",
-    ]
-
-    print("=" * 70)
-    print("RAG CONTEXT BUILDER TEST")
-    print("=" * 70)
-
-    for query in test_queries:
-        print(f"\nQuery: {query}")
-        print("-" * 70)
-
-        context = builder.retrieve_context(query)
-        print(context)
-        print()
