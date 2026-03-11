@@ -398,6 +398,9 @@ class SecurePipelineV2:
             metadata={
                 "model": action_result.model_used,
                 "script_generated": True,
+                "rag_sources": action_result.rag_sources,
+                "rag_used": bool(action_result.rag_sources),
+                "rag_chunks": len(action_result.rag_sources),
             }
         )
 

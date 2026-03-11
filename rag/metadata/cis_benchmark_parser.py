@@ -82,7 +82,7 @@ def extract_section_info(text: str) -> Dict[str, Any]:
 
     # N.N.N Ensure ... veya N.N.N.N Ensure ... — en fazla 4 seviye
     pattern = re.search(
-        r"(\d+(?:\.\d+){1,3})\s+(Ensure\s+[^\n(]+?)(?:\s*\((Automated|Manual)\))?(?:\n|$)",
+        r"(\d+(?:\.\d+){1,3})\s+(Ensure\s+[^\n(]+?)(?:\s*\((Automated|Manual)\))?\s*(?:\n|$)",
         text,
         re.IGNORECASE,
     )

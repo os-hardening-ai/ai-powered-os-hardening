@@ -3,12 +3,12 @@ from __future__ import annotations
 import os
 import time
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 import numpy as np
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from qdrant_client.http.exceptions import ResponseHandlingException
 
 from config.config_loader import get_config
@@ -67,6 +67,17 @@ class QdrantVectorStore(IVectorStore):
                 ),
             )
 
+        # doc_type alanı için payload index — filter sorgularında zorunlu
+        try:
+            self._client.create_payload_index(
+                collection_name=self._collection,
+                field_name="doc_type",
+                field_schema="keyword",
+            )
+        except Exception:
+            # Index zaten mevcutsa hata fırlat, yoksay
+            pass
+
     def upsert(self, embeddings: np.ndarray, docs: List[Dict[str, Any]]) -> None:
         if embeddings.shape[0] != len(docs):
             raise ValueError("Embeddings ve docs uzunluğu eşleşmiyor.")
@@ -116,8 +127,21 @@ class QdrantVectorStore(IVectorStore):
                         raise
                     time.sleep(1 + attempt)
 
-    def search(self, query_emb: np.ndarray, top_k: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
+    def search(
+        self,
+        query_emb: np.ndarray,
+        top_k: int = 5,
+        min_score: float = 0.0,
+        doc_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         q = query_emb.astype("float32").tolist()
+
+        # Payload filter for doc_type (e.g., "yaml_rule" or "cis_benchmark")
+        query_filter: Optional[Filter] = None
+        if doc_type:
+            query_filter = Filter(
+                must=[FieldCondition(key="doc_type", match=MatchValue(value=doc_type))]
+            )
 
         # Bazı qdrant-client sürümlerinde `search` yok, yerine `query_points` var.
         if hasattr(self._client, "search"):
@@ -126,6 +150,7 @@ class QdrantVectorStore(IVectorStore):
                 collection_name=self._collection,
                 query_vector=q,
                 limit=top_k * 2,  # Min_score filter için daha fazla getir
+                query_filter=query_filter,
             )
         else:
             # Yeni Query API / farklı sürümler
@@ -133,6 +158,7 @@ class QdrantVectorStore(IVectorStore):
                 collection_name=self._collection,
                 query=q,
                 limit=top_k * 2,
+                query_filter=query_filter,
             )
             hits = resp.points
 

@@ -42,6 +42,13 @@ class ActionQueryResult:
     estimated_cost: float = 0.0
     zt_enrichment: Optional[ZTEnrichment] = None  # Zero Trust enrichment
     validation: Optional[ValidationResult] = None  # Output validation result
+    rag_sources: List = None  # RAG source metadata (PDF + YAML chunks)
+
+    def __post_init__(self):
+        if self.rag_sources is None:
+            self.rag_sources = []
+        if self.missing_params is None:
+            self.missing_params = []
 
 
 class ActionPipeline:
@@ -166,15 +173,39 @@ class ActionPipeline:
         ctx.extra["impact_level"] = zt_enrichment.impact_level
         ctx.extra["rollback_approach"] = zt_enrichment.rollback_approach
 
-        # STEP 2B: RAG retrieval (security guidelines for script)
+        # STEP 2B: RAG retrieval (security guidelines + YAML scripts for script generation)
+        rag_sources = []
         if self.rag_builder:
             try:
-                rag_context = self.rag_builder.retrieve_context(ctx.user_question)
-                if rag_context:
+                rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                if rag_context and raw_results:
                     ctx.retrieved_context = rag_context
+                    # Store raw results so _build_script_prompt can use YAML scripts directly
+                    ctx.extra["rag_raw_results"] = raw_results
+
+                    for result in raw_results:
+                        metadata = result.get("metadata", {})
+                        section_id = metadata.get("section_id") or metadata.get("rule_id") or ""
+                        section_title = metadata.get("section_title") or metadata.get("title") or ""
+                        if section_id and section_title:
+                            section = f"{section_id} - {section_title}"
+                        elif section_id:
+                            section = section_id
+                        elif section_title:
+                            section = section_title
+                        else:
+                            section = "N/A"
+                        rag_sources.append({
+                            "score": result.get("score", 0.0),
+                            "source": metadata.get("benchmark_product") or metadata.get("source_id") or "CIS Benchmark",
+                            "section": section,
+                            "doc_type": metadata.get("doc_type", ""),
+                            "text": result.get("text", "")[:500],
+                        })
 
                     if self.debug:
-                        print(f"[ActionPipeline] RAG context retrieved")
+                        yaml_count = sum(1 for r in raw_results if r.get("metadata", {}).get("doc_type") == "yaml_rule")
+                        print(f"[ActionPipeline] RAG OK — {len(raw_results)} chunks ({yaml_count} YAML rules)")
             except Exception as e:
                 if self.debug:
                     print(f"[ActionPipeline] RAG failed: {e}")
@@ -222,6 +253,7 @@ class ActionPipeline:
             estimated_cost=estimated_cost,
             zt_enrichment=zt_enrichment,
             validation=validation,
+            rag_sources=rag_sources,
         )
 
     def _validate_metadata(self, ctx: RequestContext) -> List[str]:
@@ -340,7 +372,10 @@ class ActionPipeline:
 
     def _build_script_prompt(self, ctx: RequestContext) -> str:
         """
-        Build specialized prompt for script generation
+        Build specialized prompt for script generation.
+        YAML rule chunks (with actual bash scripts) are surfaced in a dedicated
+        section so the LLM uses them as direct references instead of generating
+        scripts from scratch.
 
         Args:
             ctx: Request context
@@ -348,43 +383,81 @@ class ActionPipeline:
         Returns:
             Prompt string
         """
-        rag_context = ctx.retrieved_context if ctx.retrieved_context else "No specific CIS guidelines available."
+        raw_results: list = ctx.extra.get("rag_raw_results", [])
 
-        prompt = f"""You are an expert security engineer. Generate a production-ready hardening script.
+        # Separate YAML rule chunks from PDF benchmark chunks
+        yaml_chunks = [r for r in raw_results if r.get("metadata", {}).get("doc_type") == "yaml_rule"]
+        pdf_chunks  = [r for r in raw_results if r.get("metadata", {}).get("doc_type") != "yaml_rule"]
+
+        # --- YAML scripts section ---
+        yaml_section = ""
+        if yaml_chunks:
+            parts = []
+            for r in yaml_chunks:
+                meta = r.get("metadata", {})
+                rule_id = meta.get("rule_id", "?")
+                title   = meta.get("title", "")
+                score   = r.get("score", 0.0)
+                text    = r.get("text", "")
+                parts.append(
+                    f"### Rule {rule_id} — {title} (relevance: {score:.2f})\n{text}"
+                )
+            yaml_section = (
+                "\n**CIS Rule Scripts (from hardening database — use these as reference scripts):**\n"
+                + "\n---\n".join(parts)
+                + "\n"
+            )
+
+        # --- PDF benchmark context section ---
+        if pdf_chunks:
+            pdf_context_parts = []
+            for idx, r in enumerate(pdf_chunks, 1):
+                meta = r.get("metadata", {})
+                source = meta.get("benchmark_product") or meta.get("source_id") or "CIS Benchmark"
+                section_id    = meta.get("section_id") or meta.get("section") or ""
+                section_title = meta.get("section_title") or meta.get("rule_id") or ""
+                section = f"{section_id} - {section_title}" if section_id and section_title else section_id or section_title or "N/A"
+                pdf_context_parts.append(
+                    f"[{idx}] {source} | {section}\n{r.get('text', '').strip()}"
+                )
+            pdf_section = "\n**CIS Benchmark Guidance:**\n" + "\n\n".join(pdf_context_parts) + "\n"
+        elif ctx.retrieved_context:
+            pdf_section = f"\n**CIS Benchmark Guidance:**\n{ctx.retrieved_context}\n"
+        else:
+            pdf_section = "\n**CIS Benchmark Guidance:** No specific guidelines retrieved.\n"
+
+        os_target = ctx.os or "linux"
+        script_type = "PowerShell" if "windows" in os_target.lower() else "Bash"
+        shebang     = "" if "windows" in os_target.lower() else "#!/usr/bin/env bash\n"
+
+        prompt = f"""You are an expert security engineer. Generate a production-ready {script_type} hardening script.
 
 **User Request:**
 {ctx.user_question}
 
 **Target Environment:**
-- OS: {ctx.os}
+- OS: {os_target}
 - User Role: {ctx.role}
 - Security Level: {ctx.security_level}
-- ZT Maturity: {ctx.zt_maturity if hasattr(ctx, 'zt_maturity') else 'medium'}
+- ZT Maturity: {getattr(ctx, 'zt_maturity', 'medium')}
+{yaml_section}{pdf_section}
+**Script Requirements:**
+1. Production-ready {script_type} script with proper error handling
+2. Each step must have a comment explaining what it does and why (CIS reference)
+3. Include a rollback/undo note for each change
+4. Adjust strictness to security_level:
+   - minimal: Only critical controls, avoid breaking changes
+   - balanced: Recommended CIS Level 1 controls
+   - strict: CIS Level 1 + Level 2, maximum hardening
+5. If CIS Rule Scripts are provided above, adapt them directly — do NOT ignore them
+6. Output ONLY the script inside a code block, no extra prose
 
-**Security Guidelines (CIS Benchmark):**
-{rag_context}
-
-**Requirements:**
-1. Production-ready bash/PowerShell script
-2. Include error handling and rollback
-3. Add comments explaining each step
-4. Follow security best practices
-5. Match security_level strictness:
-   - minimal: Basic hardening only
-   - balanced: Recommended settings
-   - strict: Maximum security (may impact usability)
-
-**Output Format:**
-```bash
-#!/bin/bash
-# Hardening script for {ctx.os}
-# Security Level: {ctx.security_level}
-# Generated for: {ctx.role}
-
-# [Your script here]
-```
-
-**Script:**"""
+**Generated Script:**
+```{script_type.lower()}
+{shebang}# Hardening script — {os_target}
+# Security Level: {ctx.security_level} | Role: {ctx.role}
+# Generated by AI-Powered OS Hardening System
+"""
 
         return prompt
 

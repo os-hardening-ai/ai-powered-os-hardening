@@ -400,8 +400,20 @@ Intent categories:
 ### Architecture
 - **Embeddings**: Novita `qwen/qwen3-embedding-8b` (4096 dimensions) via `rag/embeddings/novita_embeddings.py`
 - **Vector Store**: Qdrant cloud (`rag/vector_store/qdrant_store.py`)
-- **Chunking**: Semantic PDF chunking with sliding window (`rag/chunking/`)
-- **Source document**: `data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf`
+- **Collection**: `cis_ubuntu_24_04_and_cis_windows_2025_benchmarks`
+- **Chunkers**: `cis_section` (PDF) and `yaml_rules` (YAML) — see `rag/chunking/`
+
+### Indexed Sources (`config/config.json` → `rag.source_documents`)
+
+| ID | Type | File | Chunker |
+|----|------|------|---------|
+| `cis_ubuntu_24_04` | PDF | `data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf` | `cis_section` |
+| `cis_windows_2025` | PDF | `data/source/CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf` | `cis_section` |
+| `ubuntu_rules_yaml` | YAML | `data/rules/ubuntu_24_04_rules.yaml` | `yaml_rules` |
+
+- `YamlRulesChunker` creates one chunk per CIS rule — includes full audit + remediation bash scripts, metadata (section, level, tags, config_files, auto_remediate)
+- `windows_2025_rules.yaml` exists but is empty — Windows hardening uses PDF only for now
+- To rebuild the index: `python scripts/build_index.py`
 
 ### Smart RAG Triggering
 RAG is only invoked for security-relevant queries — approximately 45% of queries skip RAG entirely (greetings, generic questions), reducing latency and cost.
@@ -410,7 +422,7 @@ RAG is only invoked for security-relevant queries — approximately 45% of queri
 ```json
 {
   "embedding": { "provider": "novita", "model_name": "qwen/qwen3-embedding-8b", "dim": 4096 },
-  "vector_store": { "provider": "qdrant", "qdrant": { "collection_name": "cis_ubuntu_24_04" } }
+  "vector_store": { "provider": "qdrant", "qdrant": { "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025_benchmarks" } }
 }
 ```
 

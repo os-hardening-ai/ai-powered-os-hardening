@@ -133,8 +133,8 @@ class InfoPipeline:
         print(f"[InfoPipeline] use_rag={use_rag}, rag_builder={'SET' if self.rag_builder else 'NONE'}")
         if use_rag and self.rag_builder:
             try:
-                # Single embed call: get context string + raw results together
-                rag_context, raw_results = self.rag_builder.retrieve_all(ctx.user_question)
+                # Balanced retrieval: half from YAML rules, half from PDF benchmarks
+                rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
 
                 if rag_context and raw_results:
                     ctx.retrieved_context = rag_context
@@ -144,9 +144,9 @@ class InfoPipeline:
                     # Extract source metadata
                     for result in raw_results:
                         metadata = result.get("metadata", {})
-                        section_id = metadata.get("section_id") or ""
-                        section_title = metadata.get("section_title") or ""
-                        if section_id and section_title:
+                        section_id = metadata.get("section_id") or metadata.get("section") or ""
+                        section_title = metadata.get("section_title") or metadata.get("title") or ""
+                        if section_id and section_title and section_id != section_title:
                             section = f"{section_id} - {section_title}"
                         elif section_id:
                             section = section_id
