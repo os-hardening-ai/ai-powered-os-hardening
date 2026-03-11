@@ -1,0 +1,65 @@
+{
+    "rule_id": "18.5.2",
+    "title": "Ensure 'MSS: (DisableIPSourceRouting IPv6) IP source routing protection level' is set to 'Enabled: Highest completely disabled'",
+    "description": "This policy setting configures an Administrative Template or MSS Legacy registry key.",
+    "cis_level": 1,
+    "category": "Administrative Templates",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip6\\\\Parameters",
+        "value_name": "DisableIPSourceRouting",
+        "value_type": "REG_DWORD",
+        "value_data": 2,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "",
+        "setting_name": "",
+        "setting_value": "",
+        "admx_category": "AdministrativeTemplates"
+    },
+    "implementation_local": {
+        "powershell_command": "",
+        "powershell_script": "if (-not (Test-Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters')) { New-Item -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters' -Force -ErrorAction SilentlyContinue }; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters' -Name 'DisableIPSourceRouting' -Value 2 -Type DWord -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters\\DisableIPSourceRouting",
+        "inf_value": "4,2",
+        "gpo_xml": "<RegistryValue name='DisableIPSourceRouting' type='REG_DWORD' value='2'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters' -Name 'DisableIPSourceRouting' -ErrorAction SilentlyContinue).'DisableIPSourceRouting'; return ($val -eq 2)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters' -Name 'DisableIPSourceRouting' -Force"
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Changing template settings can restrict component usage or legacy features. Test before deploying."
+    },
+    "rationale": "Enforcing these settings restricts potential vector surfaces outlined by the CIS benchmark.",
+    "default_value": {
+        "standalone": "Not Configured",
+        "domain_joined": "Not Configured"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "admin-templates",
+        "cis",
+        "registry",
+        "level-1"
+    ]
+}

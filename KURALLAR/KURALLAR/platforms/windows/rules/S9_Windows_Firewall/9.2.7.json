@@ -1,0 +1,64 @@
+{
+    "rule_id": "9.2.7",
+    "title": "Ensure 'Windows Firewall: Private: Logging: Log successful connections is set to Yes'",
+    "description": "This policy setting controls Windows Defender Firewall parameters.",
+    "cis_level": 1,
+    "category": "Windows Firewall",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging",
+        "value_name": "LogSuccessfulConnections",
+        "value_type": "REG_DWORD",
+        "value_data": 1,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Windows Defender Firewall with Advanced Security\\Windows Defender Firewall with Advanced Security",
+        "setting_name": "Windows Firewall: Private: Logging: Log successful connections is set to Yes",
+        "setting_value": "",
+        "admx_category": "WindowsFirewall"
+    },
+    "implementation_local": {
+        "powershell_command": "",
+        "powershell_script": "if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging' -Force }; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging' -Name 'LogSuccessfulConnections' -Value 1 -Type DWord -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging\\LogSuccessfulConnections",
+        "inf_value": "4,1",
+        "gpo_xml": "<RegistryValue name='LogSuccessfulConnections' type='REG_DWORD' value='1'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging' -Name 'LogSuccessfulConnections' -ErrorAction SilentlyContinue).'LogSuccessfulConnections'; return ($val -eq 1)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsFirewall\\PrivateProfile\\Logging' -Name 'LogSuccessfulConnections' -Force"
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Changes to firewall profiles affect inbound and outbound connectivity. Test changes before applying to production."
+    },
+    "rationale": "Windows Defender Firewall helps prevent unauthorized access to the network and protects against malware.",
+    "default_value": {
+        "standalone": "Varies",
+        "domain_joined": "Varies"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "windows-firewall",
+        "cis",
+        "security"
+    ]
+}

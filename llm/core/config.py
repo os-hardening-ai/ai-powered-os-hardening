@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 
-LLMProvider = Literal["huggingface", "openai", "groq", "ollama"]
+LLMProvider = Literal["huggingface", "openai", "groq", "ollama", "novita"]
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,8 @@ class Config:
     ollama_base_url: str
     ollama_small_model: str
     ollama_large_model: str
+    novita_small_model: str
+    novita_large_model: str
     small_model_temperature: float
     large_model_temperature: float
     max_tokens: int
@@ -56,6 +58,8 @@ class Config:
             raise ValueError("LLM_PROVIDER=groq but GROQ_API_KEY is empty")
         if self.llm_provider == "huggingface" and not self.hf_api_key:
             raise ValueError("LLM_PROVIDER=huggingface but HF_API_KEY is empty")
+        if self.llm_provider == "novita" and not os.getenv("NOVITA_API_KEY"):
+            raise ValueError("LLM_PROVIDER=novita but NOVITA_API_KEY is empty")
 
     def get_active_models(self) -> tuple[str, str]:
         if self.llm_provider == "openai":
@@ -64,6 +68,8 @@ class Config:
             return (self.groq_small_model, self.groq_large_model)
         elif self.llm_provider == "ollama":
             return (self.ollama_small_model, self.ollama_large_model)
+        elif self.llm_provider == "novita":
+            return (self.novita_small_model, self.novita_large_model)
         return (self.hf_small_model, self.hf_large_model)
 
     def print_summary(self) -> None:
@@ -138,12 +144,14 @@ def load_config() -> Config:
         json_correction = True
 
     provider_str = _env("LLM_PROVIDER", json_provider).lower()
-    if provider_str not in ("huggingface", "openai", "groq", "ollama"):
+    if provider_str not in ("huggingface", "openai", "groq", "ollama", "novita"):
         raise ValueError(f"Invalid LLM_PROVIDER: {provider_str!r}")
     provider: LLMProvider = provider_str  # type: ignore[assignment]
 
     groq_small   = _env("GROQ_SMALL_MODEL_NAME",   _pmodel(providers, "groq",   "small", "name", "llama-3.1-8b-instant"))
     groq_large   = _env("GROQ_LARGE_MODEL_NAME",   _pmodel(providers, "groq",   "large", "name", "llama-3.3-70b-versatile"))
+    novita_small = _env("NOVITA_SMALL_MODEL_NAME", _pmodel(providers, "novita", "small", "name", "qwen/qwen3.5-35b-a3b"))
+    novita_large = _env("NOVITA_LARGE_MODEL_NAME", _pmodel(providers, "novita", "large", "name", "qwen/qwen3.5-122b-a10b"))
     openai_small = _env("OPENAI_SMALL_MODEL_NAME", _pmodel(providers, "openai", "small", "name", "gpt-4o-mini"))
     openai_large = _env("OPENAI_LARGE_MODEL_NAME", _pmodel(providers, "openai", "large", "name", "gpt-4o"))
     ollama_small = _env("OLLAMA_SMALL_MODEL_NAME", _pmodel(providers, "ollama", "small", "name", "llama3.1:8b"))
@@ -165,6 +173,8 @@ def load_config() -> Config:
         groq_api_key=_env("GROQ_API_KEY"),
         groq_small_model=groq_small,
         groq_large_model=groq_large,
+        novita_small_model=novita_small,
+        novita_large_model=novita_large,
         ollama_base_url=_env("OLLAMA_BASE_URL", ollama_base_url),
         ollama_small_model=ollama_small,
         ollama_large_model=ollama_large,

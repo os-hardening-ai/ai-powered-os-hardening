@@ -1,0 +1,83 @@
+{
+  "rule_id": "1.1.1",
+  "title": "Ensure 'Enforce password history' is set to '24 or more password(s)'",
+  "description": "This policy setting determines the number of renewed, unique passwords that have to be associated with a user account before you can reuse an old password. The value for this policy setting must be between 0 and 24 passwords. The default value for standalone systems is 0 passwords, but the default setting when joined to a domain is 24 passwords. To maintain the effectiveness of this policy setting, use the Minimum password age setting to prevent users from repeatedly changing their password. The recommended state for this setting is: 24 or more password(s).",
+  "cis_level": 1,
+  "category": "Account Policies",
+  "subcategory": "Password Policy",
+  "applies_to": [
+    "Windows 11",
+    "Windows 10",
+    "Windows Server 2022",
+    "Windows Server 2019",
+    "Windows Server 2016"
+  ],
+  "automated": true,
+
+  "registry_config": null,
+
+  "gpo_config": {
+    "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Account Policies\\Password Policy",
+    "setting_name": "Enforce password history",
+    "setting_value": 24,
+    "admx_category": "PasswordPolicy"
+  },
+
+  "implementation_local": {
+    "powershell_command": "net accounts /uniquepw:24",
+    "powershell_script": "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"\n$seceditImport = \"$env:TEMP\\secpol_import.cfg\"\n\n# Export current security policy\nsecedit /export /cfg $seceditExport /quiet\n\n# Read and modify\n$content = Get-Content $seceditExport\n$content = $content -replace 'PasswordHistorySize\\s*=\\s*\\d+', 'PasswordHistorySize = 24'\n\n# If setting doesn't exist, add it\nif ($content -notmatch 'PasswordHistorySize') {\n    $content = $content -replace '(\\[System Access\\])', \"`$1`nPasswordHistorySize = 24\"\n}\n\n$content | Set-Content $seceditImport -Force\n\n# Import modified policy\nsecedit /configure /db secedit.sdb /cfg $seceditImport /quiet\n\n# Cleanup\nRemove-Item $seceditExport, $seceditImport -Force -ErrorAction SilentlyContinue",
+    "requires_admin": true,
+    "requires_reboot": false
+  },
+
+  "implementation_gpo": {
+    "inf_section": "[System Access]",
+    "inf_key": "PasswordHistorySize",
+    "inf_value": "24"
+  },
+
+  "audit_logic": {
+    "powershell_script": "try {\n    $output = net accounts 2>&1\n    $historyLine = $output | Select-String 'Length of password history maintained'\n    if ($historyLine) {\n        $value = [int]($historyLine -replace '.*:\\s*(\\d+).*', '$1')\n        return ($value -ge 24)\n    }\n    \n    # Alternative: Check via secedit export\n    $tempFile = \"$env:TEMP\\secpol_audit_$([guid]::NewGuid().ToString('N')).cfg\"\n    secedit /export /cfg $tempFile /quiet 2>&1 | Out-Null\n    \n    if (Test-Path $tempFile) {\n        $content = Get-Content $tempFile -Raw\n        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue\n        \n        if ($content -match 'PasswordHistorySize\\s*=\\s*(\\d+)') {\n            $value = [int]$Matches[1]\n            return ($value -ge 24)\n        }\n    }\n    \n    return $false\n} catch {\n    return $false\n}",
+    "expected_result": true
+  },
+
+  "remediation_rollback": {
+    "powershell_command": "net accounts /uniquepw:0",
+    "original_value": 0,
+    "description": "Restores password history to Windows standalone default (0). Domain-joined systems default to 24."
+  },
+
+  "impact": {
+    "severity": "low",
+    "description": "Users must create a new password every time they are required to change their old one. There is an increased risk of users writing their passwords down or creating passwords that change incrementally (e.g., password01, password02)."
+  },
+
+  "rationale": "The longer a user uses the same password, the greater the chance that an attacker can determine the password through brute force attacks. Also, any accounts that may have been compromised will remain exploitable for as long as the password is left unchanged. If password changes are required but password reuse is not prevented, or if users continually reuse a small number of passwords, the effectiveness of a good password policy is greatly reduced.",
+
+  "default_value": {
+    "standalone": 0,
+    "domain_joined": 24
+  },
+
+  "references": [
+    "https://www.cisecurity.org/white-papers/cis-password-policy-guide/",
+    "https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/password-policy",
+    "https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/enforce-password-history"
+  ],
+
+  "tags": [
+    "password",
+    "account-policy",
+    "authentication",
+    "level-1",
+    "automated",
+    "password-history"
+  ],
+
+  "notes": [
+    "Password Policy settings must be applied via the Default Domain Policy GPO to be globally in effect on domain user accounts.",
+    "If configured in another GPO, they will only affect local user accounts.",
+    "Custom exceptions can be defined using Password Settings Objects (PSOs).",
+    "Microsoft currently has a maximum limit of 24 saved passwords."
+  ]
+}

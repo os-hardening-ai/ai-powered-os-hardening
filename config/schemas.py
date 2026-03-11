@@ -51,7 +51,7 @@ class DataPathsConfig:
 @dataclass
 class SourceDocumentConfig:
     id: str
-    type: Literal["pdf", "markdown", "html"]
+    type: Literal["pdf", "markdown", "html", "yaml"]
     path: str
     chunker: str
     metadata_strategy: str = "auto"

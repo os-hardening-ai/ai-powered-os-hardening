@@ -1,0 +1,67 @@
+{
+    "rule_id": "2.3.2.1",
+    "title": "Ensure 'Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings' is set to 'Enabled'",
+    "description": "This policy setting evaluates the security options.",
+    "cis_level": 1,
+    "category": "Local Policies",
+    "subcategory": "Security Options",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\System\\CurrentControlSet\\Control\\Lsa",
+        "value_name": "SCENoApplyLegacyAuditPolicy",
+        "value_type": "REG_DWORD",
+        "value_data": 1,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Local Policies\\Security Options",
+        "setting_name": "Ensure 'Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings' is set to 'Enabled'",
+        "setting_value": "Enabled",
+        "admx_category": "SecurityOptions"
+    },
+    "implementation_local": {
+        "powershell_command": "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' -Name 'PLACEHOLDER' -Value 1 -Type DWord -Force",
+        "powershell_script": "Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Lsa' -Name 'SCENoApplyLegacyAuditPolicy' -Value 1 -Type DWord -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\System\\CurrentControlSet\\Control\\Lsa\\SCENoApplyLegacyAuditPolicy",
+        "inf_value": "4,1",
+        "gpo_xml": "<RegistryValue name='SCENoApplyLegacyAuditPolicy' type='REG_DWORD' value='1'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Lsa' -Name 'SCENoApplyLegacyAuditPolicy' -ErrorAction SilentlyContinue).SCENoApplyLegacyAuditPolicy; return ($val -eq 1)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Lsa' -Name 'SCENoApplyLegacyAuditPolicy' -Force",
+        "original_value": null
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Modifying this security option may result in unexpected behavior if proper configuration relies on it."
+    },
+    "rationale": "Following the CIS specification hardens the system against potential attacks.",
+    "default_value": {
+        "standalone": "Not Defined",
+        "domain_joined": "Not Defined"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "security-options",
+        "local-policy",
+        "cis",
+        "level-1"
+    ]
+}

@@ -1,0 +1,62 @@
+{
+    "rule_id": "1.2.1",
+    "title": "Ensure 'Account lockout duration' is set to '15 or more minute(s)'",
+    "description": "This policy setting determines the number of minutes a locked-out account remains locked out before automatically becoming unlocked. The available range is from 0 minutes through 99,999 minutes. If you set the account lockout duration to 0, the account will be locked out until an administrator explicitly unlocks it. If Account lockout threshold is set to a number greater than zero, Account lockout duration must be greater than or equal to the value of Reset account lockout counter after.",
+    "cis_level": 1,
+    "category": "Account Policies",
+    "subcategory": "Account Lockout Policy",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": null,
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Account Policies\\Account Lockout Policy",
+        "setting_name": "Account lockout duration",
+        "setting_value": "15 or more minute(s)",
+        "admx_category": "AccountLockout"
+    },
+    "implementation_local": {
+        "powershell_command": null,
+        "powershell_script": "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"\n$seceditImport = \"$env:TEMP\\secpol_import.cfg\"\nsecedit /export /cfg $seceditExport /quiet\n$content = Get-Content $seceditExport\n$content = $content -replace 'LockoutDuration\\s*=\\s*\\d+', 'LockoutDuration = 15'\nif ($content -notmatch 'LockoutDuration') {\n    $content = $content -replace '(\\[System Access\\])', \"`$1`nLockoutDuration = 15\"\n}\n$content | Set-Content $seceditImport -Force\nsecedit /configure /db secedit.sdb /cfg $seceditImport /quiet\nRemove-Item $seceditExport, $seceditImport -Force -ErrorAction SilentlyContinue",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[System Access]",
+        "inf_key": "LockoutDuration",
+        "inf_value": "15"
+    },
+    "audit_logic": {
+        "powershell_script": "try {\n    $tempFile = \"$env:TEMP\\secpol_audit_$([guid]::NewGuid().ToString('N')).cfg\"\n    secedit /export /cfg $tempFile /quiet 2>&1 | Out-Null\n    if (Test-Path $tempFile) {\n        $content = Get-Content $tempFile -Raw\n        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue\n        if ($content -match 'LockoutDuration\\s*=\\s*(\\d+)') {\n            return ([int]$Matches[1] -ge 15)\n        }\n    }\n    return $false\n} catch {\n    return $false\n}",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"; $seceditImport = \"$env:TEMP\\secpol_import.cfg\"; secedit /export /cfg $seceditExport /quiet; $content = Get-Content $seceditExport; $content = $content -replace 'LockoutDuration\\s*=\\s*\\d+', 'LockoutDuration = 0'; $content | Set-Content $seceditImport -Force; secedit /configure /db secedit.sdb /cfg $seceditImport /quiet",
+        "original_value": 0,
+        "description": "Sets Account lockout duration to 0 (Administrator must explicitly unlock)"
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "If an account is locked out, the user will not be able to log on until the lockout duration has expired."
+    },
+    "rationale": "Setting the account lockout duration to 0, so that the account remains locked until an administrator unlocks it, can help prevent a Denial of Service (DoS) attack if an attacker authenticates with multiple users.",
+    "default_value": {
+        "standalone": 0,
+        "domain_joined": 0
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "account-policy",
+        "lockout-policy",
+        "security",
+        "cis",
+        "level-1"
+    ]
+}

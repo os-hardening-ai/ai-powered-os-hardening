@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<GroupPolicyBackupScheme bkp:version="2.0" bkp:type="GroupPolicyBackupTemplate" xmlns:bkp="http://www.microsoft.com/GroupPolicy/GPOOperations" xmlns="http://www.microsoft.com/GroupPolicy/GPOOperations">
+  <GroupPolicyObject>
+    <SecurityGroups>
+      <Group bkp:Source="FromDACL">
+        <Sid>S-1-5-21-0-0-0-512</Sid>
+        <SamAccountName>Domain Admins</SamAccountName>
+        <Type>Global</Type>
+        <Domain>DOMAIN</Domain>
+      </Group>
+    </SecurityGroups>
+    <FilePaths/>
+    <GroupPolicyCoreSettings>
+      <ID>{{796AC01C-57E4-4873-84E0-7EF72F08D9F0}}</ID>
+      <Domain>DOMAIN</Domain>
+      <SecurityDescriptor>01 00 04 80</SecurityDescriptor>
+      <DisplayName><![CDATA[CIS_Hardening_20260130_192413]]></DisplayName>
+      <Options>0</Options>
+      <UserVersionNumber>0</UserVersionNumber>
+      <MachineVersionNumber>1</MachineVersionNumber>
+      <MachineExtensionGuids><![CDATA[[{827D319E-6EAC-11D2-A4EA-00C04F79F83A}{803E14A0-B4FB-11D0-A0D0-00A0C90F574B}]]]></MachineExtensionGuids>
+      <UserExtensionGuids/>
+      <WMIFilter/>
+    </GroupPolicyCoreSettings>
+    <GroupPolicyExtension bkp:ID="{35378EAC-683F-11D2-A89A-00C04FBBCFA2}" bkp:DescName="Registry">
+      <FSObjectFile bkp:Path="%GPO_MACH_FSPATH%\microsoft\windows nt\SecEdit\GptTmpl.inf" bkp:SourceExpandedPath="C:\Users\cagri\OneDrive\Belgeler\GitHub\sh-bitirme-proje\platforms\windows\tools\..\output\GPO_Backup_20260130_192413\{8A8376FE-2879-43DE-99E4-E8CA6FE12A50}\DomainSysvol\GPO\Machine\microsoft\windows nt\SecEdit\GptTmpl.inf" bkp:Location="DomainSysvol\GPO\Machine\microsoft\windows nt\SecEdit\GptTmpl.inf"/>
+    </GroupPolicyExtension>
+  </GroupPolicyObject>
+</GroupPolicyBackupScheme>

@@ -1,0 +1,53 @@
+{
+    "rule_id": "1.2.3",
+    "title": "Ensure 'Allow Administrator account lockout' is set to 'Enabled'",
+    "description": "This policy setting determines whether the built-in Administrator account is subject to the account lockout policy. Only the built-in Administrator account is affected by this policy setting, and it is useful for preventing brute-force attacks on the Administrator account.",
+    "cis_level": 1,
+    "category": "Account Policies",
+    "subcategory": "Account Lockout Policy",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": false,
+    "registry_config": null,
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Account Policies\\Account Lockout Policy",
+        "setting_name": "Allow Administrator account lockout",
+        "setting_value": "Enabled",
+        "admx_category": "AccountLockout"
+    },
+    "implementation_local": null,
+    "implementation_gpo": null,
+    "audit_logic": {
+        "powershell_script": null,
+        "expected_result": true
+    },
+    "remediation_rollback": null,
+    "impact": {
+        "severity": "high",
+        "description": "If the Administrator account is locked out, you may need to use another administrative account to unlock it, or wait for the lockout duration to expire."
+    },
+    "rationale": "Enabling this setting prevents the Administrator account from being used to brute-force passwords without risk of lockout.",
+    "default_value": {
+        "standalone": "Disabled",
+        "domain_joined": "Disabled"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "account-policy",
+        "lockout-policy",
+        "security",
+        "cis",
+        "level-1",
+        "manual"
+    ],
+    "notes": [
+        "This is a manual rule check."
+    ]
+}

@@ -59,6 +59,15 @@
         "enabled": true,
         "chunker": "cis_section",
         "priority": 2
+      },
+      {
+        "id": "ubuntu_rules_yaml",
+        "name": "Ubuntu 24.04 CIS Hardening Rules",
+        "type": "yaml",
+        "path": "data/rules/ubuntu_24_04_rules.yaml",
+        "enabled": true,
+        "chunker": "yaml_rules",
+        "priority": 3
       }
     ]
   },
@@ -80,7 +89,7 @@
     }
   },
   "llm": {
-    "default_provider": "groq",
+    "default_provider": "novita",
     "timeout": 60,
     "max_retries": 3,
     "providers": {
@@ -127,6 +136,22 @@
           "large": {
             "name": "llama3.1:70b",
             "max_tokens": 4096,
+            "temperature": 0.2
+          }
+        }
+      },
+      "novita": {
+        "enabled": true,
+        "base_url": "https://api.novita.ai/openai",
+        "models": {
+          "small": {
+            "name": "qwen/qwen3.5-35b-a3b",
+            "max_tokens": 65536,
+            "temperature": 0.3
+          },
+          "large": {
+            "name": "qwen/qwen3.5-122b-a10b",
+            "max_tokens": 65536,
             "temperature": 0.2
           }
         }

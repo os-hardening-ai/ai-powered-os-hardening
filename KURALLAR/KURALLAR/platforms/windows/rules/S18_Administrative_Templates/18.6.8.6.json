@@ -1,0 +1,66 @@
+{
+    "rule_id": "18.6.8.6",
+    "title": "Ensure 'Mandate the minimum version of SMB' is set to 'Enabled: 3.1.1'",
+    "description": "This policy setting configures an Administrative Template or MSS Legacy registry key under the Network section.",
+    "cis_level": 1,
+    "category": "Administrative Templates (Network)",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows\\\\LanmanWorkstation",
+        "value_name": "MinSmb2Dialect",
+        "value_type": "REG_DWORD",
+        "value_data": 785,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Administrative Templates\\Network",
+        "setting_name": "",
+        "setting_value": "",
+        "admx_category": "Network"
+    },
+    "implementation_local": {
+        "powershell_command": "",
+        "powershell_script": "if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\LanmanWorkstation')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\LanmanWorkstation' -Force -ErrorAction SilentlyContinue }; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\LanmanWorkstation' -Name 'MinSmb2Dialect' -Value 785 -Type DWord -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\LanmanWorkstation\\MinSmb2Dialect",
+        "inf_value": "4,785",
+        "gpo_xml": "<RegistryValue name='MinSmb2Dialect' type='REG_DWORD' value='785'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\LanmanWorkstation' -Name 'MinSmb2Dialect' -ErrorAction SilentlyContinue).'MinSmb2Dialect'; return ($val -eq 785)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\LanmanWorkstation' -Name 'MinSmb2Dialect' -Force"
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Changing network settings can restrict network protocol usage or legacy features. Test before deploying."
+    },
+    "rationale": "Enforcing these network configurations aligns with CIS benchmark recommendations.",
+    "default_value": {
+        "standalone": "Not Configured",
+        "domain_joined": "Not Configured"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "admin-templates",
+        "network",
+        "cis",
+        "registry",
+        "level-1"
+    ]
+}

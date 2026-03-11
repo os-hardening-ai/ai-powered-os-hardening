@@ -1,0 +1,64 @@
+{
+    "rule_id": "1.1.5",
+    "title": "Ensure 'Password must meet complexity requirements' is set to 'Enabled'",
+    "description": "This policy setting checks all new passwords to ensure that they meet basic requirements for strong passwords. When enabled, passwords must: not contain the user's account name, be at least six characters in length, and contain characters from three of five categories (uppercase, lowercase, digits, non-alphabetic, Unicode). The recommended state for this setting is: Enabled.",
+    "cis_level": 1,
+    "category": "Account Policies",
+    "subcategory": "Password Policy",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": null,
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Account Policies\\Password Policy",
+        "setting_name": "Password must meet complexity requirements",
+        "setting_value": 1,
+        "admx_category": "PasswordPolicy"
+    },
+    "implementation_local": {
+        "powershell_command": null,
+        "powershell_script": "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"\n$seceditImport = \"$env:TEMP\\secpol_import.cfg\"\nsecedit /export /cfg $seceditExport /quiet\n$content = Get-Content $seceditExport\n$content = $content -replace 'PasswordComplexity\\s*=\\s*\\d+', 'PasswordComplexity = 1'\nif ($content -notmatch 'PasswordComplexity') {\n    $content = $content -replace '(\\[System Access\\])', \"`$1`nPasswordComplexity = 1\"\n}\n$content | Set-Content $seceditImport -Force\nsecedit /configure /db secedit.sdb /cfg $seceditImport /quiet\nRemove-Item $seceditExport, $seceditImport -Force -ErrorAction SilentlyContinue",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[System Access]",
+        "inf_key": "PasswordComplexity",
+        "inf_value": "1"
+    },
+    "audit_logic": {
+        "powershell_script": "try {\n    $tempFile = \"$env:TEMP\\secpol_audit_$([guid]::NewGuid().ToString('N')).cfg\"\n    secedit /export /cfg $tempFile /quiet 2>&1 | Out-Null\n    if (Test-Path $tempFile) {\n        $content = Get-Content $tempFile -Raw\n        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue\n        if ($content -match 'PasswordComplexity\\s*=\\s*(\\d+)') {\n            return ([int]$Matches[1] -eq 1)\n        }\n    }\n    return $false\n} catch {\n    return $false\n}",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"; $seceditImport = \"$env:TEMP\\secpol_import.cfg\"; secedit /export /cfg $seceditExport /quiet; $content = Get-Content $seceditExport; $content = $content -replace 'PasswordComplexity\\s*=\\s*\\d+', 'PasswordComplexity = 0'; $content | Set-Content $seceditImport -Force; secedit /configure /db secedit.sdb /cfg $seceditImport /quiet",
+        "original_value": 0,
+        "description": "Disables password complexity requirement (standalone default)"
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "If the default password complexity configuration is retained, additional help desk calls for locked-out accounts could occur because users might not be accustomed to passwords that contain non-alphabetic characters."
+    },
+    "rationale": "Passwords that contain only alphanumeric characters are extremely easy to discover with several publicly available tools.",
+    "default_value": {
+        "standalone": 0,
+        "domain_joined": 1
+    },
+    "references": [
+        "https://www.cisecurity.org/white-papers/cis-password-policy-guide/",
+        "https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/password-policy"
+    ],
+    "tags": [
+        "password",
+        "account-policy",
+        "authentication",
+        "level-1",
+        "automated",
+        "password-complexity"
+    ]
+}

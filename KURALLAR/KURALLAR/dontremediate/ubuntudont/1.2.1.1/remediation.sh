@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# CIS 1.2.1.1 - Ensure GPG keys are configured (Manual)
+# This is a MANUAL remediation that requires site-specific policy
+
+echo "==================================================================="
+echo "CIS 1.2.1.1 - Ensure GPG keys are configured (Manual)"
+echo "==================================================================="
+echo ""
+echo "This control requires MANUAL remediation according to site policy."
+echo ""
+echo "Remediation Steps:"
+echo "1. Review your organization's approved GPG keys for package repositories"
+echo "2. Update package manager GPG keys according to site policy"
+echo ""
+echo "Recommended approach (Signed-By in sources.list):"
+echo "  - Place GPG keys in /etc/apt/trusted.gpg.d/ as .gpg or .asc files"
+echo "  - Use the Signed-By option in /etc/apt/sources.list.d/*.list files"
+echo "  - Example: deb [signed-by=/etc/apt/trusted.gpg.d/example.gpg] https://... ..."
+echo ""
+echo "Deprecated approach (apt-key):"
+echo "  - apt-key is deprecated but still functional in some distributions"
+echo "  - Example: apt-key add /path/to/key.gpg"
+echo ""
+echo "For more information, see:"
+echo "  - man apt-key(8)"
+echo "  - man apt-secure(8)"
+echo "  - man sources.list(5)"
+echo "  - https://manpages.debian.org/stretch/apt/sources.list.5.en.html"
+echo ""
+echo "==================================================================="
+echo "NO AUTOMATED REMEDIATION PERFORMED - MANUAL ACTION REQUIRED"
+echo "==================================================================="

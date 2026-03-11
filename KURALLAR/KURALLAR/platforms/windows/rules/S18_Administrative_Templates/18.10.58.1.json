@@ -1,0 +1,49 @@
+{
+    "rule_id": "18.10.58.1",
+    "title": "Ensure 'Prevent downloading of enclosures' is set to 'Enabled'",
+    "description": "CIS automated configuration mapping for 18.10.58.1",
+    "cis_level": "1",
+    "category": "Administrative Templates: Windows Components",
+    "applies_to": [
+        "Windows 11"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\\\Software\\\\Policies\\\\Microsoft\\\\Internet Explorer\\\\Feeds",
+        "value_name": "DisableEnclosureDownload",
+        "value_type": "REG_DWORD",
+        "value_data": 1,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Administrative Templates\\...",
+        "setting_name": "",
+        "setting_value": "",
+        "admx_category": "System"
+    },
+    "implementation_local": {
+        "powershell_command": "",
+        "powershell_script": "if (-not (Test-Path 'HKLM:\\Software\\Policies\\Microsoft\\Internet Explorer\\Feeds')) { New-Item -Path 'HKLM:\\Software\\Policies\\Microsoft\\Internet Explorer\\Feeds' -Force -ErrorAction SilentlyContinue }; Set-ItemProperty -Path 'HKLM:\\Software\\Policies\\Microsoft\\Internet Explorer\\Feeds' -Name 'DisableEnclosureDownload' -Value 1 -Type DWORD -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\HKLM:\\Software\\Policies\\Microsoft\\Internet Explorer\\Feeds\\DisableEnclosureDownload",
+        "inf_value": "4,1",
+        "gpo_xml": "<RegistryValue name='DisableEnclosureDownload' type='REG_DWORD' value='1'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\Software\\Policies\\Microsoft\\Internet Explorer\\Feeds' -Name 'DisableEnclosureDownload' -ErrorAction SilentlyContinue).'DisableEnclosureDownload'; return ($val -eq 1)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\Software\\Policies\\Microsoft\\Internet Explorer\\Feeds' -Name 'DisableEnclosureDownload' -Force"
+    },
+    "tags": [
+        "admin-templates",
+        "cis",
+        "registry",
+        "automated"
+    ]
+}

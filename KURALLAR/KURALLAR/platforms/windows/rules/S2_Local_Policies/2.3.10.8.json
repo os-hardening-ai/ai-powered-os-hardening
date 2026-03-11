@@ -1,0 +1,73 @@
+{
+    "rule_id": "2.3.10.8",
+    "title": "Ensure 'Network access: Remotely accessible registry paths and sub-paths' is configured",
+    "description": "This policy setting evaluates the security options.",
+    "cis_level": 1,
+    "category": "Local Policies",
+    "subcategory": "Security Options",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\System\\CurrentControlSet\\Control\\SecurePipeServers\\winreg\\AllowedPaths",
+        "value_name": "Machine",
+        "value_type": "REG_MULTI_SZ",
+        "value_data": [
+            "System\\CurrentControlSet\\Control\\Print\\Printers",
+            "System\\CurrentControlSet\\Services\\Eventlog",
+            "Software\\Microsoft\\OLAP Server",
+            "Software\\Microsoft\\Windows NT\\CurrentVersion\\Print",
+            "Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows"
+        ],
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Local Policies\\Security Options",
+        "setting_name": "Ensure 'Network access: Remotely accessible registry paths and sub-paths' is configured",
+        "setting_value": "Enabled",
+        "admx_category": "SecurityOptions"
+    },
+    "implementation_local": {
+        "powershell_command": "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' -Name 'PLACEHOLDER' -Value 1 -Type DWord -Force",
+        "powershell_script": "Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\SecurePipeServers\\winreg\\AllowedPaths' -Name 'Machine' -Value @('System\\CurrentControlSet\\Control\\Print\\Printers','System\\CurrentControlSet\\Services\\Eventlog','Software\\Microsoft\\OLAP Server','Software\\Microsoft\\Windows NT\\CurrentVersion\\Print','Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows') -Type MultiString -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\System\\CurrentControlSet\\Control\\SecurePipeServers\\winreg\\AllowedPaths\\Machine",
+        "inf_value": "7,System\\CurrentControlSet\\Control\\Print\\Printers,System\\CurrentControlSet\\Services\\Eventlog,Software\\Microsoft\\OLAP Server,Software\\Microsoft\\Windows NT\\CurrentVersion\\Print,Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows",
+        "gpo_xml": "<RegistryValue name='Machine' type='REG_MULTI_SZ' value='System\\CurrentControlSet\\Control\\Print\\Printers,System\\CurrentControlSet\\Services\\Eventlog,Software\\Microsoft\\OLAP Server,Software\\Microsoft\\Windows NT\\CurrentVersion\\Print,Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\SecurePipeServers\\winreg\\AllowedPaths' -Name 'Machine' -ErrorAction SilentlyContinue).'Machine'; return ($null -ne $val)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\SecurePipeServers\\winreg\\AllowedPaths' -Name 'Machine' -Force",
+        "original_value": null
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Modifying this security option may result in unexpected behavior if proper configuration relies on it."
+    },
+    "rationale": "Following the CIS specification hardens the system against potential attacks.",
+    "default_value": {
+        "standalone": "Not Defined",
+        "domain_joined": "Not Defined"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "security-options",
+        "local-policy",
+        "cis",
+        "level-1"
+    ]
+}

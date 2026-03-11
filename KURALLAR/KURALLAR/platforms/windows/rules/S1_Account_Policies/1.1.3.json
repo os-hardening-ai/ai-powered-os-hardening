@@ -1,0 +1,64 @@
+{
+    "rule_id": "1.1.3",
+    "title": "Ensure 'Minimum password age' is set to '1 or more day(s)'",
+    "description": "This policy setting determines the number of days that you must use a password before you can change it. The range of values for this policy setting is between 1 and 999 days. You may also set the value to 0 to allow immediate password changes. The default value for this setting is 0 days. The recommended state for this setting is: 1 or more day(s).",
+    "cis_level": 1,
+    "category": "Account Policies",
+    "subcategory": "Password Policy",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": null,
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Account Policies\\Password Policy",
+        "setting_name": "Minimum password age",
+        "setting_value": 1,
+        "admx_category": "PasswordPolicy"
+    },
+    "implementation_local": {
+        "powershell_command": "net accounts /minpwage:1",
+        "powershell_script": "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"\n$seceditImport = \"$env:TEMP\\secpol_import.cfg\"\nsecedit /export /cfg $seceditExport /quiet\n$content = Get-Content $seceditExport\n$content = $content -replace 'MinimumPasswordAge\\s*=\\s*\\d+', 'MinimumPasswordAge = 1'\nif ($content -notmatch 'MinimumPasswordAge') {\n    $content = $content -replace '(\\[System Access\\])', \"`$1`nMinimumPasswordAge = 1\"\n}\n$content | Set-Content $seceditImport -Force\nsecedit /configure /db secedit.sdb /cfg $seceditImport /quiet\nRemove-Item $seceditExport, $seceditImport -Force -ErrorAction SilentlyContinue",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[System Access]",
+        "inf_key": "MinimumPasswordAge",
+        "inf_value": "1"
+    },
+    "audit_logic": {
+        "powershell_script": "try {\n    $output = net accounts 2>&1\n    $minAgeLine = $output | Select-String 'Minimum password age'\n    if ($minAgeLine) {\n        $value = [int](($minAgeLine -replace '.*:\\s*', '').Trim() -replace '[^0-9]', '')\n        return ($value -ge 1)\n    }\n    return $false\n} catch {\n    return $false\n}",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "net accounts /minpwage:0",
+        "original_value": 0,
+        "description": "Restores to Windows standalone default of 0 days (immediate password change allowed)"
+    },
+    "impact": {
+        "severity": "low",
+        "description": "If an administrator sets a password for a user but wants that user to change the password when the user first logs on, the administrator must select the 'User must change password at next logon' check box, or the user will not be able to change the password until the next day."
+    },
+    "rationale": "Using this policy setting with the Enforce password history setting prevents the easy reuse of old passwords. For example, if you configure the Enforce password history setting to ensure that users cannot reuse any of their last 12 passwords, they could change their password 13 times in a few minutes and reuse their original password, unless you also configure the Minimum password age setting to a number greater than 0.",
+    "default_value": {
+        "standalone": 0,
+        "domain_joined": 1
+    },
+    "references": [
+        "https://www.cisecurity.org/white-papers/cis-password-policy-guide/",
+        "https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/password-policy"
+    ],
+    "tags": [
+        "password",
+        "account-policy",
+        "authentication",
+        "level-1",
+        "automated",
+        "password-age"
+    ]
+}

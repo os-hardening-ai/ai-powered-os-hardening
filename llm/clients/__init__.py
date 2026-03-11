@@ -27,6 +27,15 @@ def _get_groq_clients() -> Tuple[LLMCallable, LLMCallable]:
     return small, large
 
 
+def _get_novita_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """Novita client'larını local import ile al."""
+    from .novita_llm_client import get_small_novita_llm, get_large_novita_llm
+
+    small = get_small_novita_llm()
+    large = get_large_novita_llm()
+    return small, large
+
+
 def _get_ollama_clients() -> Tuple[LLMCallable, LLMCallable]:
     """Ollama client'larını local import ile al."""
     from .ollama_client import get_small_ollama_llm, get_large_ollama_llm
@@ -62,10 +71,12 @@ def get_llm_clients() -> Tuple[LLMCallable, LLMCallable]:
         return _get_groq_clients()
     elif provider == "ollama":
         return _get_ollama_clients()
+    elif provider == "novita":
+        return _get_novita_clients()
     else:
         raise ValueError(
             f"Desteklenmeyen LLM_PROVIDER: '{provider}'\n"
-            f"Geçerli değerler: 'groq' (FREE), 'ollama' (FREE Local), 'openai'"
+            f"Geçerli değerler: 'groq' (FREE), 'novita', 'ollama' (FREE Local), 'openai'"
         )
 
 
