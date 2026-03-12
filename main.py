@@ -10,6 +10,34 @@ if sys.platform == 'win32':
     os.system('chcp 65001 > nul 2>&1')
 
 from fastapi import FastAPI
+
+# ── OpenTelemetry setup (İP 11: Gözlemlenebilirlik) ──
+def _setup_otel(service_name: str, service_version: str) -> None:
+    """Initialize OpenTelemetry with OTLP exporter if endpoint is configured."""
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.resources import Resource
+
+        resource = Resource.create({
+            "service.name": service_name,
+            "service.version": service_version,
+            "service.namespace": "hardening-ai",
+        })
+
+        provider = TracerProvider(resource=resource)
+
+        otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+        if otlp_endpoint:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+
+        trace.set_tracer_provider(provider)
+    except Exception as e:
+        # OTel is optional — never block startup
+        print(f"[OTel] Setup skipped: {e}")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -64,6 +92,13 @@ TAGS_METADATA = [
 
 def create_app() -> FastAPI:
     cfg = get_config()
+
+    # Initialize OpenTelemetry before FastAPI app creation
+    _setup_otel(
+        service_name=os.getenv("OTEL_SERVICE_NAME", "hardening-backend"),
+        service_version=cfg.app.version,
+    )
+
     app = FastAPI(
         title="AI-Powered OS Hardening API",
         version=cfg.app.version,
@@ -130,6 +165,24 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         max_age=600,
     )
+
+    # ── Prometheus metrics (Prometheus-format scrape endpoint) ──
+    try:
+        from prometheus_fastapi_instrumentator import Instrumentator
+        Instrumentator(
+            should_group_status_codes=False,
+            should_ignore_untemplated=True,
+            excluded_handlers=["/metrics.*", "/docs", "/redoc", "/openapi.json", "/health"],
+        ).instrument(app).expose(app, endpoint="/metrics/prometheus", tags=["monitoring"])
+    except ImportError:
+        pass  # prometheus-fastapi-instrumentator not installed, skip
+
+    # ── OpenTelemetry FastAPI instrumentation ──
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        FastAPIInstrumentor.instrument_app(app)
+    except (ImportError, Exception):
+        pass  # OTel FastAPI instrumentation is optional
 
     # RAG-only endpoint (backward compatibility)
     app.include_router(rag_router, prefix="/rag", tags=["rag"])

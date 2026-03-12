@@ -21,6 +21,7 @@ from api.errors import APIError, ErrorCode
 from api.streaming import stream_chat_response
 
 from log_manager import get_logger
+from llm.utils.analytics_collector import get_analytics_collector
 
 _conv_logger = get_logger("conversations")
 
@@ -209,6 +210,24 @@ async def chat(payload: ChatRequest) -> ChatResponse:
 
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
+
+        # Record query analytics (wires up AdvancedAnalyticsCollector)
+        try:
+            get_analytics_collector().record_query(
+                query=payload.question,
+                intent_type=result.intent.type if result.intent else "unknown",
+                safety_category=result.safety.category if result.safety else "unknown",
+                layer_path=result.layer_path or "",
+                complexity=result.metadata.get("complexity", "medium") if result.metadata else "medium",
+                rag_used=bool(result.metadata.get("rag_used")) if result.metadata else False,
+                rag_chunks=result.metadata.get("rag_chunks", 0) if result.metadata else 0,
+                model_used=result.metadata.get("model", "unknown") if result.metadata else "unknown",
+                response_time_s=result.total_time_s or 0.0,
+                estimated_cost=result.estimated_cost or 0.0,
+                success=result.success,
+            )
+        except Exception:
+            pass  # Analytics must never break the main request
 
         # Log conversation (question + answer)
         _conv_logger.info(

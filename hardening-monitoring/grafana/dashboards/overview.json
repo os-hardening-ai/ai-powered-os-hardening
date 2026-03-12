@@ -1,0 +1,205 @@
+{
+  "id": null,
+  "uid": "hardening-overview",
+  "title": "Hardening AI - Overview",
+  "description": "AI-Powered OS Hardening Backend - HTTP metrics overview",
+  "tags": ["hardening", "overview"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Requests",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [{
+        "expr": "sum(http_requests_total{job=\"hardening-backend\"})",
+        "legendFormat": "Total"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Request Rate (req/s)",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "unit": "reqps"
+      },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=\"hardening-backend\"}[5m]))",
+        "legendFormat": "req/s"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Error Rate (%)",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "unit": "percent",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 5 },
+            { "color": "red", "value": 10 }
+          ]
+        }
+      },
+      "targets": [{
+        "expr": "100 * sum(rate(http_requests_total{job=\"hardening-backend\", status_code=~\"[45].*\"}[5m])) / sum(rate(http_requests_total{job=\"hardening-backend\"}[5m]))",
+        "legendFormat": "Error Rate"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "P95 Latency (ms)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "unit": "ms",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 3000 },
+            { "color": "red", "value": 5000 }
+          ]
+        }
+      },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\"}[5m])) by (le)) * 1000",
+        "legendFormat": "P95"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Backend Health",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "mappings": [
+          { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } },
+          { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } }
+        ]
+      },
+      "targets": [{
+        "expr": "up{job=\"hardening-backend\"}",
+        "legendFormat": "Status"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "HTTP Request Rate Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"hardening-backend\", status_code=~\"2.*\"}[1m]))",
+          "legendFormat": "2xx Success"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"hardening-backend\", status_code=~\"4.*\"}[1m]))",
+          "legendFormat": "4xx Client Error"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"hardening-backend\", status_code=~\"5.*\"}[1m]))",
+          "legendFormat": "5xx Server Error"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Latency Percentiles (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P50 (median)"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P99"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Requests by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      },
+      "targets": [{
+        "expr": "sum by (handler) (rate(http_requests_total{job=\"hardening-backend\"}[5m]))",
+        "legendFormat": "{{handler}}"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Response Size Distribution",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_response_size_bytes_bucket{job=\"hardening-backend\"}[5m])) by (le))",
+          "legendFormat": "P50 Response Size"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_response_size_bytes_bucket{job=\"hardening-backend\"}[5m])) by (le))",
+          "legendFormat": "P95 Response Size"
+        }
+      ]
+    }
+  ]
+}

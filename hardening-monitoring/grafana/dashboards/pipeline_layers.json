@@ -1,0 +1,185 @@
+{
+  "id": null,
+  "uid": "hardening-pipeline",
+  "title": "Hardening AI - Pipeline Layers",
+  "description": "4-Layer Security Pipeline performance breakdown: Safety → Intent → Routing → Generation",
+  "tags": ["hardening", "pipeline"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Layer 1 - Safety Check Avg (ms)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "ms",
+        "thresholds": {
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 500 },
+            { "color": "red", "value": 1000 }
+          ]
+        }
+      },
+      "targets": [{
+        "expr": "hardening_layer_duration_avg_ms{layer=\"safety\"}",
+        "legendFormat": "Layer 1"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Layer 2 - Intent Detection Avg (ms)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "ms",
+        "thresholds": {
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "red", "value": 200 }
+          ]
+        }
+      },
+      "targets": [{
+        "expr": "hardening_layer_duration_avg_ms{layer=\"intent\"}",
+        "legendFormat": "Layer 2"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Layer 3 - Routing Avg (ms)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "ms"
+      },
+      "targets": [{
+        "expr": "hardening_layer_duration_avg_ms{layer=\"routing\"}",
+        "legendFormat": "Layer 3"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Full Pipeline P95 (ms)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "ms",
+        "thresholds": {
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 3000 },
+            { "color": "red", "value": 5000 }
+          ]
+        }
+      },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\", handler=\"/api/chat\"}[5m])) by (le)) * 1000",
+        "legendFormat": "P95 /api/chat"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Pipeline Layer Duration Over Time (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "hardening_layer_duration_avg_ms{layer=\"safety\"}",
+          "legendFormat": "Layer 1: Safety"
+        },
+        {
+          "expr": "hardening_layer_duration_avg_ms{layer=\"intent\"}",
+          "legendFormat": "Layer 2: Intent"
+        },
+        {
+          "expr": "hardening_layer_duration_avg_ms{layer=\"routing\"}",
+          "legendFormat": "Layer 3: Routing"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Rejection Rate (unsafe queries)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": { "lineWidth": 2, "fillOpacity": 15 }
+        }
+      },
+      "targets": [{
+        "expr": "100 * rate(hardening_unsafe_queries_total[5m]) / rate(hardening_total_queries_total[5m])",
+        "legendFormat": "Rejection Rate %"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Safety Category Breakdown",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"]
+      },
+      "targets": [{
+        "expr": "hardening_safety_category_total",
+        "legendFormat": "{{category}}"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "/api/chat Latency Percentiles (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\", handler=\"/api/chat\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\", handler=\"/api/chat\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"hardening-backend\", handler=\"/api/chat\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P99"
+        }
+      ]
+    }
+  ]
+}

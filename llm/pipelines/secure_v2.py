@@ -35,6 +35,13 @@ from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResu
 from llm.core.config import CONFIG
 from log_manager import get_logger
 
+# OpenTelemetry tracing (optional — no-op if not installed)
+try:
+    from opentelemetry import trace as _otel_trace
+    _tracer = _otel_trace.get_tracer("hardening.pipeline")
+except ImportError:
+    _tracer = None
+
 _pipeline_logger = get_logger("pipeline_metrics")
 
 # Type alias
@@ -164,7 +171,16 @@ class SecurePipelineV2:
             print("\n[Layer 1] Safety Classification...")
 
         layer1_start = datetime.now()
-        safety_result = self.safety_classifier.classify(ctx.user_question)
+        _span_ctx = (_tracer.start_as_current_span("layer_1_safety") if _tracer else None)
+        _span = _span_ctx.__enter__() if _span_ctx else None
+        try:
+            safety_result = self.safety_classifier.classify(ctx.user_question)
+            if _span:
+                _span.set_attribute("safety.category", safety_result.category)
+                _span.set_attribute("safety.is_safe", safety_result.is_safe)
+        finally:
+            if _span_ctx:
+                _span_ctx.__exit__(None, None, None)
         layer1_time_s = (datetime.now() - layer1_start).total_seconds()
 
         if self.debug:
@@ -201,7 +217,16 @@ class SecurePipelineV2:
             print("\n[Layer 2] Intent Detection...")
 
         layer2_start = datetime.now()
-        intent = self.intent_detector.detect(ctx.user_question)
+        _span_ctx2 = (_tracer.start_as_current_span("layer_2_intent") if _tracer else None)
+        _span2 = _span_ctx2.__enter__() if _span_ctx2 else None
+        try:
+            intent = self.intent_detector.detect(ctx.user_question)
+            if _span2:
+                _span2.set_attribute("intent.type", intent.type)
+                _span2.set_attribute("intent.confidence", intent.confidence)
+        finally:
+            if _span_ctx2:
+                _span_ctx2.__exit__(None, None, None)
         layer2_time_s = (datetime.now() - layer2_start).total_seconds()
 
         if self.debug:

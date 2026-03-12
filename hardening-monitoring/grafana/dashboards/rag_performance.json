@@ -1,0 +1,141 @@
+{
+  "id": null,
+  "uid": "hardening-rag",
+  "title": "Hardening AI - RAG Performance",
+  "description": "RAG (Retrieval-Augmented Generation) effectiveness and performance metrics",
+  "tags": ["hardening", "rag"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "RAG Usage Rate (%)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "percent"
+      },
+      "targets": [{
+        "expr": "100 * hardening_rag_queries_total / hardening_total_queries_total",
+        "legendFormat": "RAG Usage"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Total Queries (24h)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background"
+      },
+      "targets": [{
+        "expr": "increase(hardening_total_queries_total[24h])",
+        "legendFormat": "Queries"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Avg RAG Latency vs Non-RAG (ms)",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "unit": "ms",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "hardening_rag_latency_avg_ms",
+          "legendFormat": "With RAG"
+        },
+        {
+          "expr": "hardening_no_rag_latency_avg_ms",
+          "legendFormat": "Without RAG"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Query Intent Distribution",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"]
+      },
+      "targets": [{
+        "expr": "hardening_intent_total",
+        "legendFormat": "{{intent_type}}"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Query Complexity Distribution",
+      "type": "piechart",
+      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"]
+      },
+      "targets": [{
+        "expr": "hardening_complexity_total",
+        "legendFormat": "{{complexity}}"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "LLM Model Usage",
+      "type": "piechart",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"]
+      },
+      "targets": [{
+        "expr": "hardening_model_usage_total",
+        "legendFormat": "{{model}}"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Estimated Cost Over Time ($)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "targets": [{
+        "expr": "increase(hardening_total_cost_usd_total[5m])",
+        "legendFormat": "Cost (5m)"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "Pipeline Layer Path Distribution",
+      "type": "barchart",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus" },
+      "options": { "orientation": "horizontal" },
+      "targets": [{
+        "expr": "hardening_layer_path_total",
+        "legendFormat": "{{layer_path}}"
+      }]
+    }
+  ]
+}
