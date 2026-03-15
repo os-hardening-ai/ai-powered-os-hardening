@@ -34,6 +34,7 @@ from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
 from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResult
 from llm.core.config import CONFIG
 from log_manager import get_logger
+from prometheus_metrics import layer_timer, record_query, record_rejection
 
 _pipeline_logger = get_logger("pipeline_metrics")
 
@@ -164,7 +165,8 @@ class SecurePipelineV2:
             print("\n[Layer 1] Safety Classification...")
 
         layer1_start = datetime.now()
-        safety_result = self.safety_classifier.classify(ctx.user_question)
+        with layer_timer("1"):
+            safety_result = self.safety_classifier.classify(ctx.user_question)
         layer1_time_s = (datetime.now() - layer1_start).total_seconds()
 
         if self.debug:
@@ -181,6 +183,17 @@ class SecurePipelineV2:
             self.stats["rejected_unsafe"] += 1
 
             total_time = (datetime.now() - start_time).total_seconds()
+
+            record_rejection(layer="1")
+            record_query(
+                status="rejected",
+                intent="unknown",
+                complexity="unknown",
+                model="none",
+                rag_used=False,
+                input_tokens=0,
+                output_tokens=0,
+            )
 
             return PipelineResult(
                 success=False,
@@ -201,7 +214,8 @@ class SecurePipelineV2:
             print("\n[Layer 2] Intent Detection...")
 
         layer2_start = datetime.now()
-        intent = self.intent_detector.detect(ctx.user_question)
+        with layer_timer("2"):
+            intent = self.intent_detector.detect(ctx.user_question)
         layer2_time_s = (datetime.now() - layer2_start).total_seconds()
 
         if self.debug:
@@ -215,39 +229,51 @@ class SecurePipelineV2:
 
         layer3_start = datetime.now()
 
-        if intent.type == "out_of_scope":
-            # Out-of-scope: Polite rejection
-            result = self._handle_out_of_scope(ctx, safety_result, intent)
-            self.stats["pattern_responses"] += 1  # No cost, like pattern responses
+        with layer_timer("3"):
+            if intent.type == "out_of_scope":
+                # Out-of-scope: Polite rejection
+                result = self._handle_out_of_scope(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1  # No cost, like pattern responses
 
-        elif intent.type == "smalltalk":
-            # Layer 3A: Pattern Responder
-            result = self._handle_layer_3a(ctx, safety_result, intent)
-            self.stats["pattern_responses"] += 1
+            elif intent.type == "smalltalk":
+                # Layer 3A: Pattern Responder
+                result = self._handle_layer_3a(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1
 
-        elif intent.type == "info_request":
-            # Layer 3B: Info Pipeline
-            result = self._handle_layer_3b(ctx, safety_result, intent)
-            self.stats["info_responses"] += 1
+            elif intent.type == "info_request":
+                # Layer 3B: Info Pipeline
+                result = self._handle_layer_3b(ctx, safety_result, intent)
+                self.stats["info_responses"] += 1
 
-        elif intent.type == "action_request":
-            # Layer 3C: Action Pipeline
-            result = self._handle_layer_3c(ctx, safety_result, intent)
-            self.stats["action_responses"] += 1
+            elif intent.type == "action_request":
+                # Layer 3C: Action Pipeline
+                result = self._handle_layer_3c(ctx, safety_result, intent)
+                self.stats["action_responses"] += 1
 
-        else:
-            # Unknown intent → Default to info pipeline
-            if self.debug:
-                print(f"\n[Layer 3B] Unknown intent, defaulting to Info Pipeline")
+            else:
+                # Unknown intent → Default to info pipeline
+                if self.debug:
+                    print(f"\n[Layer 3B] Unknown intent, defaulting to Info Pipeline")
 
-            result = self._handle_layer_3b(ctx, safety_result, intent)
-            self.stats["info_responses"] += 1
+                result = self._handle_layer_3b(ctx, safety_result, intent)
+                self.stats["info_responses"] += 1
 
         layer3_time_s = (datetime.now() - layer3_start).total_seconds()
 
         # Update global stats
         self.stats["total_queries"] += 1
         self.stats["total_cost"] += result.estimated_cost
+
+        # Prometheus query record
+        record_query(
+            status="answered" if result.success else "rejected",
+            intent=intent.type,
+            complexity=result.metadata.get("complexity", "unknown"),
+            model=result.metadata.get("model", "unknown"),
+            rag_used=result.metadata.get("rag_used", False),
+            input_tokens=0,
+            output_tokens=0,
+        )
 
         # Log pipeline metrics
         rag_used = result.metadata.get("rag_used", False)

@@ -51,3 +51,7 @@ matplotlib==3.9.2
 
 # opsiyonel excel işleri
 openpyxl==3.1.5
+
+# Prometheus Monitoring
+prometheus-client==0.20.0
+prometheus-fastapi-instrumentator==7.0.0

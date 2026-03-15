@@ -37,6 +37,7 @@ from api.metrics import (
     MetricsMiddleware,
     metrics_collector,
 )
+from prometheus_metrics import setup_metrics
 from config.config_loader import get_config
 import uvicorn
 
@@ -103,6 +104,9 @@ def create_app() -> FastAPI:
 
     # 5. Metrics collection (tracks all requests)
     app.add_middleware(MetricsMiddleware, collector=metrics_collector)
+
+    # Prometheus metrics — exposes /metrics/prometheus for scraping
+    setup_metrics(app)
 
     # 6. Rate limiting — config.json'dan okunur
     rate_limit_config = RateLimitConfig(

@@ -1,10 +1,12 @@
 from __future__ import annotations
 import re
+import time
 from typing import List, Dict, Any
 import numpy as np
 from rag.embeddings import get_embedding_client
 from rag.vector_store import get_vector_store
 from api.schemas import RagSearchResult
+from prometheus_metrics import record_rag_retrieval
 
 def _is_junky_window(w: str) -> bool:
     """
@@ -249,6 +251,7 @@ class RAGRetriever:
             min_score: Minimum relevance score (default: 0.5)
         """
         # Query için embedding'i sadece 1 kez üret
+        t0 = time.perf_counter()
         query_emb = self._embed_client.embed_query(query)
 
         if not use_late_chunking:
@@ -266,6 +269,11 @@ class RAGRetriever:
                         metadata=r.get("metadata", {}),
                     )
                 )
+            record_rag_retrieval(
+                duration_s=time.perf_counter() - t0,
+                results_count=len(results),
+                top_score=results[0].score if results else 0.0,
+            )
             return results
 
         # Coarse k'i sınırla (çok büyümesin)
@@ -284,6 +292,11 @@ class RAGRetriever:
             stride=stride,
             max_windows_per_chunk=10,
             min_score=min_score,
+        )
+        record_rag_retrieval(
+            duration_s=time.perf_counter() - t0,
+            results_count=len(fine_results),
+            top_score=fine_results[0].score if fine_results else 0.0,
         )
         return fine_results
 

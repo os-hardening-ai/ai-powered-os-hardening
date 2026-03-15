@@ -21,6 +21,8 @@ from dataclasses import dataclass
 import json
 import re
 
+from prometheus_metrics import record_safety_check, record_rejection
+
 
 SafetyCategory = Literal[
     "safe_defensive",      # Legitimate security hardening
@@ -142,6 +144,11 @@ Classification:"""
                 self.stats["ambiguous_count"] += 1
             else:
                 self.stats["unsafe_count"] += 1
+
+            outcome = "passed" if result.is_safe else "blocked"
+            record_safety_check(category=result.category, outcome=outcome)
+            if not result.is_safe:
+                record_rejection(layer="1")
 
             return result
 
