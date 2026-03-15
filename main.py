@@ -37,7 +37,7 @@ from api.metrics import (
     MetricsMiddleware,
     metrics_collector,
 )
-from prometheus_metrics import setup_metrics
+from prometheus_metrics import setup_metrics, setup_tracing
 from config.config_loader import get_config
 import uvicorn
 
@@ -107,6 +107,9 @@ def create_app() -> FastAPI:
 
     # Prometheus metrics — exposes /metrics/prometheus for scraping
     setup_metrics(app)
+
+    # OpenTelemetry tracing — sends spans to Jaeger via OTLP
+    setup_tracing(app)
 
     # 6. Rate limiting — config.json'dan okunur
     rate_limit_config = RateLimitConfig(

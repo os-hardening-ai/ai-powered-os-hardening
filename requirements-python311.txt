@@ -52,6 +52,11 @@ matplotlib==3.9.2
 # opsiyonel excel işleri
 openpyxl==3.1.5
 
-# Prometheus Monitoring
+# Prometheus + OpenTelemetry Monitoring
 prometheus-client==0.20.0
 prometheus-fastapi-instrumentator==7.0.0
+opentelemetry-api==1.24.0
+opentelemetry-sdk==1.24.0
+opentelemetry-exporter-otlp-proto-grpc==1.24.0
+opentelemetry-instrumentation-fastapi==0.45b0
+opentelemetry-instrumentation-httpx==0.45b0

@@ -1,145 +1,205 @@
-from __future__ import annotations
+"""
+Prometheus metrics + Jaeger tracing setup for ai-powered-os-hardening backend.
 
-import time
+Usage in main.py:
+    from prometheus_metrics import setup_metrics, setup_tracing
+    setup_metrics(app)   # Prometheus — exposes /metrics/prometheus
+    setup_tracing(app)   # Jaeger — sends OTLP traces to OTEL_EXPORTER_OTLP_ENDPOINT
+
+Usage for pipeline events:
+    from prometheus_metrics import record_query, record_safety_check, record_rejection, record_rag_retrieval, layer_timer
+
+    with layer_timer("1"):
+        result = run_safety_check(query)
+
+    record_query(status="answered", intent="os_hardening", rag_used=True, ...)
+    record_rag_retrieval(duration_s=0.4, results_count=5, top_score=0.87)
+"""
+
+import os
 from contextlib import contextmanager
-from typing import Generator
 
-from fastapi import FastAPI
-from fastapi.responses import Response
-from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-    generate_latest,
-    CONTENT_TYPE_LATEST,
-)
+from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 
 
-# ── Layer latency ──────────────────────────────────────────────────────────────
+# ── Query counters ─────────────────────────────────────────────────────────────
 
-LAYER_LATENCY = Histogram(
-    "pipeline_layer_duration_seconds",
-    "Duration of each pipeline layer in seconds",
-    ["layer"],
-    buckets=[0.005, 0.01, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0],
+hardening_queries_total = Counter(
+    "hardening_queries_total",
+    "Total number of hardening API queries",
+    [
+        "status",       # answered | rejected | error
+        "intent",       # os_hardening | script_or_config | conceptual_explanation | ...
+        "complexity",   # simple | moderate | complex
+        "model",        # model name
+        "rag_used",     # true | false
+    ],
 )
 
-# ── Query outcomes ──────────────────────────────────────────────────────────────
-
-QUERY_COUNTER = Counter(
-    "pipeline_queries_total",
-    "Total queries processed by the pipeline",
-    ["status", "intent", "complexity", "model", "rag_used"],
-)
-
-REJECTION_COUNTER = Counter(
-    "pipeline_rejections_total",
-    "Total queries rejected",
-    ["layer"],
-)
-
-# ── Safety checks ───────────────────────────────────────────────────────────────
-
-SAFETY_CHECK_COUNTER = Counter(
-    "pipeline_safety_checks_total",
-    "Safety classification results",
-    ["category", "outcome"],
-)
-
-# ── Token usage ─────────────────────────────────────────────────────────────────
-
-TOKEN_COUNTER = Counter(
-    "llm_tokens_total",
+hardening_llm_tokens_total = Counter(
+    "hardening_llm_tokens_total",
     "Total LLM tokens consumed",
-    ["type"],  # "input" | "output"
+    ["model", "token_type"],  # token_type: input | output
 )
 
-# ── RAG retrieval ───────────────────────────────────────────────────────────────
-
-RAG_RETRIEVAL_LATENCY = Histogram(
-    "rag_retrieval_duration_seconds",
-    "RAG retrieval duration in seconds",
-    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
+hardening_safety_checks_total = Counter(
+    "hardening_safety_checks_total",
+    "Safety check outcomes by category",
+    ["category", "outcome"],  # outcome: passed | blocked
 )
 
-RAG_RESULTS_COUNT = Histogram(
-    "rag_retrieval_results_count",
-    "Number of chunks returned by RAG",
-    buckets=[0, 1, 2, 3, 5, 10, 20],
-)
-
-RAG_TOP_SCORE = Gauge(
-    "rag_retrieval_top_score",
-    "Top similarity score from the most recent RAG retrieval",
+hardening_rejections_total = Counter(
+    "hardening_rejections_total",
+    "Queries rejected by pipeline layer",
+    ["layer"],  # "1" | "2" | "3" | "4"
 )
 
 
-# ── Public helpers ───────────────────────────────────────────────────────────────
+# ── Pipeline latency ───────────────────────────────────────────────────────────
 
+pipeline_layer_duration = Histogram(
+    "hardening_pipeline_layer_duration_seconds",
+    "Time spent in each pipeline layer",
+    ["layer"],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+)
+
+
+# ── RAG-specific metrics ───────────────────────────────────────────────────────
+
+rag_retrieval_duration = Histogram(
+    "hardening_rag_retrieval_duration_seconds",
+    "Time spent on RAG retrieval (embedding + vector search)",
+    buckets=[0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0],
+)
+
+rag_top_similarity_score = Histogram(
+    "hardening_rag_top_similarity_score",
+    "Top similarity score returned by vector search",
+    buckets=[0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1.0],
+)
+
+rag_results_count = Histogram(
+    "hardening_rag_results_count",
+    "Number of chunks returned by RAG retrieval",
+    buckets=[0, 1, 2, 3, 5, 8, 10],
+)
+
+
+# ── Setup ──────────────────────────────────────────────────────────────────────
+
+def setup_metrics(app) -> None:
+    """
+    Attach Prometheus metrics to a FastAPI app.
+    Call once inside create_app(), before registering routers.
+    Exposes /metrics/prometheus — scraped by Prometheus.
+    """
+    Instrumentator(
+        should_group_status_codes=False,
+        should_ignore_untemplated=True,
+        should_instrument_requests_inprogress=True,
+        inprogress_labels=True,
+    ).instrument(app).expose(app, endpoint="/metrics/prometheus", include_in_schema=False)
+
+
+def setup_tracing(app, service_name: str | None = None) -> None:
+    """
+    Initialise OpenTelemetry tracing and send spans to Jaeger via OTLP.
+    Call once inside create_app(), after setup_metrics().
+
+    Environment variables:
+        OTEL_EXPORTER_OTLP_ENDPOINT  (default: http://localhost:4317)
+        OTEL_SERVICE_NAME            (default: hardening-api)
+        OTEL_SERVICE_VERSION         (default: 1.0.0)
+
+    Auto-instruments:
+        - FastAPI  → HTTP server spans (method, path, status_code)
+        - HTTPX    → outgoing spans (Novita, Groq, Qdrant calls)
+    """
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+    svc_name = service_name or os.getenv("OTEL_SERVICE_NAME", "hardening-api")
+    svc_ver  = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    provider = TracerProvider(
+        resource=Resource.create({SERVICE_NAME: svc_name, SERVICE_VERSION: svc_ver})
+    )
+    provider.add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
+    )
+    trace.set_tracer_provider(provider)
+
+    FastAPIInstrumentor.instrument_app(app)
+    HTTPXClientInstrumentor().instrument()
+
+
+# ── Context managers ───────────────────────────────────────────────────────────
 
 @contextmanager
-def layer_timer(layer: str) -> Generator[None, None, None]:
-    """Context manager that records wall-clock time spent in a pipeline layer."""
-    t0 = time.perf_counter()
-    try:
-        yield
-    finally:
-        LAYER_LATENCY.labels(layer=layer).observe(time.perf_counter() - t0)
+def layer_timer(layer: str):
+    """
+    Sync context manager — measures pipeline layer duration.
 
+    Example:
+        with layer_timer("1"):
+            result = run_safety_check(query)
+    """
+    with pipeline_layer_duration.labels(layer=layer).time():
+        yield
+
+
+# ── Record helpers ─────────────────────────────────────────────────────────────
 
 def record_query(
-    status: str,
-    intent: str,
-    complexity: str,
-    model: str,
-    rag_used: bool,
-    input_tokens: int,
-    output_tokens: int,
+    *,
+    status: str = "answered",
+    intent: str = "unknown",
+    complexity: str = "unknown",
+    model: str = "unknown",
+    rag_used: bool = False,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> None:
-    """Record a completed pipeline query."""
-    QUERY_COUNTER.labels(
+    """Increment counters after a query completes."""
+    hardening_queries_total.labels(
         status=status,
-        intent=str(intent),
-        complexity=str(complexity),
-        model=str(model),
+        intent=intent,
+        complexity=complexity,
+        model=model,
         rag_used=str(rag_used).lower(),
     ).inc()
     if input_tokens:
-        TOKEN_COUNTER.labels(type="input").inc(input_tokens)
+        hardening_llm_tokens_total.labels(model=model, token_type="input").inc(input_tokens)
     if output_tokens:
-        TOKEN_COUNTER.labels(type="output").inc(output_tokens)
-
-
-def record_rejection(layer: str) -> None:
-    """Record a query rejection at the given pipeline layer."""
-    REJECTION_COUNTER.labels(layer=layer).inc()
+        hardening_llm_tokens_total.labels(model=model, token_type="output").inc(output_tokens)
 
 
 def record_safety_check(category: str, outcome: str) -> None:
-    """Record a safety classification result.
+    """Record a safety check result. outcome: 'passed' | 'blocked'"""
+    hardening_safety_checks_total.labels(category=category, outcome=outcome).inc()
 
-    Args:
-        category: SafetyCategory value (e.g. "safe_defensive", "unsafe_offensive")
-        outcome: "passed" or "blocked"
-    """
-    SAFETY_CHECK_COUNTER.labels(category=category, outcome=outcome).inc()
+
+def record_rejection(layer: str) -> None:
+    """Record that a query was rejected at a pipeline layer."""
+    hardening_rejections_total.labels(layer=layer).inc()
 
 
 def record_rag_retrieval(
+    *,
     duration_s: float,
     results_count: int,
-    top_score: float,
+    top_score: float = 0.0,
 ) -> None:
-    """Record metrics for a single RAG retrieval call."""
-    RAG_RETRIEVAL_LATENCY.observe(duration_s)
-    RAG_RESULTS_COUNT.observe(results_count)
-    RAG_TOP_SCORE.set(top_score)
-
-
-# ── App setup ────────────────────────────────────────────────────────────────────
-
-
-def setup_metrics(app: FastAPI) -> None:
-    """Instrument the FastAPI app and expose /metrics/prometheus for Prometheus scraping."""
-    Instrumentator().instrument(app).expose(app, endpoint="/metrics/prometheus")
+    """Record RAG retrieval stats after a vector search completes."""
+    rag_retrieval_duration.observe(duration_s)
+    rag_results_count.observe(results_count)
+    if top_score > 0:
+        rag_top_similarity_score.observe(top_score)
