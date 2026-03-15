@@ -14,7 +14,7 @@ Core capabilities:
 - Routes requests through a 4-layer security pipeline (Safety → Intent → Routing → Generation)
 - Classifies user intent with a local ML model (90.48% accuracy, 5–10ms, $0 cost)
 - Supports streaming responses via Server-Sent Events (SSE)
-- Provider fallback chain: Groq → OpenAI → Ollama
+- Provider fallback chain: Novita → Groq → OpenAI → Ollama (configurable via `config/config.json`)
 
 **API base**: `http://localhost:8000` | **Swagger UI**: `/docs` | **Metrics**: `/metrics`
 
@@ -25,28 +25,33 @@ Core capabilities:
 ```
 ai-powered-os-hardening/
 ├── main.py                    # FastAPI app factory + middleware registration
-├── requirements.txt           # Production dependencies
+├── log_manager.py             # Custom logging setup (get_logger())
+├── requirements.txt           # Production dependencies (Python 3.12+)
+├── requirements-python311.txt # Python 3.11 compatible dependencies
+├── pytest.ini                 # Pytest configuration
+├── SECURITY_AUDIT_REPORT.md   # Security audit findings
 ├── .env / .env.example        # Environment variables (API keys, model config)
 ├── config/
-│   ├── config.json            # RAG, embedding, vector store settings
-│   ├── config_loader.py       # Loads config.json
-│   └── schemas.py             # Pydantic schemas for config
+│   ├── config.json            # RAG, embedding, vector store, LLM settings
+│   ├── config_loader.py       # Loads and validates config.json (primary config system)
+│   └── schemas.py             # Pydantic schemas for config validation
 ├── api/                       # FastAPI routers and middleware
 │   ├── router_chat.py         # POST /api/chat, POST /api/chat/stream
 │   ├── router_rag.py          # POST /rag/search
-│   ├── router_health.py       # GET /health, /health/detailed
-│   ├── router_analytics.py    # GET /api/analytics/summary
-│   ├── schemas.py             # Shared Pydantic models
+│   ├── router_health.py       # GET /, GET /health, GET /health/detailed
+│   ├── router_analytics.py    # GET /api/analytics/* (6 sub-routes)
+│   ├── schemas.py             # Shared Pydantic models (RagSearchRequest, LateChunkingOptions, etc.)
 │   ├── security.py            # RateLimitMiddleware, input validation, output sanitization
-│   ├── middleware.py          # RequestIDMiddleware, ResponseMetadataMiddleware, ProviderHeadersMiddleware
-│   ├── metrics.py             # MetricsMiddleware + metrics_collector
+│   ├── middleware.py          # RequestIDMiddleware, ResponseMetadataMiddleware,
+│   │                          #   ProviderHeadersMiddleware, RequestLogMiddleware
+│   ├── metrics.py             # MetricsCollector, MetricsMiddleware, AggregatedMetrics
 │   ├── errors.py              # APIError, ErrorCode, error handlers
 │   └── streaming.py           # SSE streaming helpers
 ├── llm/                       # LLM pipeline and clients
 │   ├── __init__.py
 │   ├── core/
-│   │   ├── context.py         # RequestContext (central pipeline state object)
-│   │   ├── config.py          # CONFIG singleton (reads .env)
+│   │   ├── context.py         # RequestContext (central pipeline state), SafetyCategory, IntentType
+│   │   ├── config.py          # Legacy Config dataclass (reads .env directly)
 │   │   └── session_store.py   # In-memory session state
 │   ├── pipelines/
 │   │   ├── secure_v2.py       # SecurePipelineV2 — primary 4-layer pipeline
@@ -54,50 +59,55 @@ ai-powered-os-hardening/
 │   │   └── layers/
 │   │       ├── safety_classifier.py      # Layer 1: LLM-based threat detection
 │   │       ├── hybrid_intent_detector.py # Layer 2: Pattern + ML intent classification
+│   │       ├── intent_detector.py        # Legacy ML-only intent detector (do not use directly)
 │   │       ├── pattern_responder.py      # Layer 3A: Instant smalltalk responses
 │   │       ├── info_pipeline.py          # Layer 3B: RAG + LLM for info queries
 │   │       ├── action_pipeline.py        # Layer 3C: Hardening script generation
 │   │       ├── zt_enrichment.py          # Zero Trust principles enrichment
 │   │       └── output_validator.py       # Output safety validation
 │   ├── clients/
-│   │   ├── __init__.py        # get_llm_clients() factory
-│   │   ├── groq_client.py     # Groq API (primary — free tier)
-│   │   ├── openai_client.py   # OpenAI API (fallback)
-│   │   ├── ollama_client.py   # Ollama local (offline fallback)
-│   │   ├── huggingface_client.py
-│   │   ├── adaptive_router.py # Complexity-based model selection
-│   │   └── fallback_handler.py
+│   │   ├── __init__.py            # get_llm_clients() factory — returns (llm_small, llm_large)
+│   │   ├── groq_client.py         # Groq API (free tier, llama models)
+│   │   ├── openai_client.py       # OpenAI API (fallback)
+│   │   ├── ollama_client.py       # Ollama local (offline fallback)
+│   │   └── novita_llm_client.py   # Novita API (Qwen models — default provider)
 │   ├── ml/
 │   │   ├── intent_detector.py            # Logistic Regression + TF-IDF classifier
 │   │   └── models/
 │   │       ├── intent_model.joblib       # Trained model (do not delete)
 │   │       └── intent_vectorizer.joblib  # TF-IDF vectorizer (do not delete)
 │   ├── prompts/
-│   │   ├── cot_prompts.py     # Chain-of-Thought prompts for complex queries
+│   │   ├── cot_prompts.py        # Chain-of-Thought prompts for complex queries
 │   │   ├── few_shot_examples.py
-│   │   └── simple_prompts.py  # Minimal prompts for simple/medium queries
+│   │   ├── simple_prompts.py     # Minimal prompts for simple/medium queries
+│   │   ├── loader.py             # Prompt template loader
+│   │   └── templates/            # Prompt template files
 │   ├── rag/
-│   │   └── integration.py     # RAG context builder used by pipelines
+│   │   └── integration.py        # RAG context builder used by pipelines
 │   ├── utils/
 │   │   ├── logger.py
 │   │   ├── monitoring.py
 │   │   ├── analytics_collector.py
-│   │   ├── input_validator.py
 │   │   ├── output_validator.py
-│   │   ├── local_responder.py     # Zero-cost pattern-matched responses
-│   │   ├── question_classifier.py # simple/medium/complex classifier
+│   │   ├── local_responder.py       # Zero-cost pattern-matched responses
+│   │   ├── question_classifier.py   # simple/medium/complex classifier
 │   │   ├── parameter_inference.py
 │   │   └── langchain_helpers.py
 │   ├── cli/
-│   │   └── chat.py            # CLI chat interface
-│   ├── examples/              # Usage examples
-│   ├── tests/                 # LLM-specific tests (pipeline_evaluator, etc.)
-│   └── archive/               # Deprecated step-based pipeline (do not use)
+│   │   └── __init__.py           # CLI module
+│   └── tests/                    # LLM-specific tests
+│       ├── test_dataset.py
+│       ├── test_safety_classifier.py
+│       ├── test_security_features.py
+│       ├── unit/
+│       └── integration/
 ├── rag/                      # RAG core components
 │   ├── chunking/
 │   │   ├── base.py
 │   │   ├── pdf_chunker.py
-│   │   └── semantic_pdf_chunker.py
+│   │   ├── semantic_pdf_chunker.py
+│   │   ├── cis_section_chunker.py    # Chunks CIS PDFs by section number
+│   │   └── yaml_rules_chunker.py     # One chunk per CIS rule (includes audit + remediation)
 │   ├── embeddings/
 │   │   ├── base.py
 │   │   ├── embeddings.py
@@ -115,15 +125,19 @@ ai-powered-os-hardening/
 │       └── cis_benchmark_parser.py
 ├── data/
 │   ├── source/
-│   │   └── CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf  # Source document
+│   │   ├── CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf
+│   │   └── CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf
 │   ├── rules/
-│   │   └── ubuntu_24_04_rules.yaml
-│   └── intent_training_dataset.csv   # 1677 examples across 7 intent categories
+│   │   ├── ubuntu_24_04_rules.yaml     # 312 CIS rules with audit + remediation scripts (770KB)
+│   │   └── windows_2025_rules.yaml     # Empty — Windows uses PDF only for now
+│   ├── cache/                          # Embedding cache directory
+│   └── intent_training_dataset.csv     # 1677 examples across 7 intent categories
 ├── scripts/
-│   ├── build_index.py          # Config-driven: tüm enabled source'ları indeksler
+│   ├── build_index.py          # Config-driven: indexes all enabled sources from config.json
 │   └── start_api.py
 ├── src/
 │   └── config_manager.py
+├── logs/                       # Runtime application logs
 ├── tests/                      # Main test suite
 │   ├── README.md
 │   ├── unit/
@@ -152,23 +166,24 @@ The primary pipeline is `SecurePipelineV2` (`llm/pipelines/secure_v2.py`). Every
 ```
 User Input
     ↓
-[Layer 1] Safety Classification   — Groq Llama 8B, ~200ms
-    ↓ categories: safe_defensive | safe_educational | ambiguous | unsafe_offensive | unsafe_spam
-    ↓ unsafe → REJECT immediately
+[Layer 1] Safety Classification   — LLM-based, ~200ms
+    ↓ categories: defensive_security | offensive_illegal | generic_it | ambiguous
+    ↓ offensive_illegal → REJECT immediately
 [Layer 2] Intent Detection        — Pattern matching (<1ms) + ML fallback (5–10ms)
-    ↓ intents: greeting | farewell | thanks | help | info_request | action_request | out_of_scope
+    ↓ intents: os_hardening | script_or_config | incident_analysis | conceptual_explanation
+    ↓           generic_qna | smalltalk_greeting | smalltalk_farewell | smalltalk_other
 [Layer 3] Routing
-    ├── 3A Pattern Responder      — Greeting/thanks/help → instant template response ($0)
+    ├── 3A Pattern Responder      — Smalltalk (greeting/farewell/other) → instant template ($0)
     ├── 3B Info Pipeline          — Info questions → RAG search + LLM answer
-    ├── 3C Action Pipeline        — Script requests → CoT generation + strict validation
+    ├── 3C Action Pipeline        — Script/hardening requests → CoT generation + strict validation
     └── Out-of-Scope              — Polite rejection
 [Layer 4] Adaptive Generation
-    ├── Simple queries → llm_small (Llama 3.1 8B)
-    ├── Complex queries → llm_large (Llama 3.3 70B)
+    ├── Simple queries → llm_small
+    ├── Complex queries → llm_large
     └── RAG context injected when relevant
 ```
 
-**Central state object**: `RequestContext` (`llm/core/context.py`) — a Pydantic model passed through every layer.
+**Central state object**: `RequestContext` (`llm/core/context.py`) — a Pydantic model passed through every layer. Also defines `SafetyCategory`, `IntentType`, `SecurityLevel`, `ZeroTrustMaturity`, `ImpactLevel`, `SafetyResult`, `JudgeResult`, `StandardReference`, `RollbackInfo` enums/models.
 
 ---
 
@@ -219,13 +234,14 @@ python scripts/build_index.py
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LLM_PROVIDER` | Primary provider: `groq`, `openai`, `ollama` | `groq` |
-| `GROQ_API_KEY` | Groq API key (free tier) | required |
-| `GROQ_SMALL_MODEL_NAME` | Fast/cheap model | `llama-3.1-8b-instant` |
-| `GROQ_LARGE_MODEL_NAME` | Powerful model | `llama-3.3-70b-versatile` |
+| `LLM_PROVIDER` | Primary provider: `novita`, `groq`, `openai`, `ollama` | `novita` |
+| `GROQ_API_KEY` | Groq API key (free tier) | optional |
+| `GROQ_SMALL_MODEL_NAME` | Fast/cheap Groq model | `llama-3.1-8b-instant` |
+| `GROQ_LARGE_MODEL_NAME` | Powerful Groq model | `llama-3.3-70b-versatile` |
+| `NOVITA_API_KEY` | Novita API key (LLM + embeddings) | required |
 | `OPENAI_API_KEY` | OpenAI key (fallback) | optional |
-| `NOVITA_API_KEY` | Novita embeddings key | required for RAG |
 | `QDRANT_API_KEY` | Qdrant cloud key | required for RAG |
+| `QDRANT_URL` | Qdrant cloud endpoint | required for RAG |
 | `SMALL_MODEL_TEMPERATURE` | Temperature for small model | `0.3` |
 | `LARGE_MODEL_TEMPERATURE` | Temperature for large model | `0.2` |
 | `MAX_TOKENS` | Max response tokens | `2048` |
@@ -244,12 +260,18 @@ python scripts/build_index.py
 | `POST` | `/api/chat` | Main chat: RAG + LLM + 4-layer pipeline |
 | `POST` | `/api/chat/stream` | Streaming version (SSE) |
 | `POST` | `/rag/search` | Direct RAG semantic search |
+| `GET` | `/` | Root — API info |
 | `GET` | `/health` | Service health status |
-| `GET` | `/health/detailed` | Component-level health |
+| `GET` | `/health/detailed` | Component-level health (vector_store, embedding, llm) |
 | `GET` | `/metrics` | Aggregated performance stats |
 | `GET` | `/metrics/errors` | Recent error log |
 | `GET` | `/metrics/slow` | Slowest requests |
-| `GET` | `/api/analytics/summary` | Usage analytics dashboard |
+| `GET` | `/api/analytics` | Full analytics dashboard |
+| `GET` | `/api/analytics/cost` | Cost breakdown by intent/complexity/model |
+| `GET` | `/api/analytics/patterns` | Top N common query patterns |
+| `GET` | `/api/analytics/rag` | RAG usage and effectiveness |
+| `GET` | `/api/analytics/errors` | Error analysis and recent errors |
+| `GET` | `/api/analytics/trends` | Performance trends over time window |
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/redoc` | ReDoc UI |
 
@@ -264,7 +286,7 @@ python scripts/build_index.py
   "zt_maturity": "medium",
   "use_rag": true,
   "rag_top_k": 5,
-  "rag_min_score": 0.7,
+  "rag_min_score": 0.5,
   "stream": false,
   "timeout": 60
 }
@@ -312,7 +334,8 @@ python scripts/build_index.py
 - LLM clients are callables: `LLMCallable = Callable[[str], str]`
 - Get initialized clients from `llm/clients/__init__.py`: `from llm.clients import get_llm_clients`
 - Two tiers: `llm_small` (fast/cheap) and `llm_large` (powerful/expensive)
-- Never hardcode model names — read from `CONFIG` or `.env`
+- Provider selection is controlled by `LLM_PROVIDER` env var; defaults to `novita` (config.json)
+- Never hardcode model names — read from `config/config.json` via `config_loader.py`
 
 ### Error Handling
 - Use `APIError(status_code, error_code, message, details)` for all API-level errors
@@ -363,9 +386,10 @@ python llm/tests/run_all_tests.py
 
 ### Missing Tests (TODO)
 - Streaming endpoint (`/api/chat/stream`)
-- Provider fallback chain
+- Provider fallback chain (Novita → Groq → OpenAI → Ollama)
 - Timeout handling
 - Rate limiting behavior
+- Windows 2025 hardening (PDF-only path)
 
 ### Test Standards
 1. Follow pytest conventions (functions named `test_*`)
@@ -387,11 +411,11 @@ The hybrid intent detector (`llm/pipelines/layers/hybrid_intent_detector.py`) ru
 
 To retrain: use `data/intent_training_dataset.csv` (1677 examples, 7 categories).
 
-Intent categories:
-- `greeting`, `farewell`, `thanks`, `help` → Pattern Responder (3A)
-- `info_request` → Info Pipeline (3B)
-- `action_request` → Action Pipeline (3C)
-- `out_of_scope` → Polite rejection
+Intent categories (defined as `IntentType` enum in `llm/core/context.py`):
+- `smalltalk_greeting`, `smalltalk_farewell`, `smalltalk_other` → Pattern Responder (3A)
+- `os_hardening`, `conceptual_explanation`, `incident_analysis`, `generic_qna` → Info Pipeline (3B)
+- `script_or_config` → Action Pipeline (3C)
+- Out-of-scope detection → Polite rejection
 
 ---
 
@@ -400,19 +424,21 @@ Intent categories:
 ### Architecture
 - **Embeddings**: Novita `qwen/qwen3-embedding-8b` (4096 dimensions) via `rag/embeddings/novita_embeddings.py`
 - **Vector Store**: Qdrant cloud (`rag/vector_store/qdrant_store.py`)
-- **Collection**: `cis_ubuntu_24_04_and_cis_windows_2025_benchmarks`
+- **Collection**: `cis_ubuntu_24_04_and_cis_windows_2025_benchmarks_with_ubuntu_rules_yaml`
 - **Chunkers**: `cis_section` (PDF) and `yaml_rules` (YAML) — see `rag/chunking/`
+- **Late chunking**: Available but **disabled by default** in config.json
 
 ### Indexed Sources (`config/config.json` → `rag.source_documents`)
 
-| ID | Type | File | Chunker |
-|----|------|------|---------|
-| `cis_ubuntu_24_04` | PDF | `data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf` | `cis_section` |
-| `cis_windows_2025` | PDF | `data/source/CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf` | `cis_section` |
-| `ubuntu_rules_yaml` | YAML | `data/rules/ubuntu_24_04_rules.yaml` | `yaml_rules` |
+| ID | Type | File | Chunker | Priority |
+|----|------|------|---------|----------|
+| `cis_ubuntu_24_04` | PDF | `data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf` | `cis_section` | 1 |
+| `cis_windows_2025` | PDF | `data/source/CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf` | `cis_section` | 2 |
+| `ubuntu_rules_yaml` | YAML | `data/rules/ubuntu_24_04_rules.yaml` | `yaml_rules` | 3 |
 
-- `YamlRulesChunker` creates one chunk per CIS rule — includes full audit + remediation bash scripts, metadata (section, level, tags, config_files, auto_remediate)
-- `windows_2025_rules.yaml` exists but is empty — Windows hardening uses PDF only for now
+- `YamlRulesChunker` (`rag/chunking/yaml_rules_chunker.py`) creates one chunk per CIS rule — includes full audit + remediation bash scripts, metadata (section, level, tags, config_files, auto_remediate)
+- `CisSectionChunker` (`rag/chunking/cis_section_chunker.py`) chunks CIS PDFs by section number
+- `data/rules/windows_2025_rules.yaml` exists but is **empty** — Windows hardening uses PDF only for now
 - To rebuild the index: `python scripts/build_index.py`
 
 ### Smart RAG Triggering
@@ -422,7 +448,8 @@ RAG is only invoked for security-relevant queries — approximately 45% of queri
 ```json
 {
   "embedding": { "provider": "novita", "model_name": "qwen/qwen3-embedding-8b", "dim": 4096 },
-  "vector_store": { "provider": "qdrant", "qdrant": { "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025_benchmarks" } }
+  "rag": { "retrieval": { "top_k": 5, "min_score": 0.5 }, "late_chunking": { "enabled": false } },
+  "vector_store": { "provider": "qdrant", "qdrant": { "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025_benchmarks_with_ubuntu_rules_yaml" } }
 }
 ```
 
@@ -432,15 +459,16 @@ RAG is only invoked for security-relevant queries — approximately 45% of queri
 
 Middleware is applied in **reverse order** (last added = first executed on requests):
 
-1. `CORSMiddleware` — Allow cross-origin requests
+1. `CORSMiddleware` — Allow cross-origin requests (origins: `*` in dev)
 2. `TrustedHostMiddleware` — Host validation
 3. `GZipMiddleware` — Response compression (>1KB)
 4. `RateLimitMiddleware` — 100 req/min per IP, 5-min ban
 5. `MetricsMiddleware` — Latency/error tracking
-6. `RequestIDMiddleware` — Assign `X-Request-ID`
-7. `ResponseMetadataMiddleware` — Inject processing time, version headers
-8. `ProviderHeadersMiddleware` — Inject `X-LLM-Provider`, `X-LLM-Model`
-9. `SecurityHeadersMiddleware` — CSP, HSTS, X-Frame-Options, etc.
+6. `RequestIDMiddleware` — Assign `X-Request-ID` (uses `X-Client-Request-ID` if provided)
+7. `ResponseMetadataMiddleware` — Inject `X-Process-Time-Ms`, `X-API-Version` headers
+8. `ProviderHeadersMiddleware` — Inject `X-LLM-Provider`, `X-LLM-Model`, `X-RAG-Used` headers
+9. `RequestLogMiddleware` — Structured request logging to `api_requests` logger
+10. `SecurityHeadersMiddleware` — CSP, HSTS, X-Frame-Options, etc.
 
 ---
 
