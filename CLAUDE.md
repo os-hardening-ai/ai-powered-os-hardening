@@ -190,39 +190,58 @@ User Input
 ## Development Setup
 
 ### Prerequisites
-- Python 3.12+
-- Qdrant (cloud or local Docker)
-- API keys: Groq (required), Novita (required for RAG), optionally OpenAI
+- Python 3.11+ (Docker) veya 3.12+ (manual)
+- Qdrant Cloud (proje cloud Qdrant kullanır — local Qdrant gerekmez)
+- API keys: Novita (required — LLM + embeddings), Groq (optional fallback), Qdrant (required for RAG)
 
-### Installation
+### Seçenek A: Docker (Önerilen)
 
 ```bash
 git clone <repo>
 cd ai-powered-os-hardening
 
-# Install dependencies
+# .env oluştur ve key'leri doldur
+cp .env.example .env
+
+# Build et ve başlat (ilk build ~10-20dk — torch büyük)
+docker compose up --build
+
+# Sonraki başlatmalar (cache'den)
+docker compose up -d
+```
+
+Docker yapılandırması:
+- **`Dockerfile`**: `python:3.11-slim` base, `libgomp1` + `libgl1` + `libglib2.0-0` sistem kütüphaneleri, `requirements-python311.txt`
+- **`docker-compose.yml`**: `build.context + dockerfile` belirtilmiş, `logs/` volume mount, `env_file: .env`
+- **`.dockerignore`**: `.git`, `__pycache__`, `.env`, `logs/`, `tests/`, `docs/`, `data/cache/` hariç tutulur
+
+### Seçenek B: Manuel (venv)
+
+```bash
+git clone <repo>
+cd ai-powered-os-hardening
+
+# Virtual environment
+python -m venv venv
+source venv/bin/activate        # Linux/macOS
+# veya: .\venv\Scripts\Activate.ps1   (Windows PowerShell)
+
+# Dependencies
 pip install -r requirements.txt
 
-# Configure environment
+# .env oluştur ve key'leri doldur
 cp .env.example .env
-# Edit .env: set GROQ_API_KEY, NOVITA_API_KEY, QDRANT_API_KEY
 
-# Fix PYTHONPATH if imports fail
+# PYTHONPATH (import hatası alırsanız)
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
-# Start API server
+# API başlat
 python main.py
 # → http://localhost:8000
 # → Swagger UI: http://localhost:8000/docs
 ```
 
-### Qdrant (local development)
-
-```bash
-docker run -p 6333:6333 qdrant/qdrant
-```
-
-### Build RAG Index (first time or after PDF update)
+### Build RAG Index (ilk kurulum veya PDF güncellemesi sonrası)
 
 ```bash
 python scripts/build_index.py

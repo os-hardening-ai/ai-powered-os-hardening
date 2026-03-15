@@ -23,7 +23,88 @@
 
 ---
 
-## Adım 1: Repository Clone
+## Kurulum Yöntemi Seçimi
+
+İki kurulum yöntemi mevcuttur:
+
+| Yöntem | Avantaj | Dezavantaj |
+|--------|---------|------------|
+| **Docker** (Önerilen) | Tek komutla çalışır, ortam izolasyonu | Image büyük (~3-4 GB, torch dahil) |
+| **Manuel (venv)** | Daha hafif, geliştirme için uygun | Bağımlılık yönetimi gerektirir |
+
+---
+
+## Seçenek A: Docker ile Çalıştırma (Önerilen)
+
+### Gereksinimler
+- Docker Desktop (Windows/macOS) veya Docker Engine (Linux)
+- `.env` dosyası (API key'ler)
+
+### 1. Repository'yi klonla
+
+```bash
+git clone https://github.com/yourusername/ai-powered-os-hardening.git
+cd ai-powered-os-hardening
+```
+
+### 2. `.env` dosyasını oluştur
+
+```bash
+cp .env.example .env
+```
+
+Zorunlu key'leri doldur:
+
+```env
+LLM_PROVIDER=novita
+NOVITA_API_KEY=your-novita-api-key
+QDRANT_API_KEY=your-qdrant-api-key
+GROQ_API_KEY=your-groq-api-key        # opsiyonel, fallback için
+```
+
+### 3. Image'ı build et ve başlat
+
+```bash
+docker compose up --build
+```
+
+İlk build `torch` ve diğer büyük paketler nedeniyle **10-20 dakika** sürebilir.
+Sonraki başlatmalarda cache'den çok daha hızlı olur:
+
+```bash
+docker compose up          # cache'den başlat
+docker compose up -d       # arka planda başlat
+docker compose logs -f     # logları izle
+docker compose down        # durdur
+```
+
+### 4. Erişim
+
+- **API**: http://localhost:8000
+- **Swagger UI**: http://localhost:8000/docs
+- **Health**: http://localhost:8000/health
+- **Metrics**: http://localhost:8000/metrics
+
+### Docker Notları
+
+- `logs/` dizini volume olarak mount edilmiştir — container yeniden başlasa da loglar korunur
+- `--workers 1` ile çalışır: `session_store` ve `metrics_collector` in-memory singleton olduğundan multi-worker kullanılamaz
+- Qdrant **cloud** üzerinde çalışmaktadır, container içinde local Qdrant gerekmez
+
+### Yaygın Docker Sorunları
+
+| Sorun | Çözüm |
+|-------|-------|
+| `libgomp1` hatası | Base image `python:3.11-slim` kullanıldığından zaten dahil |
+| `PyMuPDF` import hatası | `libgl1`, `libglib2.0-0` Dockerfile'da kurulu |
+| Port 8000 kullanımda | `docker compose down` veya `lsof -ti:8000 \| xargs kill` |
+| `.env` bulunamadı | `cp .env.example .env` çalıştır ve key'leri doldur |
+
+---
+
+## Seçenek B: Manuel Kurulum (venv)
+
+### Adım 1: Repository Clone
 
 ```bash
 git clone https://github.com/yourusername/ai-powered-os-hardening.git
