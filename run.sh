@@ -7,7 +7,13 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-echo "Docker image build ediliyor ve container başlatılıyor..."
+echo "Calisan container varsa durduruluyor..."
+docker compose down 2>/dev/null || true
+
+echo "Dangling image'lar temizleniyor..."
+docker image prune -f
+
+echo "Docker image build ediliyor ve container baslatiliyor..."
 docker compose up --build -d
 
 echo ""

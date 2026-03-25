@@ -7,6 +7,7 @@ from rag.embeddings import get_embedding_client
 from rag.vector_store import get_vector_store
 from api.schemas import RagSearchResult
 from prometheus_metrics import record_rag_retrieval
+from config.config_loader import get_config
 
 def _is_junky_window(w: str) -> bool:
     """
@@ -226,39 +227,70 @@ class RAGRetriever:
                 
         return results
 
-    # ==== 3) Dışarı açılan search: default late chunking ====
+    # ==== 3) Her kaynak için ayrı ayrı top_k çekip birleştir ====
+    def _search_per_source(
+        self,
+        query_emb,
+        top_k: int,
+        min_score: float,
+        coarse_k_factor: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        "yaml_rule" ve "cis_benchmark" kaynaklarından ayrı ayrı top_k chunk çeker,
+        birleştirip score'a göre sıralar.
+        """
+        doc_types = ["yaml_rule", "cis_benchmark"]
+        coarse_k = min(max(top_k * coarse_k_factor, top_k), 20)
+        combined: List[Dict[str, Any]] = []
+
+        for dt in doc_types:
+            hits = self._vector_store.search(
+                query_emb,
+                top_k=coarse_k,
+                min_score=max(min_score * 0.5, 0.0),
+                doc_type=dt,
+            )
+            combined.extend(hits)
+
+        # Score'a göre sırala; her kaynak zaten kendi top_k'sını getirdi
+        combined.sort(key=lambda x: x["score"], reverse=True)
+        return combined
+
+    # ==== 4) Dışarı açılan search: per-source top_k + late chunking ====
     def search(
         self,
         query: str,
         top_k: int = 5,
-        use_late_chunking: bool = True,
+        use_late_chunking: bool | None = None,
         coarse_k_factor: int = 3,
         window_size: int = 3,
         stride: int = 1,
-        min_score: float = 0.5,  # Minimum relevance score için threshold (default: 0.5)
+        min_score: float = 0.5,
     ) -> List[RagSearchResult]:
         """
-        Varsayılan: late chunking açık.
-        istersen use_late_chunking=False ile eski davranışa dönebilirsin.
-        
+        Her kaynaktan (yaml_rule, cis_benchmark) ayrı ayrı top_k chunk çeker,
+        birleştirir ve late chunking uygular. Toplam sonuç top_k * kaynak_sayısı
+        olabilir; final liste score'a göre sıralıdır.
+
         Args:
             query: Arama sorgusu
-            top_k: Döndürülecek sonuç sayısı
+            top_k: Her kaynak için döndürülecek chunk sayısı
             use_late_chunking: Late chunking kullan mı?
-            coarse_k_factor: Koarse k faktörü
+            coarse_k_factor: Coarse k faktörü (late chunking için)
             window_size: Pencere boyutu
             stride: Pencere stride'ı
             min_score: Minimum relevance score (default: 0.5)
         """
-        # Query için embedding'i sadece 1 kez üret
+        if use_late_chunking is None:
+            use_late_chunking = get_config().rag.late_chunking.get("enabled", False)
+
         t0 = time.perf_counter()
         query_emb = self._embed_client.embed_query(query)
 
         if not use_late_chunking:
-            raw_results = self._vector_store.search(query_emb, top_k=top_k, min_score=min_score)
+            raw_results = self._search_per_source(query_emb, top_k, min_score, coarse_k_factor)
             results: List[RagSearchResult] = []
             for r in raw_results:
-                # Min score filtering
                 if float(r.get("score", 0.0)) < min_score:
                     continue
                 results.append(
@@ -276,18 +308,14 @@ class RAGRetriever:
             )
             return results
 
-        # Coarse k'i sınırla (çok büyümesin)
-        coarse_k = max(top_k * coarse_k_factor, top_k)
-        coarse_k = min(coarse_k, 20)  # güvenlik: en fazta 20 büyük chunk
-
-        # Coarse level'de daha düşük threshold (fine level'de yüksek tutacağız)
-        raw_results = self._vector_store.search(query_emb, top_k=coarse_k, min_score=max(min_score * 0.5, 0.0))
+        # Per-source coarse fetch → late chunk refine
+        raw_results = self._search_per_source(query_emb, top_k, min_score, coarse_k_factor)
 
         fine_results = self._late_chunk_refine(
             query=query,
             query_emb=query_emb,
             coarse_results=raw_results,
-            top_k_fine=top_k,
+            top_k_fine=top_k * 2,  # her kaynaktan top_k geldiği için limit 2x
             window_size=window_size,
             stride=stride,
             max_windows_per_chunk=10,

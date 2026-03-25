@@ -7,7 +7,13 @@ if (-not (Test-Path .env)) {
     exit 1
 }
 
-Write-Host "Docker image build ediliyor ve container başlatılıyor..."
+Write-Host "Calisan container varsa durduruluyor..."
+docker compose down 2>$null
+
+Write-Host "Dangling image'lar temizleniyor..."
+docker image prune -f
+
+Write-Host "Docker image build ediliyor ve container baslatiliyor..."
 docker compose up --build -d
 
 Write-Host ""
