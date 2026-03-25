@@ -27,9 +27,9 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from llm.testing.tests.test_dataset import TEST_DATASET, get_test_cases_by_tag
-from llm.core.pipeline_v2 import SecurityPipeline
+from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.core.context import RequestContext
-from llm.core.models import get_llm_clients
+from llm.clients import get_llm_clients
 
 
 @dataclass

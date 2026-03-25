@@ -1,6 +1,7 @@
 # context.py
 from __future__ import annotations
 
+import uuid
 from typing import List, Optional, Literal, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -159,7 +160,7 @@ class RequestContext(BaseModel):
     # Örnek: {"bash": "#!/bin/bash\n...", "powershell": "Set-ItemProperty..."}
 
     # ── Meta ──
-    request_id: Optional[str] = None
+    request_id: str = Field(default_factory=lambda: f"req_{uuid.uuid4().hex[:16]}")
     extra: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(

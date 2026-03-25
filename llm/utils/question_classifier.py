@@ -55,6 +55,12 @@ class QuestionClassifier:
         # "nasıl" soruları genelde medium
         r'\b(nasıl.*güvenli|nasıl.*yapılır|how.*to)\b',
 
+        # Türkçe hardening fiilleri
+        r'\b(s[ıi]k[ıi]laşt[ıi]r|güçlendir|harden|koru[mn]|yapılandır|configure|secure)\b',
+
+        # Güvenlik araçları / servisler
+        r'\b(ssh|rdp|firewall|sudo|ufw|selinux|apparmor|auditd|sysctl)\b',
+
         # Spesifik servis yapılandırma
         r'\b(ssh.*config|ssh.*yapılandır|firewall.*rule|rdp.*hardening)\b',
         r'\b(log.*rotation|backup.*strategy)\b',
@@ -97,9 +103,9 @@ class QuestionClassifier:
                 return "medium"
 
         # ─── DEFAULT: Kelime sayısına göre ───
-        # Kısa sorular (4-10 kelime) → simple
+        # Kısa sorular (4-10 kelime) → medium (security chatbot için)
         if word_count <= 10:
-            return "simple"
+            return "medium"
 
         # Orta uzunluk (11-20 kelime) → medium
         elif word_count <= 20:
@@ -125,50 +131,3 @@ def classify_question(question: str) -> QuestionComplexity:
         "simple" | "medium" | "complex"
     """
     return _classifier.classify(question)
-
-
-# ─────────────────────────────────────────────
-# Test Examples
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    test_cases = [
-        # SIMPLE
-        ("SELinux nedir?", "simple"),
-        ("merhaba", "simple"),
-        ("ssh port değiştir", "simple"),
-        ("firewall nedir", "simple"),
-
-        # MEDIUM
-        ("SSH yapılandırmasını nasıl güvenli hale getiririm?", "medium"),
-        ("nginx için güvenlik ayarları nelerdir", "medium"),
-        ("log rotation nasıl yapılır ubuntu'da", "medium"),
-
-        # COMPLEX
-        ("Ubuntu 22.04 için full hardening script yaz", "complex"),
-        ("Zero Trust mimarisini nasıl uygularım", "complex"),
-        ("Sistemde saldırı analizi yap ve raporla", "complex"),
-        ("Monitoring ve alerting sistemi kur", "complex"),
-    ]
-
-    print("="*70)
-    print("QUESTION COMPLEXITY CLASSIFIER - TEST")
-    print("="*70)
-
-    classifier = QuestionClassifier()
-
-    correct = 0
-    for question, expected in test_cases:
-        result = classifier.classify(question)
-        status = "OK" if result == expected else "FAIL"
-
-        if result == expected:
-            correct += 1
-
-        print(f"[{status:4s}] [{result.upper():8s}] {question}")
-        if result != expected:
-            print(f"          Expected: {expected.upper()}")
-
-    print("="*70)
-    print(f"Accuracy: {correct}/{len(test_cases)} ({100*correct//len(test_cases)}%)")
-    print("="*70)

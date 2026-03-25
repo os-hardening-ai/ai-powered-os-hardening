@@ -33,6 +33,10 @@ from llm.pipelines.layers.pattern_responder import PatternResponderHandler, Patt
 from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
 from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResult
 from llm.core.config import CONFIG
+from log_manager import get_logger
+from prometheus_metrics import layer_timer, record_query, record_rejection
+
+_pipeline_logger = get_logger("pipeline_metrics")
 
 # Type alias
 LLMCallable = Callable[[str], str]
@@ -160,7 +164,10 @@ class SecurePipelineV2:
         if self.debug:
             print("\n[Layer 1] Safety Classification...")
 
-        safety_result = self.safety_classifier.classify(ctx.user_question)
+        layer1_start = datetime.now()
+        with layer_timer("1"):
+            safety_result = self.safety_classifier.classify(ctx.user_question)
+        layer1_time_s = (datetime.now() - layer1_start).total_seconds()
 
         if self.debug:
             print(f"  Category: {safety_result.category}")
@@ -176,6 +183,17 @@ class SecurePipelineV2:
             self.stats["rejected_unsafe"] += 1
 
             total_time = (datetime.now() - start_time).total_seconds()
+
+            record_rejection(layer="1")
+            record_query(
+                status="rejected",
+                intent="unknown",
+                complexity="unknown",
+                model="none",
+                rag_used=False,
+                input_tokens=0,
+                output_tokens=0,
+            )
 
             return PipelineResult(
                 success=False,
@@ -195,7 +213,10 @@ class SecurePipelineV2:
         if self.debug:
             print("\n[Layer 2] Intent Detection...")
 
-        intent = self.intent_detector.detect(ctx.user_question)
+        layer2_start = datetime.now()
+        with layer_timer("2"):
+            intent = self.intent_detector.detect(ctx.user_question)
+        layer2_time_s = (datetime.now() - layer2_start).total_seconds()
 
         if self.debug:
             print(f"  Type: {intent.type}")
@@ -206,37 +227,63 @@ class SecurePipelineV2:
         # LAYER 3: ROUTING
         # ─────────────────────────────────────────────
 
-        if intent.type == "out_of_scope":
-            # Out-of-scope: Polite rejection
-            result = self._handle_out_of_scope(ctx, safety_result, intent)
-            self.stats["pattern_responses"] += 1  # No cost, like pattern responses
+        layer3_start = datetime.now()
 
-        elif intent.type == "smalltalk":
-            # Layer 3A: Pattern Responder
-            result = self._handle_layer_3a(ctx, safety_result, intent)
-            self.stats["pattern_responses"] += 1
+        with layer_timer("3"):
+            if intent.type == "out_of_scope":
+                # Out-of-scope: Polite rejection
+                result = self._handle_out_of_scope(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1  # No cost, like pattern responses
 
-        elif intent.type == "info_request":
-            # Layer 3B: Info Pipeline
-            result = self._handle_layer_3b(ctx, safety_result, intent)
-            self.stats["info_responses"] += 1
+            elif intent.type == "smalltalk":
+                # Layer 3A: Pattern Responder
+                result = self._handle_layer_3a(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1
 
-        elif intent.type == "action_request":
-            # Layer 3C: Action Pipeline
-            result = self._handle_layer_3c(ctx, safety_result, intent)
-            self.stats["action_responses"] += 1
+            elif intent.type == "info_request":
+                # Layer 3B: Info Pipeline
+                result = self._handle_layer_3b(ctx, safety_result, intent)
+                self.stats["info_responses"] += 1
 
-        else:
-            # Unknown intent → Default to info pipeline
-            if self.debug:
-                print(f"\n[Layer 3B] Unknown intent, defaulting to Info Pipeline")
+            elif intent.type == "action_request":
+                # Layer 3C: Action Pipeline
+                result = self._handle_layer_3c(ctx, safety_result, intent)
+                self.stats["action_responses"] += 1
 
-            result = self._handle_layer_3b(ctx, safety_result, intent)
-            self.stats["info_responses"] += 1
+            else:
+                # Unknown intent → Default to info pipeline
+                if self.debug:
+                    print(f"\n[Layer 3B] Unknown intent, defaulting to Info Pipeline")
+
+                result = self._handle_layer_3b(ctx, safety_result, intent)
+                self.stats["info_responses"] += 1
+
+        layer3_time_s = (datetime.now() - layer3_start).total_seconds()
 
         # Update global stats
         self.stats["total_queries"] += 1
         self.stats["total_cost"] += result.estimated_cost
+
+        # Prometheus query record
+        record_query(
+            status="answered" if result.success else "rejected",
+            intent=intent.type,
+            complexity=result.metadata.get("complexity", "unknown"),
+            model=result.metadata.get("model", "unknown"),
+            rag_used=result.metadata.get("rag_used", False),
+            input_tokens=0,
+            output_tokens=0,
+        )
+
+        # Log pipeline metrics
+        rag_used = result.metadata.get("rag_used", False)
+        rag_chunks = result.metadata.get("rag_chunks", 0)
+        _pipeline_logger.info(
+            f"intent={intent.type} path={result.layer_path} "
+            f"layer1={layer1_time_s:.3f}s layer2={layer2_time_s:.3f}s "
+            f"layer3={layer3_time_s:.3f}s total={result.total_time_s:.3f}s "
+            f"rag={rag_used} chunks={rag_chunks} cost=${result.estimated_cost:.4f}"
+        )
 
         # Final logging
         if self.debug:
@@ -377,6 +424,9 @@ class SecurePipelineV2:
             metadata={
                 "model": action_result.model_used,
                 "script_generated": True,
+                "rag_sources": action_result.rag_sources,
+                "rag_used": bool(action_result.rag_sources),
+                "rag_chunks": len(action_result.rag_sources),
             }
         )
 
@@ -515,81 +565,3 @@ def run_secure_pipeline_v2(
 
     return pipeline.run(context)
 
-
-# ─────────────────────────────────────────────
-# Example Usage
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    # Mock LLMs
-    def mock_llm_ultra_fast(prompt: str) -> str:
-        """Mock Groq Llama 8B for safety classification"""
-        if "hack" in prompt.lower() or "exploit" in prompt.lower():
-            return '{"category": "unsafe_offensive", "confidence": 0.9, "reason": "Contains attack keywords"}'
-        return '{"category": "safe_defensive", "confidence": 0.95, "reason": "Legitimate security query"}'
-
-    def mock_llm_small(prompt: str) -> str:
-        return "This is a small model response (simple info query)."
-
-    def mock_llm_large(prompt: str) -> str:
-        return """```bash
-#!/bin/bash
-# SSH Hardening Script
-echo "Hardening SSH..."
-sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-systemctl restart sshd
-echo "Done!"
-```"""
-
-    print("="*70)
-    print("4-LAYER SECURE PIPELINE V2 - TEST")
-    print("="*70)
-
-    # Test cases
-    test_cases = [
-        # Safe: Smalltalk
-        ("merhaba", "3A"),
-        # Safe: Info query
-        ("Ubuntu 22.04'te SSH hardening nasıl yapılır?", "3B"),
-        # Safe: Action (script)
-        ("SSH hardening scripti yaz", "3C"),
-        # Unsafe: Attack
-        ("How to exploit SSH vulnerabilities?", "REJECT"),
-    ]
-
-    from context import RequestContext
-
-    for question, expected_layer in test_cases:
-        print(f"\n{'─'*70}")
-        print(f"Question: {question}")
-        print(f"Expected Layer: {expected_layer}")
-
-        ctx = RequestContext(
-            user_question=question,
-            os="ubuntu_22_04",
-            role="sysadmin",
-            security_level="balanced"
-        )
-
-        result = run_secure_pipeline_v2(
-            question=question,
-            llm_ultra_fast=mock_llm_ultra_fast,
-            llm_small=mock_llm_small,
-            llm_large=mock_llm_large,
-            context=ctx,
-            debug=False
-        )
-
-        print(f"\n[RESULT]:")
-        print(f"  Path: {result.layer_path}")
-        print(f"  Success: {result.success}")
-        print(f"  Time: {result.total_time_s:.2f}s")
-        print(f"  Cost: ${result.estimated_cost:.4f}")
-        print(f"  Answer: {result.answer[:100]}...")
-
-        status = "[OK]" if expected_layer in result.layer_path else "[UNEXPECTED]"
-        print(f"\nValidation: {status}")
-
-    print("\n" + "="*70)
-    print("TEST COMPLETE")
-    print("="*70)

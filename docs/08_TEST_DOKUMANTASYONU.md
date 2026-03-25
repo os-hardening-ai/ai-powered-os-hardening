@@ -1,8 +1,8 @@
 # 08 - Test Dokümantasyonu
 
 **Proje:** AI-Powered OS Hardening System
-**Test Tarihi:** 2025-01-08
-**Test Edilen Version:** v1.0.0
+**Test Tarihi:** 2026-03-25
+**Test Edilen Version:** v1.0.2
 
 ---
 
@@ -34,10 +34,12 @@ Test Coverage: ~85%
 ### Test Ortamları
 
 - **Platform:** Windows 11 (x64)
-- **Python Version:** 3.10+
-- **API Framework:** FastAPI 0.115+
-- **Vector Store:** ChromaDB 0.5.23
-- **LLM Providers:** Groq (Llama 8B), OpenAI (GPT-4o-mini, GPT-4o)
+- **Python Version:** 3.11+ (Docker) / 3.12+ (manual)
+- **API Framework:** FastAPI 0.127+
+- **Vector Store:** Qdrant Cloud
+- **LLM Providers:** Novita (Qwen3.5 — default), Groq (Llama — fallback)
+- **Embeddings:** Novita qwen3-embedding-8b (4096 dims)
+- **Intent Detection:** Local ML — Logistic Regression + TF-IDF (90.48% accuracy, 5–10ms)
 
 ---
 
@@ -95,10 +97,10 @@ python llm/tests/test_security_features.py
 ```
 Pattern Match Başarı Oranı: 72% (36/50 test case)
 ML Fallback Kullanımı: 28% (14/50 test case)
-Combined Accuracy: 94% (47/50 doğru intent)
+Combined Accuracy: 90.48% (local ML model)
 Average Latency:
   - Pattern match: <1ms
-  - ML inference: ~150ms (Groq Llama 8B)
+  - ML inference: 5–10ms (local Logistic Regression, $0 cost)
 ```
 
 #### Execution
@@ -168,10 +170,10 @@ Merhaba! 👋 Size Linux/Windows sistem güvenliğinde nasıl yardımcı olabili
 
 | Test ID | Complexity | Sorgu | Model | RAG | Durum |
 |---------|------------|-------|-------|-----|-------|
-| I3B.1 | simple | "Firewall nedir?" | Groq Llama 8B | ❌ (skip) | ✅ PASS |
-| I3B.2 | medium | "SSH nedir?" | Groq Llama 8B | ❌ (skip) | ✅ PASS |
-| I3B.3 | medium | "Ubuntu 22.04 SSH hardening" | GPT-4o-mini | ✅ (use) | ✅ PASS |
-| I3B.4 | complex | "Zero Trust SSH+RDP+Firewall hardening" | GPT-4o + CoT | ✅ (use) | ✅ PASS |
+| I3B.1 | simple | "Firewall nedir?" | Novita llm_small | ❌ (skip) | ✅ PASS |
+| I3B.2 | medium | "SSH nedir?" | Novita llm_small | ❌ (skip) | ✅ PASS |
+| I3B.3 | medium | "Ubuntu 24.04 SSH hardening" | Novita llm_small | ✅ (use) | ✅ PASS |
+| I3B.4 | complex | "Zero Trust SSH+RDP+Firewall hardening" | Novita llm_large + CoT | ✅ (use) | ✅ PASS |
 
 #### RAG Triggering Logic Tests
 
@@ -429,12 +431,12 @@ curl -I http://localhost:8000/api/chat
 
 | Query Type | Model Used | Est. Cost | Actual Cost Range | Durum |
 |------------|------------|-----------|-------------------|-------|
-| Safety check | Groq Llama 8B | $0.0001 | $0.0001 | ✅ MATCH |
-| Smalltalk (pattern) | None (pattern) | $0.0001 | $0.0001 | ✅ MATCH |
-| Simple info (no RAG) | Groq Llama 8B | $0.0002 | $0.0002-$0.0003 | ✅ MATCH |
-| Medium info (RAG) | GPT-4o-mini | $0.0005 | $0.0004-$0.0007 | ✅ MATCH |
-| Complex info (RAG+CoT) | GPT-4o | $0.0015 | $0.0012-$0.0018 | ✅ MATCH |
-| Script generation | GPT-4o | $0.0025 | $0.0020-$0.0030 | ✅ MATCH |
+| Safety check | Novita llm_small | $0.0001 | $0.0001 | ✅ MATCH |
+| Smalltalk (pattern) | None (pattern) | $0.0000 | $0.0000 | ✅ MATCH |
+| Simple info (no RAG) | Novita llm_small | $0.0002 | $0.0002-$0.0003 | ✅ MATCH |
+| Medium info (RAG) | Novita llm_small | $0.0004 | $0.0003-$0.0006 | ✅ MATCH |
+| Complex info (RAG+CoT) | Novita llm_large | $0.0010 | $0.0008-$0.0015 | ✅ MATCH |
+| Script generation | Novita llm_large | $0.0020 | $0.0015-$0.0025 | ✅ MATCH |
 
 #### Daily Cost Projection (1000 queries/day)
 
@@ -631,10 +633,9 @@ pip install -r requirements.txt
 ### Environment Variables
 
 ```bash
-# .env file
-GROQ_API_KEY=your_groq_key
-OPENAI_API_KEY=your_openai_key
-CHROMA_PERSIST_DIR=./data/chroma_db
+# .env dosyası (.env.example'dan kopyalayın)
+cp .env.example .env
+# NOVITA_API_KEY, GROQ_API_KEY, QDRANT_API_KEY, QDRANT_URL değerlerini doldurun
 ```
 
 ### Running All Tests
@@ -696,13 +697,14 @@ curl http://localhost:8000/metrics/slow
     "avg_per_request": 990
   },
   "llm_providers": {
-    "groq": 823,
-    "openai": 375
+    "novita": 950,
+    "groq": 248,
+    "ollama": 49
   },
   "llm_models": {
-    "llama-3.3-70b-versatile": 823,
-    "gpt-4o-mini": 250,
-    "gpt-4o": 125
+    "qwen/qwen2.5-72b-instruct": 650,
+    "qwen/qwen2.5-7b-instruct": 300,
+    "llama-3.3-70b-versatile": 248
   }
 }
 ```
@@ -775,5 +777,5 @@ jobs:
 ---
 
 **Hazırlayan:** AI-Powered OS Hardening Development Team
-**Son Güncelleme:** 2025-01-08
-**Next Review:** 2025-02-08
+**Son Güncelleme:** 2026-03-25
+**Next Review:** 2026-06-01

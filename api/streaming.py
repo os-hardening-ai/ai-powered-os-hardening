@@ -7,7 +7,6 @@ Implements Server-Sent Events (SSE) for token-by-token streaming.
 
 from __future__ import annotations
 import json
-import asyncio
 from typing import AsyncIterator, Dict, Any, Optional
 from fastapi.responses import StreamingResponse
 
@@ -94,55 +93,3 @@ def format_sse_event(event: str, data: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json_data}\n\n"
 
 
-# Example async generator (for testing)
-async def dummy_token_generator(text: str, delay: float = 0.05) -> AsyncIterator[str]:
-    """
-    Simulate streaming tokens with delay.
-
-    Args:
-        text: Text to stream word by word
-        delay: Delay between tokens (seconds)
-
-    Yields:
-        Tokens (words)
-    """
-    words = text.split()
-    for word in words:
-        await asyncio.sleep(delay)
-        yield word + " "
-
-
-# ─────────────────────────────────────────────
-# Chunked Response Builder (for non-streaming fallback)
-# ─────────────────────────────────────────────
-
-class ChunkedResponseBuilder:
-    """
-    Build response in chunks for better perceived performance.
-
-    Even when not streaming token-by-token, we can send intermediate
-    progress updates (e.g., "Safety check complete", "RAG retrieval done").
-    """
-
-    def __init__(self):
-        self.events: list[Dict[str, Any]] = []
-
-    def add_event(self, event_type: str, data: Dict[str, Any]):
-        """Add an event to the response"""
-        self.events.append({
-            "event": event_type,
-            "data": data,
-            "timestamp": asyncio.get_event_loop().time()
-        })
-
-    def get_events(self) -> list[Dict[str, Any]]:
-        """Get all events"""
-        return self.events
-
-    async def stream_events(self) -> AsyncIterator[str]:
-        """Stream events as SSE"""
-        for event in self.events:
-            yield format_sse_event(
-                event["event"],
-                event["data"]
-            )

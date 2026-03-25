@@ -89,7 +89,7 @@ print("=" * 80)
 
 # Test embeddings
 try:
-    from core.embeddings import get_embedding_client
+    from rag.embeddings import get_embedding_client
 
     embed_client = get_embedding_client()
     print(f"[OK] Embedding client initialized: {type(embed_client).__name__}")
@@ -113,7 +113,7 @@ print()
 
 # Test vector store
 try:
-    from core.vector_store import get_vector_store
+    from rag.vector_store import get_vector_store
 
     vector_store = get_vector_store()
     print(f"[OK] Vector store initialized: {type(vector_store).__name__}")

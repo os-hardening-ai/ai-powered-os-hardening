@@ -1,0 +1,66 @@
+{
+    "rule_id": "5.26",
+    "title": "Ensure 'SSDP Discovery (SSDPSRV)' is set to 'Disabled'",
+    "description": "This policy setting ensures the target service is disabled.",
+    "cis_level": 1,
+    "category": "System Services",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\System\\CurrentControlSet\\Services\\SSDPSRV",
+        "value_name": "Start",
+        "value_type": "REG_DWORD",
+        "value_data": 4,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\System Services",
+        "setting_name": "SSDP Discovery",
+        "setting_value": "Disabled",
+        "admx_category": "SystemServices"
+    },
+    "implementation_local": {
+        "powershell_command": "Set-Service -Name 'SSDPSRV' -StartupType Disabled -ErrorAction SilentlyContinue",
+        "powershell_script": "if (Get-Service -Name 'SSDPSRV' -ErrorAction SilentlyContinue) { Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Services\\SSDPSRV' -Name 'Start' -Value 4 -Type DWord -Force }",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Service General Setting]",
+        "inf_key": "SSDPSRV",
+        "inf_value": "4,",
+        "gpo_xml": ""
+    },
+    "audit_logic": {
+        "powershell_script": "$svc = Get-Service -Name 'SSDPSRV' -ErrorAction SilentlyContinue; if (-not $svc) { return $true }; return ($svc.StartType -eq 'Disabled')",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Set-Service -Name 'SSDPSRV' -StartupType Manual -ErrorAction SilentlyContinue",
+        "original_value": 3
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Disabling this service may limit system functionality. Review usage before applying."
+    },
+    "rationale": "Unnecessary services increase the attack surface of the system. Disabling them minimizes vulnerabilities.",
+    "default_value": {
+        "standalone": "Varies",
+        "domain_joined": "Varies"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "system-services",
+        "cis",
+        "security",
+        "level-1"
+    ]
+}

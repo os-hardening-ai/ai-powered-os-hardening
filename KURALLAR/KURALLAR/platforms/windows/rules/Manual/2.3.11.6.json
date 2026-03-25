@@ -1,0 +1,48 @@
+{
+    "rule_id": "2.3.11.6",
+    "title": "Ensure 'Network security: Force logoff when logon hours expire' is set to 'Enabled'",
+    "description": "This policy setting evaluates the security options.",
+    "cis_level": 1,
+    "category": "Local Policies",
+    "subcategory": "Security Options",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022",
+        "Windows Server 2019",
+        "Windows Server 2016"
+    ],
+    "automated": false,
+    "registry_config": null,
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Local Policies\\Security Options",
+        "setting_name": "Ensure 'Network security: Force logoff when logon hours expire' is set to 'Enabled'",
+        "setting_value": "Enabled",
+        "admx_category": "SecurityOptions"
+    },
+    "implementation_local": null,
+    "implementation_gpo": null,
+    "audit_logic": null,
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' -Name 'PLACEHOLDER' -Force",
+        "original_value": null
+    },
+    "impact": {
+        "severity": "medium",
+        "description": "Modifying this security option may result in unexpected behavior if proper configuration relies on it."
+    },
+    "rationale": "Following the CIS specification hardens the system against potential attacks.",
+    "default_value": {
+        "standalone": "Not Defined",
+        "domain_joined": "Not Defined"
+    },
+    "references": [
+        "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+    ],
+    "tags": [
+        "security-options",
+        "local-policy",
+        "cis",
+        "level-1"
+    ]
+}

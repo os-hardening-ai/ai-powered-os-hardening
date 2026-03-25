@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from llm.core.context import RequestContext
-from llm.pipelines.optimized import run_optimized_pipeline_with_retry
+from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.core.config import CONFIG
 from llm.clients import get_llm_clients
 from llm.core.session_store import global_session_store
@@ -257,13 +257,8 @@ def main() -> None:
         # Optimized Pipeline'ı çalıştır (retry ile)
         print("\nIsleniyor...\n")
 
-        ctx = run_optimized_pipeline_with_retry(
-            ctx=ctx,
-            llm_small=llm_small,
-            llm_large=llm_large,
-            max_retries=CONFIG.max_retries,
-            priority="balanced",
-        )
+        pipeline = SecurePipelineV2()
+        ctx = pipeline.run(ctx)
         
         answer = ctx.final_answer or "(Bos cevap dondu, bir hata olmus olabilir.)"
 

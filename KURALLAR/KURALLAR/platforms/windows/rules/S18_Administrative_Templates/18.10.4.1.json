@@ -1,0 +1,51 @@
+{
+    "rule_id": "18.10.4.1",
+    "title": "Ensure 'Allow a Windows app to share application data between users' is set to 'Disabled'",
+    "description": "Automated configuration for 18.10.4.1",
+    "cis_level": 2,
+    "category": "Administrative Templates: Windows Components",
+    "applies_to": [
+        "Windows 11",
+        "Windows 10",
+        "Windows Server 2022"
+    ],
+    "automated": true,
+    "registry_config": {
+        "path": "HKLM:\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows\\\\AppPrivacy",
+        "value_name": "LetAppsActivateWithVoiceAboveLock",
+        "value_type": "REG_DWORD",
+        "value_data": 2,
+        "comparison": "equals"
+    },
+    "gpo_config": {
+        "policy_path": "Computer Configuration\\Policies\\Administrative Templates\\...",
+        "setting_name": "",
+        "setting_value": "",
+        "admx_category": "System"
+    },
+    "implementation_local": {
+        "powershell_command": "",
+        "powershell_script": "if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppPrivacy')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppPrivacy' -Force -ErrorAction SilentlyContinue }; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppPrivacy' -Name 'LetAppsActivateWithVoiceAboveLock' -Value 2 -Type DWORD -Force",
+        "requires_admin": true,
+        "requires_reboot": false
+    },
+    "implementation_gpo": {
+        "inf_section": "[Registry Values]",
+        "inf_key": "MACHINE\\HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppPrivacy\\LetAppsActivateWithVoiceAboveLock",
+        "inf_value": "4,1",
+        "gpo_xml": "<RegistryValue name='LetAppsActivateWithVoiceAboveLock' type='REG_DWORD' value='2'/>"
+    },
+    "audit_logic": {
+        "powershell_script": "$val = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppPrivacy' -Name 'LetAppsActivateWithVoiceAboveLock' -ErrorAction SilentlyContinue).'LetAppsActivateWithVoiceAboveLock'; return ($val -eq 2)",
+        "expected_result": true
+    },
+    "remediation_rollback": {
+        "powershell_command": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppPrivacy' -Name 'LetAppsActivateWithVoiceAboveLock' -Force"
+    },
+    "tags": [
+        "admin-templates",
+        "cis",
+        "registry",
+        "automated"
+    ]
+}

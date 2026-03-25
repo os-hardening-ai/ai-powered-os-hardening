@@ -120,8 +120,9 @@ class InfoPipeline:
         if self.debug:
             print(f"[InfoPipeline] Complexity: {complexity}")
 
-        # Smart RAG decision
-        use_rag = self._should_use_rag(ctx.user_question, complexity)
+        # RAG: rag_builder yalnızca API'dan use_rag=True geldiğinde set edilir,
+        # dolayısıyla rag_builder mevcutsa her zaman kullan.
+        use_rag = self.rag_builder is not None
 
         if self.debug:
             print(f"[InfoPipeline] RAG usage: {use_rag}")
@@ -129,37 +130,51 @@ class InfoPipeline:
         # RAG retrieval (if needed)
         rag_chunks = 0
         rag_sources = []
+        print(f"[InfoPipeline] use_rag={use_rag}, rag_builder={'SET' if self.rag_builder else 'NONE'}")
         if use_rag and self.rag_builder:
             try:
-                # Get formatted context for LLM
-                rag_context = self.rag_builder.retrieve_context(ctx.user_question)
+                # Balanced retrieval: half from YAML rules, half from PDF benchmarks
+                rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
 
-                # Get raw results for metadata
-                raw_results = self.rag_builder.retrieve_raw(ctx.user_question)
-
-                if rag_context:
+                if rag_context and raw_results:
                     ctx.retrieved_context = rag_context
-                    rag_chunks = len(rag_context.split("\n\n")) if rag_context else 0
+                    rag_chunks = len(raw_results)
                     self.stats["rag_used_count"] += 1
 
                     # Extract source metadata
                     for result in raw_results:
                         metadata = result.get("metadata", {})
+                        section_id = metadata.get("section_id") or metadata.get("section") or ""
+                        section_title = metadata.get("section_title") or metadata.get("title") or ""
+                        if section_id and section_title and section_id != section_title:
+                            section = f"{section_id} - {section_title}"
+                        elif section_id:
+                            section = section_id
+                        elif section_title:
+                            section = section_title
+                        else:
+                            section = "N/A"
+                        chunk_text = result.get("text", "")
                         rag_sources.append({
                             "score": result.get("score", 0.0),
-                            "source": metadata.get("source", "CIS Benchmark"),
-                            "section": metadata.get("section", "N/A"),
-                            "text_preview": result.get("text", "")[:200] + "..."  # First 200 chars
+                            "source": metadata.get("benchmark_product") or metadata.get("source_id") or "CIS Benchmark",
+                            "section": section,
+                            "text": chunk_text[:500] if chunk_text else None,
                         })
 
-                    if self.debug:
-                        print(f"[InfoPipeline] RAG retrieved {rag_chunks} chunks")
-                        print(f"[InfoPipeline] RAG sources: {len(rag_sources)}")
+                    print(f"[InfoPipeline] RAG OK — {rag_chunks} chunks, {len(rag_sources)} sources")
+                else:
+                    print(f"[InfoPipeline] RAG returned empty — context={bool(rag_context)}, results={len(raw_results)}")
             except Exception as e:
-                if self.debug:
-                    print(f"[InfoPipeline] RAG failed: {e}")
+                print(f"[InfoPipeline] RAG ERROR: {e}")
         else:
             self.stats["rag_skipped_count"] += 1
+            print("[InfoPipeline] RAG skipped")
+
+        # RAG kaliteli context getirdiyse simple→medium yükselt
+        if complexity == "simple" and rag_chunks >= 2:
+            complexity = "medium"
+            print(f"[InfoPipeline] Upgraded simple→medium (rag_chunks={rag_chunks})")
 
         # Route based on complexity
         if complexity == "simple":
@@ -368,84 +383,3 @@ def handle_info_query(
     )
 
     return pipeline.handle(context)
-
-
-# ─────────────────────────────────────────────
-# Test & Examples
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    # Mock LLMs for testing
-    def mock_llm_small(prompt: str) -> str:
-        return "This is a SMALL model response (fast, cheap)."
-
-    def mock_llm_large(prompt: str) -> str:
-        return "This is a LARGE model response (powerful, expensive)."
-
-    # Mock RAG builder
-    class MockRAGBuilder:
-        def retrieve_context(self, question: str) -> Optional[str]:
-            if "ubuntu" in question.lower() or "ssh" in question.lower():
-                return "CIS Benchmark context:\n\n- SSH hardening steps...\n- Configure sshd_config..."
-            return None
-
-    print("="*70)
-    print("INFO PIPELINE - TEST")
-    print("="*70)
-
-    pipeline = InfoPipeline(
-        llm_small=mock_llm_small,
-        llm_large=mock_llm_large,
-        rag_builder=MockRAGBuilder(),
-        debug=True,
-    )
-
-    test_cases = [
-        # Generic (simple, no RAG)
-        ("Firewall nedir?", "simple", False),
-
-        # Specific (medium, with RAG)
-        ("Ubuntu 22.04'te SSH hardening nasıl yapılır?", "medium", True),
-
-        # Complex (complex, with RAG)
-        ("Zero Trust maturity level 3 için SSH, RDP ve firewall hardening scriptleri yaz", "complex", True),
-
-        # Generic educational (simple, no RAG)
-        ("SELinux nasıl çalışır?", "simple", False),
-    ]
-
-    for question, expected_complexity, expected_rag in test_cases:
-        print(f"\n{'─'*70}")
-        print(f"Question: {question}")
-        print(f"Expected: complexity={expected_complexity}, RAG={expected_rag}")
-
-        from llm.core.context import RequestContext
-        ctx = RequestContext(user_question=question)
-
-        result = pipeline.handle(ctx)
-
-        print(f"\n✅ RESULT:")
-        print(f"  Complexity: {result.complexity}")
-        print(f"  Model: {result.model_used}")
-        print(f"  RAG Used: {result.used_rag} (chunks: {result.rag_chunks})")
-        print(f"  Response Time: {result.response_time_s:.2f}s")
-        print(f"  Cost: ${result.estimated_cost:.4f}")
-        print(f"  Answer: {result.answer[:80]}...")
-
-        # Validation
-        complexity_ok = result.complexity == expected_complexity
-        rag_ok = result.used_rag == expected_rag
-
-        status = "✅ PASS" if (complexity_ok and rag_ok) else "⚠️ PARTIAL"
-        print(f"\nValidation: {status}")
-
-    print("\n" + "="*70)
-    print("STATISTICS")
-    print("="*70)
-    stats = pipeline.get_stats()
-    for key, value in stats.items():
-        print(f"  {key}: {value}")
-
-    print("\n" + "="*70)
-    print("TEST COMPLETE")
-    print("="*70)

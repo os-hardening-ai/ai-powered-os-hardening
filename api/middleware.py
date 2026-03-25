@@ -5,16 +5,20 @@ Additional Middleware for Enhanced API Functionality
 Includes:
 - Request ID tracking
 - Response metadata
+- Request logging
 """
 
 from __future__ import annotations
 import uuid
 import time
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+
+from log_manager import get_logger
+
+_request_logger = get_logger("api_requests")
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -77,7 +81,6 @@ class ResponseMetadataMiddleware(BaseHTTPMiddleware):
         # Add metadata headers
         response.headers["X-Process-Time-Ms"] = f"{process_time_ms:.2f}"
         response.headers["X-API-Version"] = self.version
-        response.headers["X-Content-Type-Options"] = "nosniff"  # Security
 
         return response
 
@@ -101,5 +104,34 @@ class ProviderHeadersMiddleware(BaseHTTPMiddleware):
 
         if hasattr(request.state, "rag_used"):
             response.headers["X-RAG-Used"] = str(request.state.rag_used)
+
+        return response
+
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """
+    Log every HTTP request to the api_requests log file.
+
+    Captures method, path, status_code, duration_ms, and request_id
+    (read from request.state.request_id set by RequestIDMiddleware).
+
+    Format:
+        method=POST path=/api/chat status=200 duration_ms=21080.5 request_id=req_abc123
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+
+        response = await call_next(request)
+
+        duration_ms = (time.time() - start_time) * 1000
+
+        request_id = getattr(request.state, "request_id", "unknown")
+
+        _request_logger.info(
+            f"method={request.method} path={request.url.path} "
+            f"status={response.status_code} duration_ms={duration_ms:.1f} "
+            f"request_id={request_id}"
+        )
 
         return response

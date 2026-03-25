@@ -1,0 +1,58 @@
+﻿{
+    "rule_id":  "2.2.14",
+    "title":  "Ensure \u0027Create symbolic links\u0027 is set to \u0027Administrators\u0027",
+    "description":  "This policy setting determines which users or groups have the right described by this rule. The recommended state for this setting is: Administrators.",
+    "cis_level":  1,
+    "category":  "Local Policies",
+    "subcategory":  "User Rights Assignment",
+    "applies_to":  [
+                       "Windows 11",
+                       "Windows 10",
+                       "Windows Server 2022",
+                       "Windows Server 2019",
+                       "Windows Server 2016"
+                   ],
+    "automated":  true,
+    "registry_config":  null,
+    "gpo_config":  {
+                       "policy_path":  "Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Local Policies\\User Rights Assignment",
+                       "setting_name":  "Create symbolic links",
+                       "setting_value":  "Administrators",
+                       "admx_category":  "UserRightsAssignment"
+                   },
+    "implementation_local":  {
+                                 "powershell_command":  null,
+                                 "powershell_script":  "$seceditExport = \"$env:TEMP\\secpol_export.cfg\"\r\n$seceditImport = \"$env:TEMP\\secpol_import.cfg\"\r\nsecedit /export /cfg $seceditExport /quiet\r\n$content = Get-Content $seceditExport\r\n$replaced = $false\r\n$newContent = @()\r\nforeach ($line in $content) {\r\n    if ($line -match \u0027^SeCreateSymbolicLinkPrivilege\\s*=\u0027) {\r\n        $newContent += \u0027SeCreateSymbolicLinkPrivilege = *S-1-5-32-544\u0027\r\n        $replaced = $true\r\n    } else {\r\n        $newContent += $line\r\n    }\r\n}\r\nif (-not $replaced) {\r\n    $idx = -1\r\n    for ($i = 0; $i -lt $newContent.Count; $i++) {\r\n        if ($newContent[$i] -match \u0027^\\[Privilege Rights\\]\u0027) { $idx = $i; break }\r\n    }\r\n    if ($idx -ge 0) {\r\n        $before = $newContent[0..$idx]\r\n        $after = if ($idx + 1 -lt $newContent.Count) { $newContent[($idx+1)..($newContent.Count-1)] } else { @() }\r\n        $newContent = $before + \u0027SeCreateSymbolicLinkPrivilege = *S-1-5-32-544\u0027 + $after\r\n    }\r\n}\r\n$newContent | Set-Content $seceditImport -Force\r\nsecedit /configure /db secedit.sdb /cfg $seceditImport /quiet\r\nRemove-Item $seceditExport, $seceditImport -Force -ErrorAction SilentlyContinue",
+                                 "requires_admin":  true,
+                                 "requires_reboot":  false
+                             },
+    "implementation_gpo":  {
+                               "inf_section":  "[Privilege Rights]",
+                               "inf_key":  "SeCreateSymbolicLinkPrivilege",
+                               "inf_value":  "*S-1-5-32-544"
+                           },
+    "audit_logic":  {
+                        "powershell_script":  "try {\r\n    $tempFile = \"$env:TEMP\\secpol_audit_$([guid]::NewGuid().ToString(\u0027N\u0027)).cfg\"\r\n    secedit /export /cfg $tempFile /quiet 2\u003e\u00261 | Out-Null\r\n    if (Test-Path $tempFile) {\r\n        $content = Get-Content $tempFile -Raw\r\n        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue\r\n        if ($content -match \u0027SeCreateSymbolicLinkPrivilege\\s*=\\s*(.*)\u0027) {\r\n            $currentSids = ($Matches[1].Trim() -split \u0027,\u0027) | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne \u0027\u0027 } | Sort-Object\r\n            $expectedSids = @(\u0027*S-1-5-32-544\u0027) | Sort-Object\r\n            $diff = Compare-Object $currentSids $expectedSids\r\n            return ($null -eq $diff)\r\n        }\r\n        return $false\r\n    }\r\n    return $false\r\n} catch {\r\n    return $false\r\n}",
+                        "expected_result":  true
+                    },
+    "remediation_rollback":  null,
+    "impact":  {
+                   "severity":  "medium",
+                   "description":  "Changing this user right may affect compatibility with applications and services that require the privilege."
+               },
+    "rationale":  "Restricting user rights assignments reduces the attack surface and helps prevent unauthorized access or actions on the system.",
+    "default_value":  {
+                          "standalone":  "Varies",
+                          "domain_joined":  "Varies"
+                      },
+    "references":  [
+                       "https://www.cisecurity.org/benchmark/microsoft_windows_desktop/"
+                   ],
+    "tags":  [
+                 "local-policy",
+                 "user-rights",
+                 "security",
+                 "cis",
+                 "level-1"
+             ]
+}

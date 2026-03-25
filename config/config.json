@@ -1,44 +1,219 @@
 {
   "app": {
-    "name": "OS Hardening RAG",
+    "name": "AI-Powered OS Hardening",
+    "version": "1.0.0",
     "env": "dev",
-    "language": "tr"
+    "language": "tr",
+    "debug": true,
+    "log_level": "INFO"
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "cors": {
+      "enabled": true,
+      "allow_origins": [
+        "*"
+      ],
+      "allow_methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    "rate_limit": {
+      "enabled": true,
+      "requests_per_minute": 100,
+      "requests_per_hour": 2000
+    }
   },
   "rag": {
+    "enabled": true,
+    "chunk_method": "semantic",
+    "late_chunking": {
+      "enabled": false,
+      "window_size": 3,
+      "stride": 1,
+      "coarse_k_factor": 3,
+      "fine_k": 5
+    },
+    "retrieval": {
+      "top_k": 3,
+      "min_score": 0.5,
+      "max_results": 6
+    },
     "source_documents": [
       {
         "id": "cis_ubuntu_24_04",
+        "name": "CIS Ubuntu Linux 24.04 LTS Benchmark",
         "type": "pdf",
         "path": "data/source/CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf",
-        "chunker": "pdf_semantic",
-        "metadata_strategy": "section_based"
-      }
-    ],
-    "rules": {
-      "ubuntu_24_04": {
+        "enabled": true,
+        "chunker": "cis_section",
+        "priority": 1
+      },
+      {
+        "id": "cis_windows_2025",
+        "name": "CIS Microsoft Windows Server 2025 Benchmark",
+        "type": "pdf",
+        "path": "data/source/CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf",
+        "enabled": true,
+        "chunker": "cis_section",
+        "priority": 2
+      },
+      {
+        "id": "ubuntu_rules_yaml",
+        "name": "Ubuntu 24.04 CIS Hardening Rules",
+        "type": "yaml",
         "path": "data/rules/ubuntu_24_04_rules.yaml",
-        "enabled": true
+        "enabled": true,
+        "chunker": "yaml_rules",
+        "priority": 3
+      },
+      {
+        "id": "cis_windows_11_desktop",
+        "name": "CIS Microsoft Windows 11 Stand-alone Benchmark",
+        "type": "pdf",
+        "path": "data/source/CIS_Microsoft_Windows_11_Stand-alone_Benchmark_v4.0.0.pdf",
+        "enabled": true,
+        "chunker": "cis_section",
+        "priority": 4
+      },
+      {
+        "id": "windows_11_rules_yaml",
+        "name": "Windows 11 CIS Hardening Rules",
+        "type": "yaml",
+        "path": "data/rules/windows_11_desktop_rules.yaml",
+        "enabled": true,
+        "chunker": "yaml_rules",
+        "priority": 5
+      },
+      {
+        "id": "windows_server_2025_rules_yaml",
+        "name": "Windows Server 2025 CIS Hardening Rules",
+        "type": "yaml",
+        "path": "data/rules/windows_server_2025_rules.yaml",
+        "enabled": false,
+        "chunker": "yaml_rules",
+        "priority": 6
       }
-    }
+    ]
   },
   "embedding": {
-  "provider": "novita",
-  "model_name": "qwen/qwen3-embedding-8b",
-  "dim": 4096,
-  "base_url": "https://api.novita.ai/openai"
+    "provider": "novita",
+    "model_name": "qwen/qwen3-embedding-8b",
+    "dim": 4096,
+    "base_url": "https://api.novita.ai/openai",
+    "batch_size": 100,
+    "cache_enabled": false
   },
   "vector_store": {
     "provider": "qdrant",
-    "index_path": "data/indexes/ubuntu_24_04/faiss.index",
-    "metadata_path": "data/indexes/ubuntu_24_04/metadata.json",
     "qdrant": {
       "url": "https://286d1f0c-9411-4842-b153-a571d8af4479.eu-west-2-0.aws.cloud.qdrant.io",
-      "collection_name": "cis_ubuntu_24_04"
+      "collection_name": "cis_ubuntu_2404_windows11_winserver2025_with_rules",
+      "timeout": 120.0,
+      "batch_size": 100
     }
   },
   "llm": {
-    "provider": "dummy",
-    "model_name": "gpt-4o-mini",
-    "api_key": null
+    "default_provider": "groq",
+    "timeout": 60,
+    "max_retries": 3,
+    "providers": {
+      "groq": {
+        "enabled": true,
+        "base_url": "https://api.groq.com/openai/v1",
+        "models": {
+          "small": {
+            "name": "llama-3.1-8b-instant",
+            "max_tokens": 2048,
+            "temperature": 0.3
+          },
+          "large": {
+            "name": "llama-3.3-70b-versatile",
+            "max_tokens": 4096,
+            "temperature": 0.2
+          }
+        }
+      },
+      "openai": {
+        "enabled": false,
+        "models": {
+          "small": {
+            "name": "gpt-4o-mini",
+            "max_tokens": 2048,
+            "temperature": 0.3
+          },
+          "large": {
+            "name": "gpt-4o",
+            "max_tokens": 4096,
+            "temperature": 0.2
+          }
+        }
+      },
+      "ollama": {
+        "enabled": false,
+        "base_url": "http://localhost:11434",
+        "models": {
+          "small": {
+            "name": "llama3.1:8b",
+            "max_tokens": 2048,
+            "temperature": 0.3
+          },
+          "large": {
+            "name": "llama3.1:70b",
+            "max_tokens": 4096,
+            "temperature": 0.2
+          }
+        }
+      },
+      "novita": {
+        "enabled": true,
+        "base_url": "https://api.novita.ai/openai",
+        "models": {
+          "small": {
+            "name": "meta-llama/llama-3.1-8b-instruct",
+            "max_tokens": 8192,
+            "temperature": 0.3
+          },
+          "large": {
+            "name": "deepseek/deepseek-v3-0324",
+            "max_tokens": 8192,
+            "temperature": 0.2
+          }
+        }
+      }
+    }
+  },
+  "pipeline": {
+    "enable_debug_logs": false,
+    "enable_judge_step": true,
+    "enable_correction_step": true,
+    "safety_classification": {
+      "enabled": true,
+      "method": "llm"
+    },
+    "intent_detection": {
+      "enabled": true,
+      "method": "hybrid"
+    },
+    "generation": {
+      "enabled": true,
+      "use_rag": true
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics_retention_hours": 24,
+    "log_requests": true,
+    "log_errors": true
+  },
+  "data_paths": {
+    "root": ".",
+    "data": "data",
+    "source_documents": "data/source",
+    "cache": "data/cache",
+    "logs": "logs",
+    "models": "llm/ml/models"
   }
 }

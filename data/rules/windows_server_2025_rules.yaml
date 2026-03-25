@@ -1,0 +1,11 @@
+metadata:
+  os: windows_server_2025
+  benchmark: CIS Microsoft Windows Server 2025 Benchmark
+  benchmark_version: v2.0.0
+  generated: '2026-03-25'
+  total_rules: 0
+  auto_remediate_count: 0
+  manual_review_count: 0
+  with_remediation: 0
+  description: 'CIS Microsoft Windows Server 2025 Benchmark v2.0.0 security hardening rules. Her kural: title, description, registry_path/policy_setting, config_files, audit/remediation PowerShell script icerikleri ve tags icermektedir.'
+rules: []

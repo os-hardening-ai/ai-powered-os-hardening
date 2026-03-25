@@ -17,8 +17,10 @@ pandas==2.2.3
 beautifulsoup4==4.12.3
 
 # --- LLM / RAG ---
+groq
 openai==1.55.3
 tiktoken==0.8.0
+cohere==5.20.1
 langchain==0.3.9
 langchain-community==0.3.8
 langchain-core==0.3.21
@@ -39,6 +41,7 @@ faiss-cpu==1.9.0.post1
 
 # --- PDF read (tekini seç: PyMuPDF yeter) ---
 PyMuPDF==1.24.14
+pymupdf4llm
 pytest==8.3.3
 pytest-asyncio==0.24.0
 rich==13.9.4
@@ -48,3 +51,12 @@ matplotlib==3.9.2
 
 # opsiyonel excel işleri
 openpyxl==3.1.5
+
+# Prometheus + OpenTelemetry Monitoring
+prometheus-client==0.24.1
+prometheus-fastapi-instrumentator==7.1.0
+opentelemetry-api==1.40.0
+opentelemetry-sdk==1.40.0
+opentelemetry-exporter-otlp-proto-grpc==1.40.0
+opentelemetry-instrumentation-fastapi==0.61b0
+opentelemetry-instrumentation-httpx==0.61b0

@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-import sys
-import os
 import asyncio
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
-# Add project root to path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Import LLM modules (now llm is importable as a package)
 from llm.core.context import RequestContext
 from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.clients import get_llm_clients
+from llm.rag.integration import RAGContextBuilder
 
 # Import security utilities
 from api.security import validate_chat_input, sanitize_output
@@ -25,7 +18,11 @@ from api.security import validate_chat_input, sanitize_output
 from api.errors import APIError, ErrorCode
 
 # Import streaming support
-from api.streaming import stream_chat_response, dummy_token_generator
+from api.streaming import stream_chat_response
+
+from log_manager import get_logger
+
+_conv_logger = get_logger("conversations")
 
 router = APIRouter()
 
@@ -66,8 +63,8 @@ class ChatRequest(BaseModel):
         examples=["medium"]
     )
     use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı", examples=[True])
-    rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20, examples=[5])
-    rag_min_score: float = Field(0.7, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.7])
+    rag_top_k: int = Field(3, description="RAG'den kaç chunk getirileceği (her kaynak için)", ge=1, le=20, examples=[3])
+    rag_min_score: float = Field(0.5, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.5])
     stream: bool = Field(False, description="Enable streaming response (SSE)", examples=[False])
     timeout: Optional[int] = Field(60, description="Request timeout in seconds (default: 60s, max: 300s)", ge=1, le=300, examples=[60])
 
@@ -78,7 +75,9 @@ class ChatRequest(BaseModel):
         # Use security module for validation
         # check_injection=False because LLM providers (Groq, OpenAI) already handle this
         # We keep input length validation to prevent API quota abuse
-        validate_chat_input(v, max_length=5000, check_injection=False)
+        is_valid, error_message = validate_chat_input(v, max_length=5000, check_injection=False)
+        if not is_valid:
+            raise ValueError(error_message)
         return v.strip()
 
 
@@ -87,7 +86,8 @@ class RAGSource(BaseModel):
     id: str
     score: float
     source: str
-    section: str
+    section: str = "N/A"
+    text: Optional[str] = Field(None, description="Chunk metni (ilk 500 karakter)")
 
 
 class ChatResponse(BaseModel):
@@ -153,12 +153,26 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
 
+        # RAG builder — sadece use_rag=True ise baslat
+        rag_builder = None
+        if payload.use_rag:
+            try:
+                rag_builder = RAGContextBuilder(
+                    top_k=payload.rag_top_k,
+                    min_score=payload.rag_min_score,
+                )
+                _conv_logger.debug(f"[RAG] Builder OK top_k={payload.rag_top_k} min_score={payload.rag_min_score}")
+            except Exception as e:
+                _conv_logger.warning(f"[RAG] Builder FAILED: {e}")
+        else:
+            _conv_logger.debug("[RAG] use_rag=False skipped")
+
         # Pipeline'i calistir (4-layer security pipeline)
-        # SecurePipelineV2 requires ultra_fast, small, large models
         pipeline = SecurePipelineV2(
-            llm_ultra_fast=llm_small,  # Use small model for fast safety check
+            llm_ultra_fast=llm_small,
             llm_small=llm_small,
             llm_large=llm_large,
+            rag_builder=rag_builder,
             debug=False,
         )
 
@@ -185,15 +199,24 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                         RAGSource(
                             id=f"source_{idx}",
                             score=source_data.get("score", 0.0),
-                            source=source_data.get("source", "Unknown"),
-                            section=source_data.get("section", "Unknown"),
+                            source=source_data.get("source") or "Unknown",
+                            section=source_data.get("section") or "N/A",
+                            text=source_data.get("text"),
                         )
                     )
             except Exception as e:
-                print(f"[ChatAPI] Failed to parse RAG sources: {e}")
+                _conv_logger.warning(f"[ChatAPI] Failed to parse RAG sources: {e}")
 
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
+
+        # Log conversation (question + answer)
+        _conv_logger.info(
+            f"--- [{ctx.request_id}] intent={result.intent.type if result.intent else 'unknown'} "
+            f"path={result.layer_path} total={result.total_time_s:.3f}s ---"
+        )
+        _conv_logger.info(f"Q: {payload.question}")
+        _conv_logger.info(f"A: {sanitized_answer}")
 
         # Response olustur
         return ChatResponse(
@@ -210,8 +233,9 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             estimated_cost=result.estimated_cost,
         )
 
+    except APIError:
+        raise
     except Exception as e:
-        # Use standardized error handling
         raise APIError(
             status_code=500,
             error_code=ErrorCode.PIPELINE_ERROR,
@@ -256,11 +280,23 @@ async def chat_stream(payload: ChatRequest):
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
 
-        # Pipeline (non-streaming for now - streaming LLM support would require changes)
+        # RAG builder
+        rag_builder = None
+        if payload.use_rag:
+            try:
+                rag_builder = RAGContextBuilder(
+                    top_k=payload.rag_top_k,
+                    min_score=payload.rag_min_score,
+                )
+            except Exception as e:
+                _conv_logger.warning(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+
+        # Pipeline
         pipeline = SecurePipelineV2(
             llm_ultra_fast=llm_small,
             llm_small=llm_small,
             llm_large=llm_large,
+            rag_builder=rag_builder,
             debug=False,
         )
 
@@ -304,11 +340,3 @@ async def chat_stream(payload: ChatRequest):
         )
 
 
-@router.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "service": "chat_api",
-        "rag_available": True,  # RAG integration mevcut
-    }
