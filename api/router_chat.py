@@ -161,11 +161,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
                 )
-                print(f"[RAG] Builder OK top_k={payload.rag_top_k} min_score={payload.rag_min_score}")
+                _conv_logger.debug(f"[RAG] Builder OK top_k={payload.rag_top_k} min_score={payload.rag_min_score}")
             except Exception as e:
-                print(f"[RAG] Builder FAILED: {e}")
+                _conv_logger.warning(f"[RAG] Builder FAILED: {e}")
         else:
-            print("[RAG] use_rag=False skipped")
+            _conv_logger.debug("[RAG] use_rag=False skipped")
 
         # Pipeline'i calistir (4-layer security pipeline)
         pipeline = SecurePipelineV2(
@@ -205,7 +205,7 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                         )
                     )
             except Exception as e:
-                print(f"[ChatAPI] Failed to parse RAG sources: {e}")
+                _conv_logger.warning(f"[ChatAPI] Failed to parse RAG sources: {e}")
 
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
@@ -288,7 +288,7 @@ async def chat_stream(payload: ChatRequest):
                     min_score=payload.rag_min_score,
                 )
             except Exception as e:
-                print(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+                _conv_logger.warning(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
 
         # Pipeline
         pipeline = SecurePipelineV2(

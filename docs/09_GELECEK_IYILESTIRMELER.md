@@ -2,8 +2,8 @@
 
 **Proje:** AI-Powered OS Hardening System
 **Hazırlayan:** Development Team
-**Tarih:** 2025-12-24 (Updated)
-**Version:** v1.0.0 → v2.0.0 Roadmap
+**Tarih:** 2026-03-25 (Updated)
+**Version:** v1.0.2 → v2.0.0 Roadmap
 
 ---
 
@@ -94,9 +94,9 @@ New Features:
 
 ---
 
-## Kısa Vadeli İyileştirmeler (v1.1-1.3)
+## Kısa Vadeli İyileştirmeler (v1.1-1.3) — Q2 2026
 
-### 🚀 v1.1.0 - Response Caching & Streaming (2-4 hafta)
+### 🚀 v1.1.0 - Response Caching & Reliability (2-4 hafta)
 
 #### 1. Redis Response Caching ⭐⭐⭐⭐⭐
 
@@ -257,29 +257,26 @@ Overall latency reduction: ~200ms avg
 
 ---
 
-### 🔧 v1.2.0 - Quality & Reliability (3-5 hafta)
+### 🔧 v1.2.0 - Quality & Intent (3-5 hafta)
 
 #### 4. Fine-tuned Intent Detector ⭐⭐⭐
 
 **Mevcut Durum:**
-- Groq Llama 8B zero-shot: %89 accuracy
-- Bazı ambiguous cases yanlış route ediliyor
+- Local ML (Logistic Regression + TF-IDF): %90.48 accuracy, 5–10ms
+- 1677 eğitim örneği, 7 kategori
 
 **Hedef:**
-- Fine-tuned model: %95+ accuracy
-- Daha hızlı inference (smaller model)
+- Fine-tuned model veya daha büyük dataset: %95+ accuracy
+- Yeni kategoriler: incident_analysis, compliance_check
 
 **Dataset:**
 ```
-1000 labeled queries:
-- 400 info_request
-- 300 action_request
-- 200 smalltalk
-- 100 out_of_scope
+Mevcut: 1677 örnekli intent_training_dataset.csv
+Hedef:  3000+ örnekle genişletme
 
 Training approach:
-- LoRA fine-tuning on Llama 8B
-- Or: Distill to smaller model (1B params)
+- Mevcut Logistic Regression + TF-IDF pipeline'ı büyüt
+- Ya da: small transformer (distilbert) LoRA fine-tune
 ```
 
 **Beklenen Impact:**
@@ -344,7 +341,7 @@ Reliability: 99.5% → 99.9%
 
 ---
 
-### 📈 v1.3.0 - Advanced Features (5-7 hafta)
+### 📈 v1.3.0 - Advanced Features (5-7 hafta) — Q3 2026
 
 #### 6. Multi-turn Conversation History ⭐⭐⭐⭐⭐
 
@@ -429,7 +426,7 @@ Complexity: Higher (need session management)
 
 ---
 
-## Orta Vadeli İyileştirmeler (v1.5-1.9)
+## Orta Vadeli İyileştirmeler (v1.5-1.9) — Q4 2026
 
 ### 🤖 v1.5.0 - Multi-Agent System (8-12 hafta)
 
@@ -532,7 +529,7 @@ Quality optimization
 
 ---
 
-## Uzun Vadeli İyileştirmeler (v2.0+)
+## Uzun Vadeli İyileştirmeler (v2.0+) — 2027+
 
 ### 🌍 v2.0.0 - Enterprise Features (16-24 hafta)
 
@@ -660,57 +657,44 @@ POST /api/feedback
 
 ## Implementation Plan
 
-### Q1 2025 (Ocak-Mart)
+### Q2 2026 (Nisan-Haziran)
 
-**v1.1.0 Release (Şubat başı)**
-- ✅ RAG Source Metadata (DONE!)
-- ✅ Advanced Analytics (DONE!)
-- ⏳ Redis Caching
-- ⏳ Streaming Responses
-- ⏳ RAG Pre-warming
+**v1.1.0 Release (Nisan)**
+- ⏳ Redis Caching (embedding + response cache)
+- ⏳ RAG Pre-warming (hot query cache)
+- ⏳ Error retry logic (exponential backoff)
 
 **Expected Metrics:**
 - Cache hit rate: 25-30%
-- Time to first token: <200ms
-- User satisfaction: +40%
+- Overall latency: %20 reduction
+- Error rate: <0.5%
 
 ---
 
-### Q2 2025 (Nisan-Haziran)
+### Q3 2026 (Temmuz-Eylül)
 
-**v1.2.0 Release (Nisan)**
-- Error retry logic
-- Fine-tuned intent detector
-- Improved error messages
+**v1.2.0 Release (Temmuz)**
+- Fine-tuned intent detector (lokal LLM LoRA)
+- Improved error messages (Türkçe lokalizasyon)
 
-**v1.3.0 Release (Haziran)**
-- Multi-turn conversation
-- Session management
+**v1.3.0 Release (Eylül)**
+- Multi-turn conversation (session management)
 - Context-aware responses
 
 **Expected Metrics:**
 - Intent accuracy: 95%+
-- Error rate: <0.5%
 - Conversation engagement: +60%
 
 ---
 
-### Q3 2025 (Temmuz-Eylül)
+### Q4 2026 (Ekim-Aralık)
 
-**v1.5.0 Release (Ağustos)**
+**v1.5.0 Release (Ekim)**
 - Multi-agent system (beta)
 - Specialist agents (SSH, Firewall, Audit)
 - Consensus mechanism
 
-**Expected Metrics:**
-- Response accuracy: 98%+
-- Complex query handling: +50%
-
----
-
-### Q4 2025 (Ekim-Aralık)
-
-**v2.0.0 Release (Kasım)**
+**v2.0.0 Release (Aralık)**
 - Kubernetes deployment
 - Horizontal scaling
 - User feedback loop
@@ -805,5 +789,5 @@ Bu roadmap, **v1.0.0**'dan **v2.0.0**'a kadar sistemi **enterprise-ready** seviy
 ---
 
 **Hazırlayan:** AI-Powered OS Hardening Development Team
-**Son Güncelleme:** 2025-01-08
-**Next Review:** 2025-02-01
+**Son Güncelleme:** 2026-03-25
+**Next Review:** 2026-07-01

@@ -13,6 +13,10 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 import uuid
 
+from log_manager import get_logger
+
+_logger = get_logger("api_errors")
+
 
 class ErrorCode(str, Enum):
     """Standard error codes"""
@@ -140,8 +144,7 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
     """
     request_id = f"req_{uuid.uuid4().hex[:16]}"
 
-    # Log the actual error (in production, use proper logging)
-    print(f"[ERROR] {request_id}: {type(exc).__name__}: {str(exc)}")
+    _logger.error(f"{request_id}: {type(exc).__name__}: {str(exc)}")
 
     error_detail = ErrorDetail(
         code=ErrorCode.INTERNAL_ERROR,
