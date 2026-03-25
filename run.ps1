@@ -1,25 +1,39 @@
-# Windows PowerShell — kullanım: .\run.ps1
-# Execution policy hatası alırsan:
+# Windows PowerShell — kullanim: .\run.ps1
+# Execution policy hatasi alirsan:
 #   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 if (-not (Test-Path .env)) {
-    Write-Error "Hata: .env dosyası bulunamadı. Önce çalıştır: cp .env.example .env"
+    Write-Error "Hata: .env dosyasi bulunamadi. Once calistir: cp .env.example .env"
     exit 1
 }
 
-Write-Host "Calisan container varsa durduruluyor..."
-docker compose down 2>$null
+$HASH_FILE = ".requirements_hash"
+$REQ_FILE  = "requirements-python311.txt"
+$CURRENT_HASH = (Get-FileHash $REQ_FILE -Algorithm MD5).Hash
 
-Write-Host "Dangling image'lar temizleniyor..."
-docker image prune -f
+$requirements_changed = $true
+if ((Test-Path $HASH_FILE) -and ((Get-Content $HASH_FILE -Raw).Trim() -eq $CURRENT_HASH)) {
+    $requirements_changed = $false
+}
 
-Write-Host "Docker image build ediliyor ve container baslatiliyor..."
+if ($requirements_changed) {
+    Write-Host "[requirements degisti] Container ve dangling image'lar temizleniyor..."
+    docker compose down 2>$null
+    docker image prune -f
+    Write-Host "Image yeniden build ediliyor (pip yeniden kurulacak)..."
+} else {
+    Write-Host "[requirements ayni] Sadece kod katmani yeniden build edilecek (~10s)..."
+}
+
 docker compose up --build -d
 
+if ($requirements_changed) {
+    $CURRENT_HASH | Out-File -FilePath $HASH_FILE -NoNewline -Encoding ascii
+}
+
 Write-Host ""
-Write-Host "API ayağa kalktı -> http://localhost:8000"
-Write-Host "Swagger UI       -> http://localhost:8000/docs"
-Write-Host "Health           -> http://localhost:8000/health"
+Write-Host "API -> http://localhost:8000"
+Write-Host "Docs -> http://localhost:8000/docs"
 Write-Host ""
-Write-Host "Loglar icin: docker compose logs -f"
-Write-Host "Durdurmak icin:  docker compose down"
+Write-Host "Loglar : docker compose logs -f"
+Write-Host "Durdur : docker compose down"

@@ -38,15 +38,20 @@ async def rag_search(
     scores = [round(r.score, 4) for r in results]
     top_score = max(scores) if scores else 0.0
 
+    yaml_count = sum(1 for r in results if r.metadata.get("doc_type") == "yaml_rule")
+    pdf_count  = sum(1 for r in results if r.metadata.get("doc_type") == "cis_benchmark")
+
     _rag_logger.info(
         f"query=\"{payload.query}\" top_k={payload.top_k} min_score={payload.min_score} "
-        f"late_chunking={lc.enabled} results={len(results)} top_score={top_score} elapsed={elapsed_s:.3f}s"
+        f"late_chunking={lc.enabled} results={len(results)} "
+        f"yaml={yaml_count} pdf={pdf_count} top_score={top_score} elapsed={elapsed_s:.3f}s"
     )
-    if scores:
-        _rag_logger.info(f"scores={scores}")
 
     return RagSearchResponse(
         query=payload.query,
-        top_k=payload.top_k,
+        top_k_per_source=payload.top_k,
+        total_returned=len(results),
+        yaml_count=yaml_count,
+        pdf_count=pdf_count,
         results=results,
     )

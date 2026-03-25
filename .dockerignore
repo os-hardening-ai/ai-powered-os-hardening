@@ -35,3 +35,18 @@ docs/
 
 # Embedding cache — runtime'da yeniden üretilir
 data/cache/
+
+# CIS PDF kaynak dosyaları — sadece build_index.py için gerekli,
+# runtime'da Qdrant'tan sorgulanır, container'a kopyalanması gerekmez
+data/source/
+
+# Kural üretme araçları — container'da kullanılmaz
+KURALLAR/
+
+# Geliştirme araçları
+scripts/build_index.py
+*.md
+archive/
+
+# Deploy scripti hash dosyasi
+.requirements_hash
