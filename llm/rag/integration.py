@@ -25,14 +25,22 @@ class RAGContextBuilder:
     Kullanıcı sorusuna göre ilgili doküman chunk'larını getirir.
     """
 
-    def __init__(self, top_k: int = 5, min_score: float = 0.5):
+    def __init__(self, top_k: int = 5, min_score: float = None):
         """
         Args:
             top_k: Kaç tane chunk getirileceği
             min_score: Minimum relevance score (altındakiler filtrelenir)
         """
         self.top_k = top_k
-        self.min_score = min_score
+
+        if min_score is None:
+            try:
+                from config.config_loader import get_config
+                self.min_score = get_config().rag.retrieval.get("min_score", 0.5)
+            except Exception:
+                self.min_score = 0.5
+        else:
+            self.min_score = min_score
 
         if get_embedding_client is None or get_vector_store is None:
             raise RuntimeError("RAG dependencies not available. Check core.embeddings and core.vector_store imports")

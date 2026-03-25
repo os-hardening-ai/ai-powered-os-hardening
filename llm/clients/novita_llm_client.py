@@ -18,13 +18,19 @@ class NovitaLLMClient:
     Base URL: https://api.novita.ai/openai
     """
 
+    # Karakter başına yaklaşık token sayısı (Türkçe/İngilizce karışık için)
+    _CHARS_PER_TOKEN = 4
+    # Model context limitinden güvenli tampon
+    _SAFETY_BUFFER = 256
+
     def __init__(
         self,
         model_name: str,
         api_key: str,
         temperature: float = 0.3,
-        max_tokens: int = 65536,
+        max_tokens: int = 8192,
         base_url: str = "https://api.novita.ai/openai",
+        context_limit: int = 16384,
     ) -> None:
         if not api_key:
             raise RuntimeError(
@@ -34,18 +40,26 @@ class NovitaLLMClient:
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.context_limit = context_limit
         self._client = OpenAI(api_key=api_key, base_url=base_url)
 
         print(f"[OK] Novita LLM - Model: {model_name}")
 
+    def _safe_max_tokens(self, prompt: str) -> int:
+        """Input boyutuna göre context sınırını aşmayan max_tokens hesaplar."""
+        estimated_input = len(prompt) // self._CHARS_PER_TOKEN
+        available = self.context_limit - estimated_input - self._SAFETY_BUFFER
+        return max(256, min(self.max_tokens, available))
+
     def __call__(self, prompt: str) -> str:
         """Modele prompt gönder ve cevap al."""
         try:
+            actual_max_tokens = self._safe_max_tokens(prompt)
             response = self._client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.temperature,
-                max_tokens=self.max_tokens,
+                max_tokens=actual_max_tokens,
             )
 
             content = response.choices[0].message.content
@@ -79,6 +93,7 @@ def get_small_novita_llm() -> NovitaLLMClient:
         api_key=api_key,
         temperature=SMALL_MODEL_TEMPERATURE,
         max_tokens=MAX_TOKENS,
+        context_limit=16384,
     )
 
 
@@ -91,4 +106,5 @@ def get_large_novita_llm() -> NovitaLLMClient:
         api_key=api_key,
         temperature=LARGE_MODEL_TEMPERATURE,
         max_tokens=MAX_TOKENS,
+        context_limit=16384,
     )

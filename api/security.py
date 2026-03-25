@@ -204,8 +204,13 @@ def sanitize_output(output: str, remove_sensitive: bool = True) -> str:
         # API keys pattern
         sanitized = re.sub(r'(api[_-]?key|password|secret|token)\s*[:=]\s*[^\s]+', '[REDACTED]', sanitized, flags=re.IGNORECASE)
         
-        # Email pattern (openssh.com gibi teknik alan adları hariç)
-        sanitized = re.sub(r'\b[A-Za-z0-9._%+-]+@(?!openssh\.com\b)[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', sanitized)
+        # Email pattern (teknik crypto/SSH domain'leri hariç)
+        _TECH_DOMAINS = r'openssh\.com|libssh\.org|libgcrypt\.org|gnupg\.org|ietf\.org'
+        sanitized = re.sub(
+            r'\b[A-Za-z0-9._%+-]+@(?!' + _TECH_DOMAINS + r'\b)[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+            '[EMAIL]',
+            sanitized
+        )
         
         # IP addresses
         sanitized = re.sub(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', '[IP_ADDRESS]', sanitized)

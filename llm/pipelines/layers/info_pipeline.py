@@ -171,6 +171,11 @@ class InfoPipeline:
             self.stats["rag_skipped_count"] += 1
             print("[InfoPipeline] RAG skipped")
 
+        # RAG kaliteli context getirdiyse simple→medium yükselt
+        if complexity == "simple" and rag_chunks >= 2:
+            complexity = "medium"
+            print(f"[InfoPipeline] Upgraded simple→medium (rag_chunks={rag_chunks})")
+
         # Route based on complexity
         if complexity == "simple":
             result = self._simple_path(ctx)

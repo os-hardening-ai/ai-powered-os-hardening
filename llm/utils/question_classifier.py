@@ -55,6 +55,12 @@ class QuestionClassifier:
         # "nasıl" soruları genelde medium
         r'\b(nasıl.*güvenli|nasıl.*yapılır|how.*to)\b',
 
+        # Türkçe hardening fiilleri
+        r'\b(s[ıi]k[ıi]laşt[ıi]r|güçlendir|harden|koru[mn]|yapılandır|configure|secure)\b',
+
+        # Güvenlik araçları / servisler
+        r'\b(ssh|rdp|firewall|sudo|ufw|selinux|apparmor|auditd|sysctl)\b',
+
         # Spesifik servis yapılandırma
         r'\b(ssh.*config|ssh.*yapılandır|firewall.*rule|rdp.*hardening)\b',
         r'\b(log.*rotation|backup.*strategy)\b',
@@ -97,9 +103,9 @@ class QuestionClassifier:
                 return "medium"
 
         # ─── DEFAULT: Kelime sayısına göre ───
-        # Kısa sorular (4-10 kelime) → simple
+        # Kısa sorular (4-10 kelime) → medium (security chatbot için)
         if word_count <= 10:
-            return "simple"
+            return "medium"
 
         # Orta uzunluk (11-20 kelime) → medium
         elif word_count <= 20:

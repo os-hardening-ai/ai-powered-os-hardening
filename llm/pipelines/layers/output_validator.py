@@ -213,11 +213,24 @@ ORNEK:
                 if line.strip() and not line.strip().startswith("#")
             ]
 
-            # For now, we don't auto-correct (can be added later)
+            needs_correction = len(issues) > 2  # If 3+ issues, correction recommended
+            corrected_output = None
+
+            if needs_correction and self.llm:
+                issues_text = "\n".join(f"- {i}" for i in issues)
+                fix_prompt = (
+                    f"Bu güvenlik cevabında sorunlar tespit edildi:\n{issues_text}\n\n"
+                    f"Cevabı aşağıdaki sorunları gidererek düzelt:\n\n{output}"
+                )
+                try:
+                    corrected_output = self.llm(fix_prompt).strip()
+                except Exception:
+                    corrected_output = None
+
             return {
                 "issues": issues,
-                "needs_correction": len(issues) > 2,  # If 3+ issues, correction recommended
-                "corrected_output": None
+                "needs_correction": needs_correction,
+                "corrected_output": corrected_output
             }
 
         except Exception as e:

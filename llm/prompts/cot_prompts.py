@@ -104,18 +104,25 @@ class CoTSecurityAnalyzer:
 
         # ADIM 6: Final answer
         final_answer_match = re.search(
-            r'ADIM 6:.*?(?:## OZET.*)',
+            r'ADIM 6:.*?(?:## [O\u00d6]ZET.*)',
             raw_response,
-            re.DOTALL | re.IGNORECASE
+            re.DOTALL | re.IGNORECASE | re.UNICODE
         )
         if final_answer_match:
-            answer_start = final_answer_match.group(0).find("## OZET")
-            if answer_start != -1:
-                final_answer = final_answer_match.group(0)[answer_start:]
+            ozet_match = re.search(r'## [O\u00d6]ZET', final_answer_match.group(0), re.IGNORECASE | re.UNICODE)
+            if ozet_match:
+                final_answer = final_answer_match.group(0)[ozet_match.start():]
                 final_answer = re.sub(r'═{10,}.*', '', final_answer, flags=re.DOTALL)
                 ctx.final_answer = final_answer.strip()
+            else:
+                ctx.final_answer = raw_response
         else:
-            ctx.final_answer = raw_response
+            # Fallback: tüm yanıt içinde ## ÖZET ara
+            ozet_match = re.search(r'## [O\u00d6]ZET', raw_response, re.IGNORECASE | re.UNICODE)
+            if ozet_match:
+                ctx.final_answer = raw_response[ozet_match.start():].strip()
+            else:
+                ctx.final_answer = raw_response
 
         return ctx
 

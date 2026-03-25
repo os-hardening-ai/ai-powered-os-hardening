@@ -48,7 +48,7 @@ class OAIChatRequest(BaseModel):
     os: Optional[str] = Field(None, description="OS hedefi: ubuntu_24_04, windows_11 vb.")
     role: Optional[str] = Field(None, description="Kullanıcı rolü: sysadmin, soc vb.")
     use_rag: bool = Field(True)
-    rag_top_k: int = Field(5, ge=1, le=20)
+    rag_top_k: int = Field(3, ge=1, le=20)
     rag_min_score: float = Field(0.5, ge=0.0, le=1.0)
     timeout: Optional[int] = Field(60, ge=1, le=300)
 

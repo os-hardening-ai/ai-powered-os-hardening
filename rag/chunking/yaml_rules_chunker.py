@@ -66,18 +66,18 @@ def _build_chunk_text(rule: Dict[str, Any]) -> str:
     if remediation_cmd:
         parts.append(f"\nRemediation Command:\n{remediation_cmd}")
 
-    # Tam script içerikleri (en fazla 3000 karakter — bütünlük için)
+    # Tam script içerikleri (en fazla 1500 karakter — bütünlük için)
     audit_script = rule.get("audit_script_content", "")
     if audit_script:
-        truncated = audit_script[:3000]
-        if len(audit_script) > 3000:
+        truncated = audit_script[:1500]
+        if len(audit_script) > 1500:
             truncated += "\n... (truncated)"
         parts.append(f"\nAudit Script:\n{truncated}")
 
     remediation_script = rule.get("remediation_script_content", "")
     if remediation_script:
-        truncated = remediation_script[:3000]
-        if len(remediation_script) > 3000:
+        truncated = remediation_script[:1500]
+        if len(remediation_script) > 1500:
             truncated += "\n... (truncated)"
         parts.append(f"\nRemediation Script:\n{truncated}")
 

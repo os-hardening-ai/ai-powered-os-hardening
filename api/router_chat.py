@@ -63,7 +63,7 @@ class ChatRequest(BaseModel):
         examples=["medium"]
     )
     use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı", examples=[True])
-    rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği", ge=1, le=20, examples=[5])
+    rag_top_k: int = Field(3, description="RAG'den kaç chunk getirileceği (her kaynak için)", ge=1, le=20, examples=[3])
     rag_min_score: float = Field(0.5, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.5])
     stream: bool = Field(False, description="Enable streaming response (SSE)", examples=[False])
     timeout: Optional[int] = Field(60, description="Request timeout in seconds (default: 60s, max: 300s)", ge=1, le=300, examples=[60])
@@ -233,8 +233,9 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             estimated_cost=result.estimated_cost,
         )
 
+    except APIError:
+        raise
     except Exception as e:
-        # Use standardized error handling
         raise APIError(
             status_code=500,
             error_code=ErrorCode.PIPELINE_ERROR,

@@ -67,16 +67,16 @@ class QdrantVectorStore(IVectorStore):
                 ),
             )
 
-        # doc_type alanı için payload index — filter sorgularında zorunlu
-        try:
-            self._client.create_payload_index(
-                collection_name=self._collection,
-                field_name="doc_type",
-                field_schema="keyword",
-            )
-        except Exception:
-            # Index zaten mevcutsa hata fırlat, yoksay
-            pass
+        # Payload index'leri — filter sorgularında hız için zorunlu
+        for field in ("doc_type", "source_id", "os_version", "section_id", "level"):
+            try:
+                self._client.create_payload_index(
+                    collection_name=self._collection,
+                    field_name=field,
+                    field_schema="keyword",
+                )
+            except Exception:
+                pass
 
     def upsert(self, embeddings: np.ndarray, docs: List[Dict[str, Any]]) -> None:
         if embeddings.shape[0] != len(docs):
