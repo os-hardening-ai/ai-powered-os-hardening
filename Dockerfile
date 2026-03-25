@@ -20,7 +20,9 @@ COPY . .
 # logs dizinini oluştur (volume mount edilmezse container içinde kullanılır)
 RUN mkdir -p logs
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
 
