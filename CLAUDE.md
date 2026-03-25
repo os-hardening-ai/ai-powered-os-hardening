@@ -37,6 +37,7 @@ ai-powered-os-hardening/
 │   └── schemas.py             # Pydantic schemas for config validation
 ├── api/                       # FastAPI routers and middleware
 │   ├── router_chat.py         # POST /api/chat, POST /api/chat/stream
+│   ├── router_openai.py       # POST /v1/chat/completions, GET /v1/models (OpenAI-compatible)
 │   ├── router_rag.py          # POST /rag/search
 │   ├── router_health.py       # GET /, GET /health, GET /health/detailed
 │   ├── router_analytics.py    # GET /api/analytics/* (6 sub-routes)
@@ -278,6 +279,8 @@ python scripts/build_index.py
 |--------|------|-------------|
 | `POST` | `/api/chat` | Main chat: RAG + LLM + 4-layer pipeline |
 | `POST` | `/api/chat/stream` | Streaming version (SSE) |
+| `POST` | `/v1/chat/completions` | **OpenAI-compatible** — herhangi bir OpenAI istemcisi ile kullanılabilir |
+| `GET` | `/v1/models` | OpenAI-compatible model listesi |
 | `POST` | `/rag/search` | Direct RAG semantic search |
 | `GET` | `/` | Root — API info |
 | `GET` | `/health` | Service health status |

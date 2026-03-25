@@ -68,6 +68,33 @@
         "enabled": true,
         "chunker": "yaml_rules",
         "priority": 3
+      },
+      {
+        "id": "cis_windows_11_desktop",
+        "name": "CIS Microsoft Windows 11 Stand-alone Benchmark",
+        "type": "pdf",
+        "path": "data/source/CIS_Microsoft_Windows_11_Stand-alone_Benchmark_v4.0.0.pdf",
+        "enabled": true,
+        "chunker": "cis_section",
+        "priority": 4
+      },
+      {
+        "id": "windows_11_rules_yaml",
+        "name": "Windows 11 CIS Hardening Rules",
+        "type": "yaml",
+        "path": "data/rules/windows_11_desktop_rules.yaml",
+        "enabled": true,
+        "chunker": "yaml_rules",
+        "priority": 5
+      },
+      {
+        "id": "windows_server_2025_rules_yaml",
+        "name": "Windows Server 2025 CIS Hardening Rules",
+        "type": "yaml",
+        "path": "data/rules/windows_server_2025_rules.yaml",
+        "enabled": false,
+        "chunker": "yaml_rules",
+        "priority": 6
       }
     ]
   },
@@ -83,13 +110,13 @@
     "provider": "qdrant",
     "qdrant": {
       "url": "https://286d1f0c-9411-4842-b153-a571d8af4479.eu-west-2-0.aws.cloud.qdrant.io",
-      "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025_benchmarks_with_ubuntu_rules_yaml",
+      "collection_name": "cis_ubuntu_2404_windows11_winserver2025_with_rules",
       "timeout": 120.0,
       "batch_size": 100
     }
   },
   "llm": {
-    "default_provider": "novita",
+    "default_provider": "groq",
     "timeout": 60,
     "max_retries": 3,
     "providers": {

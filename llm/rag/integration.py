@@ -135,9 +135,8 @@ class RAGContextBuilder:
         Returns:
             (context_str, raw_results) tuple — score'a göre sıralı
         """
-        half = self.top_k // 2
-        yaml_k = yaml_k if yaml_k is not None else half
-        pdf_k  = pdf_k  if pdf_k  is not None else (self.top_k - half)
+        yaml_k = yaml_k if yaml_k is not None else self.top_k
+        pdf_k  = pdf_k  if pdf_k  is not None else self.top_k
 
         try:
             print(f"[RAG.retrieve_balanced] START — query='{query[:60]}' yaml_k={yaml_k} pdf_k={pdf_k}")
