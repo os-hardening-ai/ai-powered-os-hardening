@@ -1,0 +1,141 @@
+from __future__ import annotations
+import json
+import logging
+import re
+from dataclasses import dataclass, field
+from typing import Callable, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+LLMCallable = Callable[[str], str]
+
+
+@dataclass
+class ClaimCheck:
+    claim: str
+    supported: bool
+    reason: str = ""
+
+
+@dataclass
+class VerificationResult:
+    is_valid: bool
+    confidence: float          # 0.0 – 1.0  (fraction of claims that are supported)
+    claims: List[ClaimCheck] = field(default_factory=list)
+    unsupported: List[str] = field(default_factory=list)
+
+
+class ClaimVerifier:
+    """
+    Verifies LLM-generated answer claims against the retrieved chunks.
+
+    Each atomic claim in the answer is checked: "Is this directly supported
+    by the retrieved context?"  If too many claims are unsupported the result
+    is marked invalid and the caller can add a low-confidence disclaimer.
+
+    Critical for OS hardening answers — a wrong command can take a server
+    offline or introduce a security regression.
+
+    Uses the existing sync LLM callable (llm_small is fine — judgment task).
+    All calls are best-effort: on parse failures the claim is marked supported
+    (conservative — avoids false negatives).
+    """
+
+    def __init__(
+        self,
+        llm_fn: LLMCallable,
+        min_confidence: float = 0.6,
+        max_claims: int = 6,
+    ) -> None:
+        self._llm = llm_fn
+        self.min_confidence = min_confidence
+        self.max_claims = max_claims
+
+    def verify(self, answer: str, chunks: List[dict]) -> VerificationResult:
+        """
+        Args:
+            answer: The LLM-generated answer text to verify.
+            chunks: Retrieved context chunks [{"id", "text", "metadata"}].
+
+        Returns:
+            VerificationResult with is_valid flag and per-claim details.
+        """
+        if not chunks:
+            return VerificationResult(is_valid=True, confidence=1.0)
+
+        claims = self._extract_claims(answer)
+        if not claims:
+            return VerificationResult(is_valid=True, confidence=1.0)
+
+        context = "\n\n".join(
+            f"[{i + 1}] {c.get('text', '')[:600]}"
+            for i, c in enumerate(chunks)
+        )
+
+        checked: List[ClaimCheck] = []
+        for claim in claims[: self.max_claims]:
+            supported, reason = self._check_claim(claim, context)
+            checked.append(ClaimCheck(claim=claim, supported=supported, reason=reason))
+
+        unsupported = [c.claim for c in checked if not c.supported]
+        confidence = 1.0 - len(unsupported) / max(len(checked), 1)
+
+        logger.debug(
+            "[ClaimVerifier] %d/%d claims supported — confidence=%.2f",
+            len(checked) - len(unsupported),
+            len(checked),
+            confidence,
+        )
+
+        return VerificationResult(
+            is_valid=confidence >= self.min_confidence,
+            confidence=confidence,
+            claims=checked,
+            unsupported=unsupported,
+        )
+
+    # ── private helpers ──────────────────────────────────────────────────────
+
+    def _extract_claims(self, answer: str) -> List[str]:
+        prompt = (
+            f"Extract up to {self.max_claims} atomic factual claims from this answer.\n"
+            "Focus on: shell commands, file paths, config keys/values, CIS section IDs.\n"
+            "Return ONLY a JSON array of strings — no markdown, no explanation.\n\n"
+            f"Answer:\n{answer[:1500]}"
+        )
+        try:
+            resp = self._llm(prompt)
+            items = _parse_json_list(resp, self.max_claims)
+            return items
+        except Exception as exc:
+            logger.warning("[ClaimVerifier] claim extraction failed: %s", exc)
+            return []
+
+    def _check_claim(self, claim: str, context: str) -> Tuple[bool, str]:
+        prompt = (
+            "Is this claim DIRECTLY supported by the context below?\n"
+            'Answer with JSON only: {"supported": true/false, "reason": "one sentence"}\n\n'
+            f"Claim: {claim}\n\n"
+            f"Context (truncated):\n{context[:2000]}"
+        )
+        try:
+            resp = self._llm(prompt)
+            match = re.search(r"\{.*?\}", resp, re.DOTALL)
+            if match:
+                obj = json.loads(match.group())
+                return bool(obj.get("supported", True)), str(obj.get("reason", ""))
+        except Exception as exc:
+            logger.warning("[ClaimVerifier] claim check failed: %s", exc)
+        # Conservative fallback — treat as supported to avoid false negatives
+        return True, "parse_error"
+
+
+def _parse_json_list(text: str, max_items: int) -> List[str]:
+    try:
+        match = re.search(r"\[.*\]", text, re.DOTALL)
+        if match:
+            items = json.loads(match.group())
+            return [str(x) for x in items if isinstance(x, str)][:max_items]
+    except Exception:
+        pass
+    return []

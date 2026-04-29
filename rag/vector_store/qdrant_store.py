@@ -9,10 +9,14 @@ from dotenv import load_dotenv
 import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from qdrant_client.http.exceptions import ResponseHandlingException
+from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
+
+import logging
 
 from config.config_loader import get_config
 from rag.vector_store.base import IVectorStore
+
+_logger = logging.getLogger(__name__)
 
 
 class QdrantVectorStore(IVectorStore):
@@ -57,15 +61,33 @@ class QdrantVectorStore(IVectorStore):
     def _ensure_collection(self) -> None:
         try:
             self._client.get_collection(self._collection)
-        except Exception:
-            # Yoksa oluştur
-            self._client.recreate_collection(
+            return  # Collection var, devam et
+        except UnexpectedResponse as e:
+            if e.status_code != 404:
+                # 503 vb. geçici sunucu hatası — collection muhtemelen var, devam et
+                _logger.warning(
+                    f"[Qdrant] get_collection HTTP {e.status_code} — geçici hata, collection varsayıldı."
+                )
+                return
+            # 404: collection gerçekten yok → oluştur
+        except Exception as e:
+            _logger.warning(f"[Qdrant] get_collection başarısız: {e} — oluşturulmaya çalışılıyor.")
+
+        try:
+            self._client.create_collection(
                 collection_name=self._collection,
                 vectors_config=VectorParams(
                     size=self._dim,
                     distance=Distance.COSINE,
                 ),
             )
+            _logger.info(f"[Qdrant] Collection '{self._collection}' oluşturuldu.")
+        except UnexpectedResponse as e:
+            _logger.warning(
+                f"[Qdrant] create_collection HTTP {e.status_code} — collection zaten var ya da geçici hata."
+            )
+        except Exception as e:
+            _logger.warning(f"[Qdrant] create_collection başarısız: {e} — devam ediliyor.")
 
         # Payload index'leri — filter sorgularında hız için zorunlu
         for field in ("doc_type", "source_id", "os_version", "section_id", "level"):

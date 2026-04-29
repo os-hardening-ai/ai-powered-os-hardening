@@ -11,10 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Önce requirements'ı kopyala — layer cache'i maximize et
+# Önce requirements'ı kopyala — requirements değişmediği sürece pip layer cache'den gelir
 COPY requirements-python311.txt .
-RUN --mount=type=cache,id=ai-hardening-pip,target=/root/.cache/pip \
-    pip install -r requirements-python311.txt
+RUN pip install --no-cache-dir -r requirements-python311.txt
 
 # Uygulama kodunu kopyala
 COPY . .

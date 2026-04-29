@@ -100,6 +100,7 @@ class ChatResponse(BaseModel):
     stats: Dict[str, Any] = Field(default_factory=dict, description="Pipeline istatistikleri")
     request_id: Optional[str] = Field(None, description="Request ID")
     estimated_cost: Optional[float] = Field(None, description="Tahmini maliyet ($)")
+    verification_confidence: Optional[float] = Field(None, description="Claim verification güven skoru (0-1). Enhanced RAG etkinse dolar.")
 
 
 # ──────────────────────────────────────────────
@@ -219,6 +220,7 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         _conv_logger.info(f"A: {sanitized_answer}")
 
         # Response olustur
+        _meta = result.metadata or {}
         return ChatResponse(
             answer=sanitized_answer,
             intent=result.intent.type if result.intent else None,
@@ -228,9 +230,14 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             stats={
                 "total_time_s": result.total_time_s,
                 "layer_path": result.layer_path,
+                "rag_used": _meta.get("rag_used", False),
+                "rag_chunks": _meta.get("rag_chunks", 0),
+                "model": _meta.get("model"),
+                "complexity": _meta.get("complexity"),
             },
             request_id=ctx.request_id,
             estimated_cost=result.estimated_cost,
+            verification_confidence=_meta.get("verification_confidence"),
         )
 
     except APIError:

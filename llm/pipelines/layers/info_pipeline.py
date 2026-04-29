@@ -13,8 +13,9 @@ Based on:
 """
 
 from __future__ import annotations
-from typing import Callable, Optional
-from dataclasses import dataclass
+import logging
+from typing import Callable, List, Optional
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from llm.core.context import RequestContext, SafetyResult
@@ -25,6 +26,8 @@ from llm.core.config import CONFIG
 
 # Type alias
 LLMCallable = Callable[[str], str]
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,11 +40,8 @@ class InfoQueryResult:
     model_used: str = "unknown"
     response_time_s: float = 0.0
     estimated_cost: float = 0.0
-    rag_sources: list = None  # RAG source metadata
-
-    def __post_init__(self):
-        if self.rag_sources is None:
-            self.rag_sources = []
+    rag_sources: list = field(default_factory=list)
+    verification_confidence: float | None = None  # None = not checked
 
 
 class InfoPipeline:
@@ -69,18 +69,24 @@ class InfoPipeline:
         llm_small: LLMCallable,
         llm_large: LLMCallable,
         rag_builder: Optional[Callable] = None,
+        query_planner=None,
+        claim_verifier=None,
         debug: bool = False,
     ):
         """
         Args:
-            llm_small: Small/fast model callable
-            llm_large: Large/powerful model callable
-            rag_builder: RAG context builder (optional)
-            debug: Enable debug logging
+            llm_small:      Small/fast model callable
+            llm_large:      Large/powerful model callable
+            rag_builder:    RAG context builder (optional)
+            query_planner:  QueryPlanner instance (optional — expands queries)
+            claim_verifier: ClaimVerifier instance (optional — halüsinasyon kontrolü)
+            debug:          Enable debug logging
         """
         self.llm_small = llm_small
         self.llm_large = llm_large
         self.rag_builder = rag_builder
+        self.query_planner = query_planner
+        self.claim_verifier = claim_verifier
         self.debug = debug
 
         # CoT analyzer for complex queries
@@ -130,15 +136,41 @@ class InfoPipeline:
         # RAG retrieval (if needed)
         rag_chunks = 0
         rag_sources = []
+        raw_results_for_verify: List[dict] = []
         print(f"[InfoPipeline] use_rag={use_rag}, rag_builder={'SET' if self.rag_builder else 'NONE'}")
         if use_rag and self.rag_builder:
             try:
-                # Balanced retrieval: half from YAML rules, half from PDF benchmarks
-                rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                # Query planning: expand query before retrieval
+                if self.query_planner is not None:
+                    try:
+                        plan = self.query_planner.plan(ctx.user_question)
+                        all_queries = plan.all_queries()
+                        _logger.debug(
+                            "[InfoPipeline] QueryPlanner: %d queries for '%s'",
+                            len(all_queries),
+                            ctx.user_question[:50],
+                        )
+                        # Use retrieve_multi if available, else fall back to balanced
+                        if hasattr(self.rag_builder, "retrieve_multi"):
+                            rag_context, raw_results = self.rag_builder.retrieve_multi(
+                                queries=all_queries,
+                                original_query=ctx.user_question,
+                            )
+                        else:
+                            rag_context, raw_results = self.rag_builder.retrieve_balanced(
+                                ctx.user_question
+                            )
+                    except Exception as qp_exc:
+                        _logger.warning("[InfoPipeline] QueryPlanner failed, using balanced: %s", qp_exc)
+                        rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                else:
+                    # Standard balanced retrieval: YAML rules + PDF benchmarks
+                    rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
 
                 if rag_context and raw_results:
                     ctx.retrieved_context = rag_context
                     rag_chunks = len(raw_results)
+                    raw_results_for_verify = raw_results
                     self.stats["rag_used_count"] += 1
 
                     # Extract source metadata
@@ -193,6 +225,26 @@ class InfoPipeline:
             model_used = "large+CoT"
             estimated_cost = 0.0015
 
+        # Claim verification (only when RAG was used — no context = no verification)
+        verification_confidence: float | None = None
+        if self.claim_verifier is not None and raw_results_for_verify:
+            try:
+                vr = self.claim_verifier.verify(result, raw_results_for_verify)
+                verification_confidence = vr.confidence
+                if not vr.is_valid:
+                    _logger.warning(
+                        "[InfoPipeline] Low verification confidence %.2f — unsupported: %s",
+                        vr.confidence,
+                        vr.unsupported[:2],
+                    )
+                    result += (
+                        f"\n\n> ⚠️ **Güven skoru:** %{vr.confidence * 100:.0f} — "
+                        "bazı ifadeler kaynak dokümanlarla tam örtüşmüyor, "
+                        "lütfen kritik komutları resmi CIS Benchmark'tan doğrulayın."
+                    )
+            except Exception as cv_exc:
+                _logger.warning("[InfoPipeline] ClaimVerifier failed: %s", cv_exc)
+
         # Update stats
         self.stats["total_queries"] += 1
         self.stats["total_cost"] += estimated_cost
@@ -209,6 +261,7 @@ class InfoPipeline:
             response_time_s=response_time,
             estimated_cost=estimated_cost,
             rag_sources=rag_sources,
+            verification_confidence=verification_confidence,
         )
 
     def _should_use_rag(self, question: str, complexity: str) -> bool:

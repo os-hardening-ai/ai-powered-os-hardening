@@ -2,8 +2,8 @@
 
 **Proje:** AI-Powered OS Hardening System
 **Hazırlayan:** Development Team
-**Tarih:** 2026-03-25 (Updated)
-**Version:** v1.0.2 → v2.0.0 Roadmap
+**Tarih:** 2026-04-29 (Updated)
+**Version:** v1.1.0 → v2.0.0 Roadmap
 
 ---
 
@@ -21,18 +21,24 @@
 
 ## Executive Summary
 
-### Mevcut Durum (v1.0.0)
+### Mevcut Durum (v1.1.0)
 
 ```
 ✅ 4-Layer Security Pipeline
 ✅ Adaptive Model Selection
 ✅ Smart RAG Triggering
-✅ RAG Source Metadata Tracking (NEW!)
-✅ Advanced Analytics Dashboard (NEW!)
-✅ Response Caching Infrastructure (NEW!)
+✅ RAG Source Metadata Tracking
+✅ Advanced Analytics Dashboard
+✅ Response Caching Infrastructure
 ✅ 96.4% Test Success Rate
 ✅ $0.0004/query avg cost
 ✅ 2.3s avg latency
+✅ Hybrid BM25 + Dense RRF Scoring (NEW! v1.1)
+✅ MMR Reranking — Jaccard diversity (NEW! v1.1)
+✅ Query Planning — Subquery + HyDE + Stepback (NEW! v1.1)
+✅ Claim Verification — halüsinasyon kontrolü (NEW! v1.1)
+✅ Fail-Open Search — min_score otomatik gevşetme (NEW! v1.1)
+✅ Windows 11 + Windows Server 2025 YAML kurallar (NEW! v1.1)
 ```
 
 ### Hedefler (v2.0.0)
@@ -63,14 +69,15 @@
 | Hybrid Intent Detection | ✅ | Orta | v1.0.0 |
 | Pattern Response Caching | ✅ | Orta | v1.0.0 |
 | API Security (Rate Limiting) | ✅ | Yüksek | v1.0.0 |
-| **Streaming Responses (SSE)** | ✅ **YENİ** | Yüksek | **v1.0.2** |
-| **Provider Fallback Chain** | ✅ **YENİ** | Kritik | **v1.0.2** |
-| **Request Timeout Protection** | ✅ **YENİ** | Yüksek | **v1.0.2** |
-| **Enhanced API Headers** | ✅ **YENİ** | Orta | **v1.0.2** |
-| **Standardized Error Responses** | ✅ **YENİ** | Orta | **v1.0.2** |
-| **CVE Security Fixes** | ✅ **YENİ** | Kritik | **v1.0.2** |
-| **Test Suite Organization** | ✅ **YENİ** | Orta | **v1.0.2** |
-| **Documentation Consolidation** | ✅ **YENİ** | Orta | **v1.0.2** |
+| Streaming Responses (SSE) | ✅ | Yüksek | v1.0.2 |
+| Provider Fallback Chain | ✅ | Kritik | v1.0.2 |
+| Request Timeout Protection | ✅ | Yüksek | v1.0.2 |
+| CVE Security Fixes | ✅ | Kritik | v1.0.2 |
+| **Hybrid BM25 + Dense Retrieval** | ✅ **YENİ** | Yüksek | **v1.1.0** |
+| **MMR Reranking (Diversity)** | ✅ **YENİ** | Yüksek | **v1.1.0** |
+| **Query Planning (HyDE + Subquery)** | ✅ **YENİ** | Çok Yüksek | **v1.1.0** |
+| **Claim Verification (Anti-hallucination)** | ✅ **YENİ** | Çok Yüksek | **v1.1.0** |
+| **Fail-Open Search (min_score relaxation)** | ✅ **YENİ** | Orta | **v1.1.0** |
 
 ### 📊 v1.0.1 Performance
 
@@ -642,12 +649,15 @@ POST /api/feedback
 
 | Feature | Impact | Effort | ROI | Priority | Version |
 |---------|--------|--------|-----|----------|---------|
-| **Redis Caching** | 🔴 Çok Yüksek | 🟢 Düşük | ⭐⭐⭐⭐⭐ | **P0** | v1.1 |
-| **Streaming Responses** | 🔴 Yüksek | 🟡 Orta | ⭐⭐⭐⭐ | **P0** | v1.1 |
-| **RAG Pre-warming** | 🟡 Orta | 🟢 Düşük | ⭐⭐⭐⭐ | **P0** | v1.1 |
+| ~~Hybrid BM25 + Dense Retrieval~~ | ✅ **TAMAMLANDI** | — | — | — | **v1.1** |
+| ~~MMR Reranking~~ | ✅ **TAMAMLANDI** | — | — | — | **v1.1** |
+| ~~Query Planning (HyDE+Subquery)~~ | ✅ **TAMAMLANDI** | — | — | — | **v1.1** |
+| ~~Claim Verification~~ | ✅ **TAMAMLANDI** | — | — | — | **v1.1** |
+| **Redis Caching** | 🔴 Çok Yüksek | 🟢 Düşük | ⭐⭐⭐⭐⭐ | **P0** | v1.2 |
+| **RAG Pre-warming** | 🟡 Orta | 🟢 Düşük | ⭐⭐⭐⭐ | **P0** | v1.2 |
 | **Conversation History** | 🔴 Çok Yüksek | 🔴 Yüksek | ⭐⭐⭐⭐ | **P1** | v1.3 |
-| **Error Retry Logic** | 🟡 Orta | 🟡 Orta | ⭐⭐⭐ | **P1** | v1.2 |
-| **Fine-tuned Intent** | 🟡 Orta | 🔴 Yüksek | ⭐⭐⭐ | **P2** | v1.2 |
+| **Error Retry Logic** | 🟡 Orta | 🟡 Orta | ⭐⭐⭐ | **P1** | v1.3 |
+| **Fine-tuned Intent** | 🟡 Orta | 🔴 Yüksek | ⭐⭐⭐ | **P2** | v1.4 |
 | **Multi-agent System** | 🔴 Çok Yüksek | 🔴 Çok Yüksek | ⭐⭐⭐⭐ | **P2** | v1.5 |
 | **A/B Testing** | 🟡 Orta | 🔴 Yüksek | ⭐⭐⭐ | **P2** | v1.6 |
 | **Kubernetes Scaling** | 🔴 Yüksek | 🔴 Çok Yüksek | ⭐⭐⭐⭐ | **P3** | v2.0 |

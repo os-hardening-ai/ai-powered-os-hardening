@@ -41,6 +41,22 @@
       "min_score": 0.5,
       "max_results": 6
     },
+    "enhanced": {
+      "enabled": true,
+      "use_hybrid": true,
+      "dense_weight": 0.6,
+      "sparse_weight": 0.4,
+      "use_mmr": true,
+      "mmr_lambda": 0.7,
+      "mmr_max_per_source": 3,
+      "use_query_planning": true,
+      "subqueries": true,
+      "hyde": true,
+      "stepback": true,
+      "max_subqueries": 2,
+      "use_claim_verification": true,
+      "min_verification_confidence": 0.6
+    },
     "source_documents": [
       {
         "id": "cis_ubuntu_24_04",

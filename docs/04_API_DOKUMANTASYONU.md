@@ -262,7 +262,7 @@ Content-Type: application/json
 | `zt_maturity` | string | ❌ Hayır | Zero Trust maturity | `medium` |
 | `use_rag` | boolean | ❌ Hayır | RAG kullan (akıllı RAG için `true`) | `true` |
 | `rag_top_k` | integer | ❌ Hayır | RAG chunk sayısı (1-20) | `5` |
-| `rag_min_score` | float | ❌ Hayır | Min relevance score (0.0-1.0) | `0.7` |
+| `rag_min_score` | float | ❌ Hayır | Min relevance score (0.0-1.0) | `0.5` |
 | `timeout` | integer | ❌ Hayır | Request timeout (1-300 saniye) | `60` |
 
 #### Parametre Detayları
@@ -501,47 +501,37 @@ if use_rag_final and self.rag_builder:
 **Body (JSON):**
 ```json
 {
-  "answer": "Ubuntu 22.04 için SSH hardening scripti:\n\n#!/bin/bash\n# SSH Hardening Script\n...",
-  "intent": {
-    "type": "action_request",
-    "subtype": null,
-    "confidence": 0.92,
-    "method": "ml",
-    "ml_probabilities": {
-      "action_request": 0.92,
-      "info_request": 0.06,
-      "help": 0.01,
-      "greeting": 0.01
-    }
-  },
+  "answer": "Ubuntu 24.04 için SSH hardening scripti:\n\n#!/bin/bash\n# SSH Hardening Script\n...",
+  "intent": "action_request",
   "safety_category": "safe_defensive",
-  "layer_path": "1->2->3C->4",
+  "layer_path": "1→2→3C",
   "rag_sources": [
     {
-      "id": "chunk_ubuntu_22_04_ssh_001",
+      "id": "source_1",
       "score": 0.89,
-      "source": "CIS_Ubuntu_22.04_Benchmark_v2.0.0",
+      "source": "CIS Ubuntu Linux 24.04 LTS Benchmark",
       "section": "5.2.3 Ensure SSH access is limited",
-      "content": "SSH configuration best practices include..."
+      "text": "SSH configuration best practices include..."
     },
     {
-      "id": "chunk_ubuntu_22_04_ssh_002",
+      "id": "source_2",
       "score": 0.85,
-      "source": "CIS_Ubuntu_22.04_Benchmark_v2.0.0",
+      "source": "CIS Ubuntu Linux 24.04 LTS Benchmark",
       "section": "5.2.4 Ensure SSH root login is disabled",
-      "content": "PermitRootLogin no should be set..."
+      "text": "PermitRootLogin no should be set..."
     }
   ],
   "stats": {
     "total_time_s": 3.21,
-    "layer_path": "1->2->3C->4",
-    "layer_1_time_s": 0.65,
-    "layer_2_time_s": 0.008,
-    "layer_3_time_s": 2.48,
-    "layer_4_time_s": 0.072
+    "layer_path": "1→2→3C",
+    "rag_used": true,
+    "rag_chunks": 6,
+    "model": "llama-3.3-70b-versatile",
+    "complexity": "complex"
   },
   "request_id": "req_1701234567890_abc123",
-  "estimated_cost": 0.0018
+  "estimated_cost": 0.0018,
+  "verification_confidence": 0.91
 }
 ```
 
@@ -550,20 +540,19 @@ if use_rag_final and self.rag_builder:
 | Alan | Tip | Açıklama |
 |------|-----|----------|
 | `answer` | string | LLM'den gelen yanıt |
-| `intent` | object | Intent detection sonucu |
-| `intent.type` | string | Intent tipi (smalltalk, info_request, action_request, out_of_scope) |
-| `intent.subtype` | string | Alt tip (greeting, farewell, thanks, help - sadece smalltalk için) |
-| `intent.confidence` | float | Güven skoru (0.0-1.0) |
-| `intent.method` | string | Detection metodu (pattern, ml, hybrid) |
-| `intent.ml_probabilities` | object | ML model olasılıkları (sadece ML kullanıldığında) |
-| `safety_category` | string | Güvenlik kategorisi (safe_defensive, safe_educational, etc.) |
-| `layer_path` | string | Pipeline path (1→2→3A, 1→2→3B→4, etc.) |
-| `rag_sources` | array | RAG'den gelen kaynaklar (varsa) |
+| `intent` | string \| null | Intent tipi: `smalltalk_greeting`, `smalltalk_farewell`, `smalltalk_other`, `os_hardening`, `script_or_config`, `conceptual_explanation`, `incident_analysis`, `generic_qna` |
+| `safety_category` | string \| null | Güvenlik kategorisi (safe_defensive, safe_educational, ambiguous, unsafe_offensive) |
+| `layer_path` | string \| null | Pipeline path (1→2→3A, 1→2→3B, 1→2→3C, 1→REJECT, vb.) |
+| `rag_sources` | array | RAG'den gelen kaynaklar — her eleman: `id`, `score`, `source`, `section`, `text` |
 | `stats` | object | Performans istatistikleri |
 | `stats.total_time_s` | float | Toplam süre (saniye) |
-| `stats.layer_*_time_s` | float | Katman bazlı süreler |
-| `request_id` | string | Unique request ID (loglama için) |
-| `estimated_cost` | float | Tahmini maliyet (USD) |
+| `stats.rag_used` | bool | RAG kullanıldı mı |
+| `stats.rag_chunks` | int | Kullanılan chunk sayısı |
+| `stats.model` | string \| null | Kullanılan LLM modeli |
+| `stats.complexity` | string \| null | Soru karmaşıklığı (simple / medium / complex) |
+| `request_id` | string \| null | Unique request ID (loglama için) |
+| `estimated_cost` | float \| null | Tahmini maliyet (USD) |
+| `verification_confidence` | float \| null | Claim verification güven skoru (0-1). Enhanced RAG etkinse dolar. |
 
 #### Layer Paths
 
@@ -629,18 +618,19 @@ curl -X POST http://localhost:8000/api/chat \
 ```json
 {
   "answer": "SSH (Secure Shell), ağ üzerinden güvenli bir şekilde uzak bilgisayarlara erişmek için kullanılan bir şifreleme protokolüdür...",
-  "intent": {
-    "type": "info_request",
-    "confidence": 0.89,
-    "method": "ml"
-  },
+  "intent": "conceptual_explanation",
   "safety_category": "safe_educational",
-  "layer_path": "1->2->3B->4",
-  "rag_sources": [...],
+  "layer_path": "1→2→3B",
+  "rag_sources": [],
   "stats": {
-    "total_time_s": 2.1
+    "total_time_s": 2.1,
+    "rag_used": false,
+    "rag_chunks": 0,
+    "model": "llama-3.1-8b-instant",
+    "complexity": "simple"
   },
-  "estimated_cost": 0.0012
+  "estimated_cost": 0.0012,
+  "verification_confidence": null
 }
 ```
 
@@ -666,28 +656,27 @@ curl -X POST http://localhost:8000/api/chat \
 ```json
 {
   "answer": "#!/bin/bash\n# SSH Hardening Script for Ubuntu 24.04\n# Security Level: STRICT\n# Zero Trust Maturity: HIGH\n\nset -euo pipefail\n\n...",
-  "intent": {
-    "type": "action_request",
-    "confidence": 0.94,
-    "method": "ml"
-  },
+  "intent": "script_or_config",
   "safety_category": "safe_defensive",
-  "layer_path": "1->2->3C->4",
+  "layer_path": "1→2→3C",
   "rag_sources": [
     {
+      "id": "source_1",
       "score": 0.91,
-      "source": "CIS_Ubuntu_24.04_Benchmark_v1.0.0",
-      "section": "5.2 SSH Server Configuration"
+      "source": "CIS Ubuntu Linux 24.04 LTS Benchmark",
+      "section": "5.2 SSH Server Configuration",
+      "text": "..."
     }
   ],
   "stats": {
     "total_time_s": 3.8,
-    "layer_1_time_s": 0.72,
-    "layer_2_time_s": 0.009,
-    "layer_3_time_s": 3.01,
-    "layer_4_time_s": 0.061
+    "rag_used": true,
+    "rag_chunks": 6,
+    "model": "llama-3.3-70b-versatile",
+    "complexity": "complex"
   },
-  "estimated_cost": 0.0021
+  "estimated_cost": 0.0021,
+  "verification_confidence": 0.88
 }
 ```
 
