@@ -85,6 +85,7 @@ class RagConfig:
         "min_score": 0.3,
         "max_results": 10
     })
+    enhanced: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
