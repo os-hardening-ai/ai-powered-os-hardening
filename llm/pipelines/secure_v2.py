@@ -114,11 +114,38 @@ class SecurePipelineV2:
         # Layer 3A: Pattern Responder
         self.pattern_handler = PatternResponderHandler(debug=debug)
 
-        # Layer 3B: Info Pipeline
+        # Layer 3B: Info Pipeline — with optional enhanced-RAG components
+        _query_planner = None
+        _claim_verifier = None
+        try:
+            from config.config_loader import get_config
+            _enhanced = getattr(get_config().rag, "enhanced", None) or {}
+            if _enhanced.get("enabled", False):
+                if _enhanced.get("use_query_planning", False):
+                    from rag.query.query_planner import QueryPlanner
+                    _query_planner = QueryPlanner(
+                        llm_fn=llm_small,
+                        enable_subqueries=_enhanced.get("subqueries", True),
+                        enable_hyde=_enhanced.get("hyde", True),
+                        enable_stepback=_enhanced.get("stepback", True),
+                        max_subqueries=_enhanced.get("max_subqueries", 2),
+                    )
+                if _enhanced.get("use_claim_verification", False):
+                    from rag.verify.claim_verifier import ClaimVerifier
+                    _claim_verifier = ClaimVerifier(
+                        llm_fn=llm_small,
+                        min_confidence=_enhanced.get("min_verification_confidence", 0.6),
+                    )
+        except Exception as _exc:
+            import warnings
+            warnings.warn(f"Enhanced RAG init failed (non-fatal): {_exc}", RuntimeWarning)
+
         self.info_pipeline = InfoPipeline(
             llm_small=llm_small,
             llm_large=llm_large,
             rag_builder=rag_builder,
+            query_planner=_query_planner,
+            claim_verifier=_claim_verifier,
             debug=debug,
         )
 
@@ -369,7 +396,8 @@ class SecurePipelineV2:
                 "rag_used": info_result.used_rag,
                 "rag_chunks": info_result.rag_chunks,
                 "model": info_result.model_used,
-                "rag_sources": info_result.rag_sources,  # Add RAG sources to metadata
+                "rag_sources": info_result.rag_sources,
+                "verification_confidence": info_result.verification_confidence,
             }
         )
 

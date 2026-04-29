@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import re
 import time
 from typing import List, Dict, Any
@@ -8,6 +9,8 @@ from rag.vector_store import get_vector_store
 from api.schemas import RagSearchResult
 from prometheus_metrics import record_rag_retrieval
 from config.config_loader import get_config
+
+_logger = logging.getLogger(__name__)
 
 def _is_junky_window(w: str) -> bool:
     """
@@ -327,4 +330,35 @@ class RAGRetriever:
             top_score=fine_results[0].score if fine_results else 0.0,
         )
         return fine_results
+
+    # ==== 5) Fail-open search: lowers min_score when 0 results returned ====
+    def search_with_fallback(
+        self,
+        query: str,
+        top_k: int = 5,
+        min_score: float = 0.5,
+    ) -> List[RagSearchResult]:
+        """
+        Wraps search() with progressive min_score relaxation.
+
+        Tries three thresholds in sequence and returns the first non-empty
+        result set.  Useful when the indexed content uses slightly different
+        OS-version terminology than the query (e.g. query says 'ubuntu_22_04'
+        but chunks are tagged 'ubuntu_24_04').
+
+        Thresholds: original → 70 % → 50 % of original.
+        """
+        thresholds = [min_score, min_score * 0.7, min_score * 0.5]
+        for threshold in thresholds:
+            results = self.search(query, top_k=top_k, min_score=threshold)
+            if results:
+                if threshold < min_score:
+                    _logger.warning(
+                        "[RAGRetriever] fail-open: min_score relaxed %.2f → %.2f for query='%s'",
+                        min_score,
+                        threshold,
+                        query[:60],
+                    )
+                return results
+        return []
 

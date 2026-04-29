@@ -5,6 +5,7 @@ CIS benchmark dokümanlarından ilgili bilgileri getirip LLM'e context olarak su
 """
 
 from __future__ import annotations
+import logging
 from typing import List, Dict, Any, Tuple
 
 try:
@@ -18,19 +19,36 @@ except ImportError as e:
     get_vector_store = None  # type: ignore
     RAG_AVAILABLE = False
 
+try:
+    from rag.retrieval.hybrid_retriever import InContextHybridScorer, is_hybrid_available
+    _HYBRID_AVAILABLE = is_hybrid_available()
+except ImportError:
+    InContextHybridScorer = None  # type: ignore
+    _HYBRID_AVAILABLE = False
+
+from rag.retrieval.reranker import MMRReranker
+
+_logger = logging.getLogger(__name__)
+
 
 class RAGContextBuilder:
     """
     RAG sistemi ile LLM pipeline arasında köprü.
     Kullanıcı sorusuna göre ilgili doküman chunk'larını getirir.
+
+    Enhanced mod (config'de enhanced_rag.enabled=true ise):
+      - InContextHybridScorer: BM25 + dense scores via RRF fusion
+      - MMRReranker: diversity-aware reranking (no extra embed calls)
+      - retrieve_multi(): fan-out over query-planner expanded queries
     """
 
-    def __init__(self, top_k: int = 5, min_score: float = None):
-        """
-        Args:
-            top_k: Kaç tane chunk getirileceği
-            min_score: Minimum relevance score (altındakiler filtrelenir)
-        """
+    def __init__(
+        self,
+        top_k: int = 5,
+        min_score: float | None = None,
+        use_hybrid: bool | None = None,
+        use_mmr: bool | None = None,
+    ):
         self.top_k = top_k
 
         if min_score is None:
@@ -43,13 +61,45 @@ class RAGContextBuilder:
             self.min_score = min_score
 
         if get_embedding_client is None or get_vector_store is None:
-            raise RuntimeError("RAG dependencies not available. Check core.embeddings and core.vector_store imports")
+            raise RuntimeError("RAG dependencies not available.")
 
         self._embed_client = get_embedding_client()
         self._vector_store = get_vector_store()
 
-    def _search(self, query: str, doc_type: str = None) -> List[Dict[str, Any]]:
-        """Embed query once and return score-filtered results."""
+        # Resolve enhanced-mode flags from config (or explicit override)
+        enhanced_cfg = self._load_enhanced_config()
+        self._use_hybrid = use_hybrid if use_hybrid is not None else enhanced_cfg.get("use_hybrid", False)
+        self._use_mmr = use_mmr if use_mmr is not None else enhanced_cfg.get("use_mmr", False)
+
+        # Lazy-init scorers only when enabled
+        self._hybrid_scorer: InContextHybridScorer | None = None
+        if self._use_hybrid and _HYBRID_AVAILABLE and InContextHybridScorer is not None:
+            self._hybrid_scorer = InContextHybridScorer(
+                dense_weight=enhanced_cfg.get("dense_weight", 0.6),
+                sparse_weight=enhanced_cfg.get("sparse_weight", 0.4),
+            )
+            _logger.info("[RAGContextBuilder] InContextHybridScorer enabled")
+
+        self._mmr_reranker: MMRReranker | None = None
+        if self._use_mmr:
+            self._mmr_reranker = MMRReranker(
+                lambda_param=enhanced_cfg.get("mmr_lambda", 0.7),
+                max_per_source=enhanced_cfg.get("mmr_max_per_source", 3),
+            )
+            _logger.info("[RAGContextBuilder] MMRReranker enabled")
+
+    @staticmethod
+    def _load_enhanced_config() -> dict:
+        try:
+            from config.config_loader import get_config
+            cfg = get_config()
+            return getattr(cfg.rag, "enhanced", None) or {}
+        except Exception:
+            return {}
+
+    # ── internal search helpers ───────────────────────────────────────────────
+
+    def _search(self, query: str, doc_type: str | None = None) -> List[Dict[str, Any]]:
         print(f"[RAG._search] Embedding query: '{query[:60]}'")
         query_emb = self._embed_client.embed_query(query)
         print(f"[RAG._search] Searching vector store (top_k={self.top_k}, doc_type={doc_type})...")
@@ -58,17 +108,58 @@ class RAGContextBuilder:
         print(f"[RAG._search] Raw scores: {scores}")
         filtered = [r for r in raw_results if r.get("score", 0.0) >= self.min_score]
         print(f"[RAG._search] {len(raw_results)} results, {len(filtered)} pass min_score={self.min_score}")
-        for r in filtered:
-            print(f"  score={r.get('score', 0):.3f} | {str(r.get('metadata', {}))[:80]}")
         return filtered
 
-    def _search_with_emb(self, query_emb, top_k: int, doc_type: str = None) -> List[Dict[str, Any]]:
-        """Search using a pre-computed embedding (avoids re-embedding)."""
+    def _search_with_emb(
+        self, query_emb, top_k: int, doc_type: str | None = None
+    ) -> List[Dict[str, Any]]:
         raw_results = self._vector_store.search(query_emb, top_k=top_k, doc_type=doc_type)
         return [r for r in raw_results if r.get("score", 0.0) >= self.min_score]
 
+    def _apply_hybrid_and_mmr(
+        self,
+        query: str,
+        combined: List[Dict[str, Any]],
+        final_top_n: int,
+    ) -> List[Dict[str, Any]]:
+        """Apply BM25 hybrid fusion then MMR reranking to a candidate list."""
+        if not combined:
+            return combined
+
+        # Step 1: hybrid BM25 re-scoring
+        if self._hybrid_scorer is not None:
+            fused = self._hybrid_scorer.score(query, combined, top_n=None)
+            combined = [
+                {
+                    "id": r.id,
+                    "text": r.text,
+                    "metadata": r.metadata,
+                    "score": r.fused_score,
+                    "dense_score": r.dense_score,
+                    "sparse_score": r.sparse_score,
+                }
+                for r in fused
+            ]
+
+        # Step 2: MMR diversity reranking
+        if self._mmr_reranker is not None:
+            reranked = self._mmr_reranker.rerank(combined, top_n=final_top_n)
+            combined = [
+                {
+                    "id": r.id,
+                    "text": r.text,
+                    "metadata": r.metadata,
+                    "score": r.original_score,
+                }
+                for r in reranked
+            ]
+        else:
+            combined.sort(key=lambda r: r.get("score", 0.0), reverse=True)
+            combined = combined[:final_top_n]
+
+        return combined
+
     def _format_context(self, filtered_results: List[Dict[str, Any]]) -> str:
-        """Format filtered results into LLM-ready context string."""
         context_parts = []
         for idx, result in enumerate(filtered_results, start=1):
             text = result.get("text", "").strip()
@@ -77,7 +168,6 @@ class RAGContextBuilder:
 
             source = metadata.get("benchmark_product") or metadata.get("source_id") or "CIS Benchmark"
             section_id = metadata.get("section_id") or metadata.get("section") or ""
-            # title > section_title > rule_id (rule_id fallback only if nothing else)
             section_title = metadata.get("section_title") or metadata.get("title") or ""
             if section_id and section_title and section_id != section_title:
                 section = f"{section_id} - {section_title}"
@@ -95,18 +185,12 @@ class RAGContextBuilder:
                 f"İçerik:\n{text}\n"
             )
 
-        return "\n" + "="*60 + "\n" + "\n".join(context_parts) + "="*60 + "\n"
+        return "\n" + "=" * 60 + "\n" + "\n".join(context_parts) + "=" * 60 + "\n"
+
+    # ── public retrieval API ──────────────────────────────────────────────────
 
     def retrieve_all(self, query: str) -> Tuple[str, List[Dict[str, Any]]]:
-        """
-        Tek embed çağrısıyla hem context string hem raw results döndürür.
-
-        Args:
-            query: Kullanıcı sorusu
-
-        Returns:
-            (context_str, raw_results) tuple
-        """
+        """Single-query retrieval — returns (context_str, raw_results)."""
         try:
             print(f"[RAG.retrieve_all] START — query='{query[:60]}'")
             filtered = self._search(query)
@@ -121,48 +205,56 @@ class RAGContextBuilder:
             return self._get_fallback_message(), []
 
     def retrieve_context(self, query: str) -> str:
-        """Formatted context string döndürür (LLM prompt'una eklenecek)."""
         context, _ = self.retrieve_all(query)
         return context
 
     def retrieve_raw(self, query: str) -> List[Dict[str, Any]]:
-        """Raw retrieval results döndürür (API response için)."""
         _, raw = self.retrieve_all(query)
         return raw
 
-    def retrieve_balanced(self, query: str, yaml_k: int = None, pdf_k: int = None) -> Tuple[str, List[Dict[str, Any]]]:
+    def retrieve_balanced(
+        self,
+        query: str,
+        yaml_k: int | None = None,
+        pdf_k: int | None = None,
+    ) -> Tuple[str, List[Dict[str, Any]]]:
         """
-        top_k'yi YAML ve PDF arasında eşit bölerek retrieve eder.
-        Tek embedding çağrısı kullanır (maliyet optimizasyonu).
+        Retrieves chunks from yaml_rule and cis_benchmark sources separately
+        (balanced), then optionally applies hybrid scoring + MMR.
 
         Args:
-            query: Kullanıcı sorusu
-            yaml_k: YAML'dan kaç chunk (None → top_k // 2)
-            pdf_k:  PDF'den kaç chunk  (None → top_k // 2, kalan top_k'ye eklenir)
+            query:  User question.
+            yaml_k: Chunks from YAML rules (default: self.top_k).
+            pdf_k:  Chunks from PDF benchmarks (default: self.top_k).
 
         Returns:
-            (context_str, raw_results) tuple — score'a göre sıralı
+            (context_str, raw_results) — sorted by relevance.
         """
         yaml_k = yaml_k if yaml_k is not None else self.top_k
-        pdf_k  = pdf_k  if pdf_k  is not None else self.top_k
+        pdf_k = pdf_k if pdf_k is not None else self.top_k
 
         try:
             print(f"[RAG.retrieve_balanced] START — query='{query[:60]}' yaml_k={yaml_k} pdf_k={pdf_k}")
-            # Tek embedding
             query_emb = self._embed_client.embed_query(query)
 
-            # İki ayrı filtrelenmiş arama
             yaml_results = self._search_with_emb(query_emb, top_k=yaml_k, doc_type="yaml_rule")
-            pdf_results  = self._search_with_emb(query_emb, top_k=pdf_k,  doc_type="cis_benchmark")
+            pdf_results = self._search_with_emb(query_emb, top_k=pdf_k, doc_type="cis_benchmark")
 
             print(f"[RAG.retrieve_balanced] yaml={len(yaml_results)} chunks, pdf={len(pdf_results)} chunks")
 
-            # Birleştir ve score'a göre sırala
-            combined = sorted(yaml_results + pdf_results, key=lambda r: r.get("score", 0.0), reverse=True)
+            combined = sorted(
+                yaml_results + pdf_results,
+                key=lambda r: r.get("score", 0.0),
+                reverse=True,
+            )
 
             if not combined:
                 print("[RAG.retrieve_balanced] No results → fallback")
                 return self._get_fallback_message(), []
+
+            # Enhanced: hybrid + MMR
+            final_top_n = yaml_k + pdf_k
+            combined = self._apply_hybrid_and_mmr(query, combined, final_top_n)
 
             context = self._format_context(combined)
             print(f"[RAG.retrieve_balanced] OK — {len(combined)} total sources, context_len={len(context)}")
@@ -172,34 +264,81 @@ class RAGContextBuilder:
             print(f"[RAG.retrieve_balanced] ERROR: {e}")
             return self._get_fallback_message(), []
 
+    def retrieve_multi(
+        self,
+        queries: List[str],
+        original_query: str,
+        yaml_k: int | None = None,
+        pdf_k: int | None = None,
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        Fan-out retrieval over multiple queries (from QueryPlanner), then
+        deduplicate by chunk-id (keeping best score), apply hybrid + MMR.
+
+        Called by InfoPipeline when query planning is enabled.
+
+        Args:
+            queries:        All queries (original + subqueries + HyDE + stepback).
+            original_query: The unmodified user question (used for BM25/MMR scoring).
+            yaml_k:         Chunks per query per source (default: self.top_k).
+            pdf_k:          Chunks per query per source (default: self.top_k).
+
+        Returns:
+            (context_str, raw_results) — deduplicated, scored, ranked.
+        """
+        yaml_k = yaml_k if yaml_k is not None else self.top_k
+        pdf_k = pdf_k if pdf_k is not None else self.top_k
+
+        try:
+            print(f"[RAG.retrieve_multi] START — {len(queries)} queries, original='{original_query[:50]}'")
+
+            # Collect results across all queries; keep best score per chunk-id
+            best: Dict[str, Dict[str, Any]] = {}
+            for q in queries:
+                q_emb = self._embed_client.embed_query(q)
+                for hit in (
+                    self._search_with_emb(q_emb, top_k=yaml_k, doc_type="yaml_rule")
+                    + self._search_with_emb(q_emb, top_k=pdf_k, doc_type="cis_benchmark")
+                ):
+                    cid = str(hit.get("id", ""))
+                    if cid not in best or hit.get("score", 0.0) > best[cid].get("score", 0.0):
+                        best[cid] = hit
+
+            combined = list(best.values())
+            print(f"[RAG.retrieve_multi] {len(combined)} unique chunks after dedup")
+
+            if not combined:
+                print("[RAG.retrieve_multi] No results → fallback")
+                return self._get_fallback_message(), []
+
+            # Enhanced: hybrid + MMR (scored against the ORIGINAL query)
+            final_top_n = (yaml_k + pdf_k) * 2
+            combined = self._apply_hybrid_and_mmr(original_query, combined, final_top_n)
+
+            context = self._format_context(combined)
+            print(f"[RAG.retrieve_multi] OK — {len(combined)} final chunks, context_len={len(context)}")
+            return context, combined
+
+        except Exception as exc:
+            print(f"[RAG.retrieve_multi] ERROR: {exc}")
+            return self._get_fallback_message(), []
+
     def _get_fallback_message(self) -> str:
-        """
-        RAG retrieval başarısız olduğunda fallback message.
-        """
         return (
             "\n[NOT: İlgili CIS benchmark dokümanı bulunamadı. "
             "Genel bilgilerle cevap verilecek.]\n"
         )
 
 
-# Singleton instance (optional)
+# Singleton instance
 _rag_builder: RAGContextBuilder | None = None
 
 
 def get_rag_context_builder(
     top_k: int = 5,
-    min_score: float = 0.7
+    min_score: float = 0.7,
 ) -> RAGContextBuilder:
-    """
-    Global RAGContextBuilder instance döndürür (singleton pattern).
-
-    Args:
-        top_k: Kaç chunk getirileceği
-        min_score: Minimum score threshold
-
-    Returns:
-        RAGContextBuilder instance
-    """
+    """Global RAGContextBuilder instance (singleton)."""
     global _rag_builder
 
     if _rag_builder is None:

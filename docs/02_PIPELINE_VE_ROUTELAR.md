@@ -150,9 +150,9 @@ Classification:"""
 Güvenli olduğu tespit edilen sorunun **niyetini** belirlemek. Kullanıcı ne istiyor? Bilgi mi, script mi, yoksa sadece sohbet mi?
 
 ### Teknoloji
-- **Hybrid approach**: ML (primary) + Pattern-based (fallback)
-- **ML Model**: Logistic Regression + TF-IDF (1,230 örnekle eğitilmiş)
-- **Performans**: %85.37 doğruluk, <10ms inference
+- **Hybrid approach**: Pattern matching (önce, <1ms) + ML fallback (28% kapsam, 5-10ms)
+- **ML Model**: Logistic Regression + TF-IDF (1.677 örnekle eğitilmiş, 7 kategori)
+- **Performans**: %90.48 test doğruluğu, %82.10 5-fold CV, <10ms inference
 
 ### Intent Kategorileri
 
@@ -275,11 +275,12 @@ Kullanıcının bilgi/kavram sorularını **RAG + LLM** ile yanıtlamak.
 #### 1. RAG Retrieval (Opsiyonel, default: açık)
 ```python
 # Semantic search in CIS Benchmark docs
-query_embedding = cohere.embed([soru])
+# Novita qwen3-embedding-8b (4096 dim) kullanılır
+query_embedding = novita_embeddings.embed([soru])
 results = qdrant.search(
     query_embedding,
-    top_k=5,  # En alakalı 5 chunk
-    score_threshold=0.7  # Min relevance
+    top_k=3,  # Her kaynak için (YAML rules + CIS PDF)
+    score_threshold=0.5  # Min relevance (fail-open ile 0.35'e kadar düşer)
 )
 ```
 
@@ -373,11 +374,23 @@ Kullanıcı API'de `use_rag=false` parametresi gönderirse:
 - Sadece LLM'in genel bilgisi kullanılır
 - Daha hızlı ama CIS Benchmark bilgisi olmadan yanıt
 
+### Enhanced RAG Pipeline (v1.1.0)
+
+`config.json → rag.enhanced.enabled: true` iken Layer 3B şu ek adımları çalıştırır:
+
+| Bileşen | Açıklama |
+|---------|----------|
+| **Hybrid BM25** | Qdrant'tan gelen chunk'lar üzerinde in-context BM25 skoru hesaplar, dense + sparse RRF fusion ile birleştirir |
+| **MMR Reranking** | Maximal Marginal Relevance ile tekrarlı chunk'ları eler, çeşitlilik sağlar (Jaccard benzerliği) |
+| **Query Planning** | HyDE (hipotetik belge embedding), subquery decomposition, stepback generalization |
+| **Claim Verification** | LLM her atomic claim'i chunk'lara göre doğrular; güven skoru düşükse yanıta ⚠️ uyarı eklenir |
+| **Fail-Open Search** | 0 sonuç dönerse min_score otomatik gevşer (1.0 → 0.7 → 0.5) |
+
 ### Performans
-- **Süre (RAG açık)**: 1.5-2.5s
+- **Süre (RAG açık)**: 1.5-2.5s (standart) / 3-5s (enhanced)
 - **Süre (RAG kapalı)**: 0.8-1.5s
 - **Maliyet**: ~$0.0008-0.0015
-- **Layer Path**: `1→2→3B→4`
+- **Layer Path**: `1→2→3B`
 
 ---
 
@@ -744,11 +757,11 @@ answer = llm_small(prompt)  # Groq llama-3.1-8b-instant
 
 **Step 3B: RAG + LLM Generation (RAG KULLANIM durumunda)**
 ```python
-# Example: "Ubuntu 22.04 SSH yapılandırması nedir?"
+# Example: "Ubuntu 24.04 SSH yapılandırması nedir?"
 
-# 3B.1: RAG Retrieval
-query_embedding = cohere.embed("Ubuntu 22.04 SSH yapılandırması")
-rag_results = qdrant.search(query_embedding, top_k=5, score_threshold=0.7)
+# 3B.1: RAG Retrieval (Novita qwen3-embedding-8b, 4096 dim)
+query_embedding = novita_embeddings.embed("Ubuntu 24.04 SSH yapılandırması")
+rag_results = qdrant.search(query_embedding, top_k=3, score_threshold=0.5)
 # Returns: 3 chunks (score > 0.7)
 
 # 3B.2: Context Construction

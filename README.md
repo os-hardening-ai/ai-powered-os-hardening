@@ -13,15 +13,15 @@ AI-powered OS hardening system that analyzes OS security configurations using CI
 ### Key Features
 
 - **4-Layer Security Pipeline**: Safety Classification → Intent Detection → Routing → Generation
-- **RAG Pipeline**: Semantic search over CIS Benchmarks for security information access
-- **LLM Integration**: Groq (free), OpenAI, Ollama support with provider fallback
+- **Enhanced RAG Pipeline (v1.1.0)**: Hybrid BM25+Dense retrieval, MMR reranking, Query Planning (HyDE + subqueries + stepback), Claim Verification, Fail-Open search
+- **LLM Integration**: Groq (free), Novita (DeepSeek), OpenAI, Ollama support with provider fallback
 - **ML Intent Detection**: 90.48% accuracy, 5-10ms latency, local inference ($0 cost)
 - **Zero Trust Enrichment**: Automatic ZT principles, CIS/NIST/ISO standards, rollback strategies
 - **Hybrid Validation**: Regex (fast, $0) + LLM (deep, $0.001) dangerous command detection
 - **Out-of-Scope Handling**: Politely rejects non-security topics
 - **Multi-Path Routing**: Pattern (3A), Info (3B), Action (3C), Out-of-Scope
 - **Security**: Rate limiting (100 req/min), input validation, security headers
-- **Monitoring**: Real-time metrics, latency tracking, analytics dashboard
+- **Monitoring**: Real-time metrics, latency tracking, analytics dashboard, Prometheus + OpenTelemetry
 - **API Documentation**: OpenAPI/Swagger UI with comprehensive examples
 
 ### Performance Highlights
@@ -271,9 +271,14 @@ All comprehensive documentation is available in Turkish in the `docs/` folder:
 - Ollama (local models) - Offline fallback
 
 **RAG Components**:
-- **Embeddings**: Novita (4096 dimensions)
-- **Vector Store**: Qdrant
-- **Chunking**: Late chunking with sliding window
+- **Embeddings**: Novita `qwen3-embedding-8b` (4096 dimensions)
+- **Vector Store**: Qdrant Cloud
+- **Chunking**: CIS section chunking (PDF) + YAML rules chunking
+- **Hybrid Retrieval**: In-context BM25 + dense RRF fusion (v1.1.0)
+- **MMR Reranking**: Maximal Marginal Relevance diversity reranking (v1.1.0)
+- **Query Planning**: HyDE + subquery decomposition + stepback generalization (v1.1.0)
+- **Claim Verification**: LLM-based answer confidence scoring (v1.1.0)
+- **Fail-Open Search**: Progressive `min_score` relaxation to prevent zero-result failures (v1.1.0)
 
 **Machine Learning**:
 - **Model**: Logistic Regression + TF-IDF
@@ -319,7 +324,7 @@ Main chat endpoint with RAG + LLM integration.
   "answer": "SSH portunu değiştirmek için...",
   "intent": "action_request",
   "safety_category": "safe_defensive",
-  "layer_path": "1->2->3C->4",
+  "layer_path": "1→2→3C",
   "rag_sources": [
     {
       "id": "source_1",
@@ -330,11 +335,14 @@ Main chat endpoint with RAG + LLM integration.
   ],
   "stats": {
     "total_time_s": 5.2,
-    "rag_time_s": 3.0,
-    "llm_time_s": 2.1
+    "rag_used": true,
+    "rag_chunks": 6,
+    "model": "llama-3.3-70b-versatile",
+    "complexity": "complex"
   },
   "request_id": "req_abc123",
-  "estimated_cost": 0.0005
+  "estimated_cost": 0.0005,
+  "verification_confidence": 0.92
 }
 ```
 
@@ -574,13 +582,24 @@ MIT License - See [LICENSE](LICENSE) file
 
 ## Changelog
 
-### Recent Updates (v1.0.0)
+### v1.1.0 — Enhanced RAG (2026-04-29)
+- ✅ **Hybrid BM25 + Dense Retrieval**: In-context BM25 re-scoring over Qdrant candidates with RRF fusion
+- ✅ **MMR Reranking**: Maximal Marginal Relevance diversity reranking (Jaccard similarity, no extra API calls)
+- ✅ **Query Planning**: HyDE (hypothetical document embeddings) + subquery decomposition + stepback generalization
+- ✅ **Claim Verification**: LLM judges each claim against retrieved chunks; adds confidence score to response
+- ✅ **Fail-Open Search**: Progressive `min_score` relaxation (100% → 70% → 50%) to prevent zero-result failures
+- ✅ **Singleton vector store**: `QdrantVectorStore` initialized once per process, not per request
+- ✅ **Graceful Qdrant error handling**: Transient 503/network errors no longer crash the API
+- ✅ **Extended API response**: `verification_confidence` field + enriched `stats` dict in `/api/chat`
+- ✅ Added `rank-bm25>=0.2.2` dependency
+- ✅ Prometheus + OpenTelemetry monitoring
+
+### v1.0.0 (2025-12-24)
 - ✅ Added streaming support (SSE) for better UX
 - ✅ Implemented provider fallback chain (Groq → OpenAI → Ollama)
 - ✅ Added request timeout protection (60s default)
 - ✅ Enhanced API headers (request ID, processing time, provider info)
 - ✅ Standardized error responses
-- ✅ Fixed 3 CVE vulnerabilities (cryptography, idna, urllib3)
 - ✅ Retrained ML model for sklearn 1.8.0 compatibility
 - ✅ Improved RAG triggering logic (45% reduction in unnecessary calls)
 - ✅ Comprehensive documentation in Turkish and English
@@ -589,6 +608,6 @@ MIT License - See [LICENSE](LICENSE) file
 
 **Built with ❤️ for Computer Engineering Graduation Project**
 
-**Last Updated**: 2025-12-24
-**Version**: v1.0.0
-**Status**: Production Ready (85%)
+**Last Updated**: 2026-04-29
+**Version**: v1.1.0
+**Status**: Production Ready (90%)

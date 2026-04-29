@@ -5,36 +5,58 @@
 RAG, **LLM'lerin bilgi tabanını genişletmek** için kullanılan bir tekniktir. LLM'in eğitim datasında olmayan veya güncel olmayan bilgileri **dış kaynaklardan (CIS Benchmark dokümanları + hardening kuralları) çekerek** yanıtlara dahil eder.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                     RAG PIPELINE                              │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  1. USER QUESTION                                             │
-│     "Ubuntu 24.04 SSH hardening best practices?"             │
-│                      │                                        │
-│                      ▼                                        │
-│  2. EMBEDDING (Novita qwen3-embedding-8b)                    │
-│     Text → 4096-dimensional vector                           │
-│     [0.123, -0.456, 0.789, ...]                              │
-│                      │                                        │
-│                      ▼                                        │
-│  3. SEMANTIC SEARCH (Qdrant Cloud)                           │
-│     Find similar chunks from CIS Benchmarks + YAML rules     │
-│     ├─ Chunk 1 (score: 0.91) - CIS PDF Section 5.2.4        │
-│     ├─ Chunk 2 (score: 0.87) - YAML Rule sshd_config        │
-│     └─ Chunk 3 (score: 0.82) - CIS PDF Section 5.2.3        │
-│                      │                                        │
-│                      ▼                                        │
-│  4. CONTEXT CONSTRUCTION                                      │
-│     Combine retrieved chunks                                  │
-│     "CIS Ubuntu 24.04 Section 5.2.4: PermitRootLogin no..." │
-│                      │                                        │
-│                      ▼                                        │
-│  5. LLM GENERATION (Groq Llama 70B / Novita Qwen)           │
-│     Prompt: Context + User Question                           │
-│     Output: Detailed, source-backed answer                    │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                  ENHANCED RAG PIPELINE (v1.1)                     │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  1. USER QUESTION                                                  │
+│     "Ubuntu 24.04 SSH hardening best practices?"                  │
+│                      │                                             │
+│                      ▼                                             │
+│  2. QUERY PLANNING (QueryPlanner — opsiyonel)                     │
+│     Original + Subquery + HyDE passage + Stepback                 │
+│     → 4-5 farklı sorgu stratejisi                                 │
+│                      │                                             │
+│                      ▼                                             │
+│  3. FAN-OUT EMBEDDING (Novita qwen3-embedding-8b)                │
+│     Her sorgu için 4096-dim vektör                                │
+│                      │                                             │
+│                      ▼                                             │
+│  4. PER-SOURCE SEMANTIC SEARCH (Qdrant Cloud)                    │
+│     YAML rules + CIS PDF benchmark ayrı ayrı aranır              │
+│     Fail-open: 0 sonuçta min_score otomatik düşer                │
+│     ├─ YAML hit 1 (score: 0.91) - sshd_config rule              │
+│     ├─ YAML hit 2 (score: 0.88) - PermitRootLogin               │
+│     ├─ PDF hit 1  (score: 0.87) - CIS Section 5.2.4             │
+│     └─ PDF hit 2  (score: 0.82) - CIS Section 5.2.3             │
+│                      │                                             │
+│                      ▼                                             │
+│  5. HYBRID SCORING (InContextHybridScorer — opsiyonel)           │
+│     BM25 + Dense RRF füzyonu                                      │
+│     Exact keyword match: /etc/ssh/sshd_config, PermitRootLogin   │
+│                      │                                             │
+│                      ▼                                             │
+│  6. MMR RERANKING (MMRReranker — opsiyonel)                      │
+│     Jaccard çeşitlilik + Relevance dengesi                        │
+│     Tekrarlayan chunk'ları elemek → top-N seç                    │
+│                      │                                             │
+│                      ▼                                             │
+│  7. CONTEXT CONSTRUCTION                                           │
+│     "CIS Ubuntu 24.04 Section 5.2.4: PermitRootLogin no..."     │
+│                      │                                             │
+│                      ▼                                             │
+│  8. LLM GENERATION (Groq Llama 70B / Novita Qwen)               │
+│     Prompt: Context + User Question                               │
+│                      │                                             │
+│                      ▼                                             │
+│  9. CLAIM VERIFICATION (ClaimVerifier — opsiyonel)               │
+│     Her iddia → chunk'lara karşı doğrulama                       │
+│     Düşük güven → uyarı disclaimer eklenir                       │
+│                      │                                             │
+│                      ▼                                             │
+│  10. OUTPUT  (kaynaklı, doğrulanmış yanıt)                       │
+│                                                                    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -205,32 +227,79 @@ Embedding dim:               4096
 
 **Implementasyon**: `rag/retrieval/rag_retriever.py` + `llm/rag/integration.py`
 
-#### Query Embedding
+#### 2a. Query Planning (Opsiyonel — `rag.enhanced.use_query_planning: true`)
 
-Kullanıcı sorusu aynı Novita modeli ile embed edilir:
+`rag/query/query_planner.py` — `QueryPlanner`
+
+Kullanıcı sorusu tek bir query yerine 4-5 stratejiye bölünür:
+
+| Strateji | Amaç | Örnek |
+|----------|------|-------|
+| **Original** | Orijinal sorgu | "Ubuntu 24.04 SSH hardening nasıl?" |
+| **Subquery** | Atomik alt sorular | "SSH PermitRootLogin nasıl kapatılır?" |
+| **HyDE** | Hipotetik cevap metni | "PermitRootLogin no olarak /etc/ssh/sshd_config..." |
+| **Stepback** | Genel/soyut sorgu | "Linux SSH servis güvenliği genel prensipleri" |
+
+Her strateji ayrı embed edilip aranır → sonuçlar birleştirilir (deduplication).
 
 ```python
-query_vector = embed_client.embed_texts(["Ubuntu SSH root login nasıl devre dışı bırakılır?"])
+plan = query_planner.plan("Ubuntu 24.04 SSH hardening nasıl?")
+# plan.all_queries() → [original, subq1, subq2, hyde1, stepback1]
+```
+
+#### 2b. Per-Source Embedding + Search
+
+Kullanıcı sorusu (veya genişletilmiş sorgular) aynı Novita modeli ile embed edilir:
+
+```python
+query_vector = embed_client.embed_query("Ubuntu SSH root login nasıl devre dışı bırakılır?")
 # → 4096-dim vector
 ```
 
-#### Semantic Search
+Her kaynak ayrı ayrı aranır — YAML ve PDF dengeli chunk getirir:
 
 ```python
-results = qdrant_store.search(
-    query_vector=query_vector,
-    top_k=5,              # config: rag.retrieval.top_k
-    min_score=0.5         # config: rag.retrieval.min_score
-)
+yaml_results = qdrant_store.search(query_vector, top_k=3, doc_type="yaml_rule")
+pdf_results  = qdrant_store.search(query_vector, top_k=3, doc_type="cis_benchmark")
 ```
 
-Sonuçlar her iki kaynaktan (PDF + YAML) karma gelebilir. RAG en alakalı chunk'ları döndürür.
+**Fail-Open**: 0 sonuç gelirse `search_with_fallback()` min_score'u otomatik düşürür (%70 → %50), sorgu ölü sonuçla bitmez.
 
-#### Smart RAG Triggering
+#### 2c. Hybrid Scoring (Opsiyonel — `rag.enhanced.use_hybrid: true`)
+
+`rag/retrieval/hybrid_retriever.py` — `InContextHybridScorer`
+
+Qdrant'ın dense sonuçları üzerinde BM25 re-scoring uygulanır. CIS'e özgü tam token eşleşmelerini yakalar:
+
+```
+/etc/ssh/sshd_config, PermitRootLogin, auditd, UFW, PAM → dense search kaçırabilir, BM25 yakalar
+```
+
+Reciprocal Rank Fusion (RRF) ile dense ve sparse skorlar birleştirilir:
+
+```
+fused_score = 0.6 / (60 + dense_rank) + 0.4 / (60 + bm25_rank)
+```
+
+#### 2d. MMR Reranking (Opsiyonel — `rag.enhanced.use_mmr: true`)
+
+`rag/retrieval/reranker.py` — `MMRReranker`
+
+Aynı CIS bölümünün PDF ve YAML versiyonu sık sık top-K'ya birlikte girer. MMR bu tekrarı elimine eder — **relevance × diversity** dengesi:
+
+```
+MMR(i) = λ × relevance(i) − (1−λ) × max_similarity(i, seçilenler)
+```
+
+- `λ = 0.7` → relevance ağırlıklı, ama diversity korunur
+- Çeşitlilik ölçüsü: Jaccard token benzerliği (extra embed çağrısı yok)
+- `max_per_source = 3` → tek kaynaktan max 3 chunk
+
+#### 2e. Smart RAG Triggering
 
 RAG **her sorguda çalışmaz** — `info_pipeline.py` (Layer 3B) ve `action_pipeline.py` (Layer 3C) RAG context ister. Pattern Responder (selamlama, teşekkür) RAG'ı bypass eder. Bu sayede sorguların ~%45'i RAG'ı atlar, gecikme ve maliyet azalır.
 
-#### Context Construction
+#### 2f. Context Construction
 
 `llm/rag/integration.py` — `RAGContextBuilder`:
 
@@ -275,13 +344,38 @@ API yanıtında `rag_sources` alanı olarak da döner:
 {
   "rag": {
     "retrieval": {
-      "top_k": 5,
+      "top_k": 3,
       "min_score": 0.5,
-      "max_results": 10
+      "max_results": 6
+    },
+    "enhanced": {
+      "enabled": true,
+      "use_hybrid": true,
+      "dense_weight": 0.6,
+      "sparse_weight": 0.4,
+      "use_mmr": true,
+      "mmr_lambda": 0.7,
+      "mmr_max_per_source": 3,
+      "use_query_planning": true,
+      "subqueries": true,
+      "hyde": true,
+      "stepback": true,
+      "max_subqueries": 2,
+      "use_claim_verification": true,
+      "min_verification_confidence": 0.6
     }
   }
 }
 ```
+
+### Enhanced RAG Özelliklerini Ayrı Ayrı Açma
+
+| Flag | Açıklama | Ekstra Maliyet | Öneri |
+|------|----------|----------------|-------|
+| `use_hybrid` | BM25 + RRF füzyonu | Yok (CPU) | Önce aç |
+| `use_mmr` | Diversity reranking | Yok (CPU) | Sonra aç |
+| `use_query_planning` | Subquery + HyDE + Stepback | +3-4 LLM çağrısı | Demo için aç |
+| `use_claim_verification` | İddia doğrulama | +2-6 LLM çağrısı | Seçici kullan |
 
 ### Top-K Trade-off
 
@@ -367,25 +461,29 @@ API yanıtında `rag_sources` alanı olarak da döner:
 
 ---
 
-## Mevcut Durum ve Eksiklikler
+## Mevcut Durum
 
-### Çalışır Durumda
+### Çalışır Durumda (v1.1)
 - Ubuntu 24.04 CIS PDF indexleme
-- Windows Server 2025 CIS PDF indexleme
+- Windows Server 2025 + Windows 11 CIS PDF indexleme
 - Ubuntu 24.04 YAML kurallar indexleme (312 kural)
+- Windows 11 YAML kurallar indexleme
 - Novita 4096-dim embedding
 - Qdrant Cloud vector store
 - Smart RAG triggering (%45 bypass)
+- **✅ Hybrid BM25 + Dense RRF scoring** (`rag.enhanced.use_hybrid`)
+- **✅ MMR Reranking** (Jaccard çeşitlilik) (`rag.enhanced.use_mmr`)
+- **✅ Query Planning** (Subquery + HyDE + Stepback) (`rag.enhanced.use_query_planning`)
+- **✅ Claim Verification** (halüsinasyon kontrolü) (`rag.enhanced.use_claim_verification`)
+- **✅ Fail-Open Search** (0 sonuçta min_score otomatik gevşer)
 
-### Eksik / Gelecek İyileştirmeler
+### Kalan İyileştirmeler
 
 | Eksik | Etki | Öneri |
 |-------|------|-------|
-| `windows_2025_rules.yaml` boş | Windows kurallar için tam script yok | YAML doldurulmalı |
+| `windows_server_2025_rules.yaml` boş | Windows Server için tam script yok | YAML doldurulmalı |
 | Redis embedding cache | Her sorguda re-embed (~2.1s) | Redis ile cache |
-| Hybrid search | Exact keyword match zayıf | Semantic + BM25 |
-| OS bazlı filtreleme | Windows sorusuna Ubuntu chunk gelebilir | Metadata filter |
-| Re-ranking | İlk retrieval sıralaması optimal değil | Cross-encoder |
+| OS bazlı metadata filtreleme | Windows sorusuna Ubuntu chunk gelebilir | Qdrant metadata filter |
 
 ---
 
@@ -444,11 +542,15 @@ API yanıtında `rag_sources` alanı olarak da döner:
 | `rag/chunking/yaml_rules_chunker.py` | YAML kural chunker |
 | `rag/embeddings/novita_embeddings.py` | Novita embedding client |
 | `rag/vector_store/qdrant_store.py` | Qdrant vector store |
-| `rag/retrieval/rag_retriever.py` | RAG retrieval logic |
-| `llm/rag/integration.py` | Pipeline'a context enjeksiyonu |
+| `rag/retrieval/rag_retriever.py` | RAG retrieval logic + fail-open |
+| `rag/retrieval/reranker.py` | **MMR Reranker** (Jaccard diversity) |
+| `rag/retrieval/hybrid_retriever.py` | **In-context BM25 + RRF hybrid scorer** |
+| `rag/query/query_planner.py` | **Query Planner** (subquery, HyDE, stepback) |
+| `rag/verify/claim_verifier.py` | **Claim Verifier** (halüsinasyon kontrolü) |
+| `llm/rag/integration.py` | Pipeline'a context enjeksiyonu (enhanced) |
 | `rag/indexing/index_pipeline.py` | Index oluşturma pipeline |
 | `scripts/build_index.py` | Index oluşturma script |
-| `config/config.json` | RAG ve embedding ayarları |
+| `config/config.json` | RAG, enhanced RAG ve embedding ayarları |
 | `data/source/` | CIS Benchmark PDF'leri |
 | `data/rules/` | YAML hardening kural dosyaları |
 
