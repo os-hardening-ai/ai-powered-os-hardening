@@ -53,6 +53,7 @@ class ConfigLoader:
             retrieval=rag_raw.get("retrieval", {}),
             source_documents=sd_list,
             rules=rules_dict,
+            enhanced=rag_raw.get("enhanced", {}),
         )
 
         # Embedding

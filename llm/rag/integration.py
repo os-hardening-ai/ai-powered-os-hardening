@@ -275,7 +275,8 @@ class RAGContextBuilder:
         Fan-out retrieval over multiple queries (from QueryPlanner), then
         deduplicate by chunk-id (keeping best score), apply hybrid + MMR.
 
-        Called by InfoPipeline when query planning is enabled.
+        Queries are embedded and searched in parallel via ThreadPoolExecutor
+        (IO-bound: each query = 1 embed API call + 2 Qdrant searches).
 
         Args:
             queries:        All queries (original + subqueries + HyDE + stepback).
@@ -286,26 +287,37 @@ class RAGContextBuilder:
         Returns:
             (context_str, raw_results) — deduplicated, scored, ranked.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         yaml_k = yaml_k if yaml_k is not None else self.top_k
         pdf_k = pdf_k if pdf_k is not None else self.top_k
 
-        try:
-            print(f"[RAG.retrieve_multi] START — {len(queries)} queries, original='{original_query[:50]}'")
+        def _retrieve_single(q: str) -> List[Dict[str, Any]]:
+            q_emb = self._embed_client.embed_query(q)
+            return (
+                self._search_with_emb(q_emb, top_k=yaml_k, doc_type="yaml_rule")
+                + self._search_with_emb(q_emb, top_k=pdf_k, doc_type="cis_benchmark")
+            )
 
-            # Collect results across all queries; keep best score per chunk-id
+        try:
+            print(f"[RAG.retrieve_multi] START — {len(queries)} queries parallel, original='{original_query[:50]}'")
+
             best: Dict[str, Dict[str, Any]] = {}
-            for q in queries:
-                q_emb = self._embed_client.embed_query(q)
-                for hit in (
-                    self._search_with_emb(q_emb, top_k=yaml_k, doc_type="yaml_rule")
-                    + self._search_with_emb(q_emb, top_k=pdf_k, doc_type="cis_benchmark")
-                ):
-                    cid = str(hit.get("id", ""))
-                    if cid not in best or hit.get("score", 0.0) > best[cid].get("score", 0.0):
-                        best[cid] = hit
+            max_workers = min(len(queries), 4)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_retrieve_single, q): q for q in queries}
+                for future in as_completed(futures):
+                    try:
+                        for hit in future.result():
+                            cid = str(hit.get("id", ""))
+                            if cid not in best or hit.get("score", 0.0) > best[cid].get("score", 0.0):
+                                best[cid] = hit
+                    except Exception as exc:
+                        _logger.warning("[retrieve_multi] query failed ('%s'): %s", futures[future][:40], exc)
 
             combined = list(best.values())
-            print(f"[RAG.retrieve_multi] {len(combined)} unique chunks after dedup")
+            print(f"[RAG.retrieve_multi] {len(combined)} unique chunks after parallel dedup")
 
             if not combined:
                 print("[RAG.retrieve_multi] No results → fallback")

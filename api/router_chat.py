@@ -154,6 +154,25 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
 
+        # Filter agent: os/role verilmemişse sorgudan çıkar
+        _inferred_os: str | None = None
+        if ctx.os is None or ctx.role is None:
+            try:
+                from rag.query.filter_agent import FilterAgent
+                _fa = FilterAgent(llm_fn=llm_small)
+                _filters = _fa.infer(payload.question)
+                if _filters.os_type and ctx.os is None:
+                    ctx.os = _filters.os_type
+                    _inferred_os = _filters.os_type
+                if _filters.role and ctx.role is None:
+                    ctx.role = _filters.role
+                _conv_logger.debug(
+                    "[FilterAgent] os=%s role=%s confidence=%.2f source=%s",
+                    _filters.os_type, _filters.role, _filters.confidence, _filters.source,
+                )
+            except Exception as _fe:
+                _conv_logger.warning("[FilterAgent] failed (non-fatal): %s", _fe)
+
         # RAG builder — sadece use_rag=True ise baslat
         rag_builder = None
         if payload.use_rag:
@@ -234,6 +253,7 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                 "rag_chunks": _meta.get("rag_chunks", 0),
                 "model": _meta.get("model"),
                 "complexity": _meta.get("complexity"),
+                "inferred_os": _inferred_os,
             },
             request_id=ctx.request_id,
             estimated_cost=result.estimated_cost,
@@ -286,6 +306,19 @@ async def chat_stream(payload: ChatRequest):
             security_level=payload.security_level,  # type: ignore
             zt_maturity=payload.zt_maturity,  # type: ignore
         )
+
+        # Filter agent: os/role verilmemişse sorgudan çıkar
+        if ctx.os is None or ctx.role is None:
+            try:
+                from rag.query.filter_agent import FilterAgent
+                _fa = FilterAgent(llm_fn=llm_small)
+                _filters = _fa.infer(payload.question)
+                if _filters.os_type and ctx.os is None:
+                    ctx.os = _filters.os_type
+                if _filters.role and ctx.role is None:
+                    ctx.role = _filters.role
+            except Exception as _fe:
+                _conv_logger.warning("[FilterAgent] stream failed (non-fatal): %s", _fe)
 
         # RAG builder
         rag_builder = None
