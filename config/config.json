@@ -121,7 +121,13 @@
     "dim": 4096,
     "base_url": "https://api.novita.ai/openai",
     "batch_size": 100,
-    "cache_enabled": false
+    "cache_enabled": true,
+    "cache_ttl_seconds": 86400
+  },
+  "redis": {
+    "url": "redis://localhost:6379/0",
+    "embedding_cache_ttl_seconds": 86400,
+    "session_ttl_seconds": 3600
   },
   "vector_store": {
     "provider": "qdrant",

@@ -1,5 +1,5 @@
 Sen bir siber güvenlik uzmanısın. Aşağıdaki soruyu kısa, net ve pratik şekilde yanıtla.
-
+{history_section}
 SORU: "{user_question}"
 
 BAĞLAM:

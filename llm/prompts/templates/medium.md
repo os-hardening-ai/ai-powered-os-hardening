@@ -1,5 +1,5 @@
 Sen bir Zero Trust siber güvenlik uzmanısın. Aşağıdaki soruyu pratik ve adım adım yanıtla.
-
+{history_section}
 SORU: "{user_question}"
 
 BAĞLAM:

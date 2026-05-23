@@ -33,9 +33,16 @@ def load_template(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+class _DefaultDict(dict):
+    """format_map için eksik key'leri boş string ile karşıla."""
+    def __missing__(self, key: str) -> str:
+        return ""
+
+
 def render_template(name: str, **variables: str) -> str:
     """
     Şablonu yükle ve değişkenleri doldur.
+    Şablonda bulunmayan değişkenler boş string olarak bırakılır.
 
     Args:
         name: Şablon adı
@@ -45,4 +52,4 @@ def render_template(name: str, **variables: str) -> str:
         Doldurulmuş prompt string
     """
     template = load_template(name)
-    return template.format_map(variables)
+    return template.format_map(_DefaultDict(variables))

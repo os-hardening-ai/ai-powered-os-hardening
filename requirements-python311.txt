@@ -38,6 +38,9 @@ faiss-cpu==1.9.0.post1
 # --- Hybrid Retrieval ---
 rank-bm25>=0.2.2  # In-context BM25 scoring for exact keyword/path matching (enhanced RAG)
 
+# --- Cache ---
+redis>=5.0.0  # Embedding cache (embedding_cache.py)
+
 # --- PDF read (tekini seç: PyMuPDF yeter) ---
 PyMuPDF==1.24.14
 pymupdf4llm
