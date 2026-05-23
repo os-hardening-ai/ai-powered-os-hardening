@@ -159,6 +159,10 @@ class RequestContext(BaseModel):
     script_examples: Dict[str, str] = Field(default_factory=dict)
     # Örnek: {"bash": "#!/bin/bash\n...", "powershell": "Set-ItemProperty..."}
 
+    # ── Conversation history (multi-turn) ──
+    # [{"role": "user"|"assistant", "content": str}, ...]
+    conversation_history: List[Dict[str, str]] = Field(default_factory=list)
+
     # ── Meta ──
     request_id: str = Field(default_factory=lambda: f"req_{uuid.uuid4().hex[:16]}")
     extra: Dict[str, Any] = Field(default_factory=dict)

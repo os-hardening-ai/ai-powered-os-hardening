@@ -217,10 +217,22 @@ const sendMessage = async () => {
 
 | Method | Endpoint | Açıklama |
 |--------|----------|----------|
-| POST | `/api/chat` | Ana chat endpoint (RAG + LLM) |
-| POST | `/rag/search` | Sadece RAG araması |
-| GET | `/health` | Health check |
+| POST | `/api/chat` | Ana chat endpoint (RAG + LLM + 4-layer pipeline) |
+| POST | `/api/chat/stream` | Streaming SSE chat |
+| POST | `/v1/chat/completions` | OpenAI-uyumlu chat (herhangi bir OpenAI istemcisi ile kullanılabilir) |
+| GET | `/v1/models` | OpenAI-uyumlu model listesi |
+| POST | `/rag/search` | Sadece RAG araması (LLM yok) |
+| GET | `/` | Root — API bilgisi |
+| GET | `/health` | Servis sağlık durumu |
+| GET | `/health/detailed` | Bileşen bazlı sağlık (vector_store, embedding, llm) |
 | GET | `/metrics` | Performans metrikleri |
+| GET | `/metrics/errors` | Son hata logu |
+| GET | `/metrics/slow` | En yavaş istekler |
+| GET | `/api/analytics` | Analytics dashboard |
+| GET | `/api/analytics/cost` | Maliyet dökümü |
+| GET | `/api/analytics/rag` | RAG kullanım istatistikleri |
+| GET | `/docs` | Swagger UI |
+| GET | `/redoc` | ReDoc UI |
 
 ---
 
@@ -256,34 +268,36 @@ Content-Type: application/json
 | Parametre | Tip | Zorunlu | Açıklama | Varsayılan |
 |-----------|-----|---------|----------|------------|
 | `question` | string | ✅ Evet | Kullanıcı sorusu (1-5000 karakter) | - |
-| `os` | string | ❌ Hayır | İşletim sistemi | `null` |
-| `role` | string | ❌ Hayır | Kullanıcı rolü | `null` |
+| `os` | string | ❌ Hayır | İşletim sistemi (verilmezse FilterAgent çıkarır) | `null` |
+| `role` | string | ❌ Hayır | Kullanıcı rolü (verilmezse FilterAgent çıkarır) | `null` |
 | `security_level` | string | ❌ Hayır | Güvenlik seviyesi | `balanced` |
 | `zt_maturity` | string | ❌ Hayır | Zero Trust maturity | `medium` |
-| `use_rag` | boolean | ❌ Hayır | RAG kullan (akıllı RAG için `true`) | `true` |
-| `rag_top_k` | integer | ❌ Hayır | RAG chunk sayısı (1-20) | `5` |
+| `use_rag` | boolean | ❌ Hayır | RAG kullan | `true` |
+| `rag_top_k` | integer | ❌ Hayır | RAG chunk sayısı (1-20) | `3` |
 | `rag_min_score` | float | ❌ Hayır | Min relevance score (0.0-1.0) | `0.5` |
+| `stream` | boolean | ❌ Hayır | SSE streaming yanıt | `false` |
 | `timeout` | integer | ❌ Hayır | Request timeout (1-300 saniye) | `60` |
 
 #### Parametre Detayları
 
 **`os` (İşletim Sistemi):**
+- `ubuntu_24_04` - Ubuntu 24.04 LTS *(CIS PDF + YAML kurallar)*
 - `ubuntu_22_04` - Ubuntu 22.04 LTS
-- `ubuntu_24_04` - Ubuntu 24.04 LTS
-- `centos_9` - CentOS Stream 9
-- `windows_server_2022` - Windows Server 2022
-- `debian_12` - Debian 12 (Bookworm)
+- `windows_11` - Windows 11 Desktop *(CIS PDF + YAML kurallar)*
+- `windows_server_2025` - Windows Server 2025 *(CIS PDF)*
+- `centos` - CentOS / RHEL
+- `debian` - Debian
 
-**Not**: Action request'lerde (script oluşturma) `os` parametresi **gereklidir**.
+**Not**: `os` verilmezse **FilterAgent** sorgu metninden otomatik çıkarır. Çıkaramazsa `null` kalır. `stats.inferred_os` alanında sonuç görülür.
 
 **`role` (Kullanıcı Rolü):**
-- `admin` - Sistem yöneticisi
-- `sysadmin` - Sistem yöneticisi (genel)
-- `soc` - SOC analisti
+- `sysadmin` - Sistem yöneticisi
+- `soc` - SOC / Blue Team analisti
 - `developer` - Yazılım geliştirici
+- `auditor` - Güvenlik denetçisi
 - `devops` - DevOps mühendisi
 
-**Not**: Action request'lerde `role` parametresi **gereklidir**.
+**Not**: `role` verilmezse **FilterAgent** sorgu metninden otomatik çıkarır.
 
 **`security_level` (Güvenlik Seviyesi):**
 - `minimal` - Minimum güvenlik (development ortamları)
@@ -294,6 +308,44 @@ Content-Type: application/json
 - `low` - Temel ZT prensipleri (least privilege, logging)
 - `medium` - Orta seviye ZT (+ MFA, network segmentation)
 - `high` - İleri seviye ZT (+ continuous validation, micro-segmentation)
+
+---
+
+### FilterAgent — Otomatik OS/Rol Çıkarımı
+
+`os` veya `role` parametreleri verilmezse sistem **FilterAgent** (`rag/query/filter_agent.py`) ile bunları sorgu metninden otomatik olarak çıkarır.
+
+**İki aşamalı çalışır:**
+
+1. **Pattern matching** (<1ms, $0): Regex/keyword eşleşmesi
+2. **LLM fallback** (~200ms): Belirsiz sorularda LLM ile JSON çıkarımı
+
+**Örnek:**
+```json
+// REQUEST — os/role verilmemiş
+{ "question": "Ubuntu 24.04 sistemimde SSH nasıl sıkılaştırırım?" }
+
+// YANIT stats bölümü
+{
+  "stats": {
+    "inferred_os": "ubuntu_24_04",  // FilterAgent çıkardı
+    "rag_used": true,
+    "rag_chunks": 6
+  }
+}
+```
+
+```json
+// REQUEST — os/role açıkça verilmiş (FilterAgent çalışmaz)
+{ "question": "SSH nasıl sıkılaştırılır?", "os": "ubuntu_24_04", "role": "sysadmin" }
+```
+
+**Desteklenen çıkarım değerleri:**
+
+| Alan | Desteklenen Değerler |
+|------|---------------------|
+| `os_type` | `ubuntu_24_04`, `ubuntu_22_04`, `windows_11`, `windows_server_2025`, `centos`, `debian` |
+| `role` | `sysadmin`, `soc`, `developer`, `auditor`, `devops` |
 
 ---
 
@@ -550,6 +602,7 @@ if use_rag_final and self.rag_builder:
 | `stats.rag_chunks` | int | Kullanılan chunk sayısı |
 | `stats.model` | string \| null | Kullanılan LLM modeli |
 | `stats.complexity` | string \| null | Soru karmaşıklığı (simple / medium / complex) |
+| `stats.inferred_os` | string \| null | FilterAgent'ın sorgudan çıkardığı OS (siz vermemiş olmanız gerekir) |
 | `request_id` | string \| null | Unique request ID (loglama için) |
 | `estimated_cost` | float \| null | Tahmini maliyet (USD) |
 | `verification_confidence` | float \| null | Claim verification güven skoru (0-1). Enhanced RAG etkinse dolar. |

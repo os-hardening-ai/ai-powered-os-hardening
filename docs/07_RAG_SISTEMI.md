@@ -101,18 +101,21 @@ Sistem üç farklı kaynak türünü indexler:
 
 ### 1. CIS Benchmark PDF'leri (`data/source/`)
 
-| Dosya | OS | Chunk Yöntemi |
-|-------|----|---------------|
-| `CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf` | Ubuntu 24.04 | `cis_section` |
-| `CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf` | Windows Server 2025 | `cis_section` |
+| Dosya | OS | Chunk Yöntemi | Durum |
+|-------|----|---------------|-------|
+| `CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf` | Ubuntu 24.04 | `cis_section` | ✅ Aktif |
+| `CIS_Microsoft_Windows_Server_2025_Benchmark_v2.0.0.pdf` | Windows Server 2025 | `cis_section` | ✅ Aktif |
+| `CIS_Microsoft_Windows_11_Stand-alone_Benchmark_v4.0.0.pdf` | Windows 11 Desktop | `cis_section` | ✅ Aktif |
 
 PDF'ler CIS section yapısına göre bölünür. Her chunk: başlık, açıklama, rationale, audit prosedürü, remediation adımları içerir.
 
 ### 2. YAML Kural Dosyaları (`data/rules/`)
 
-| Dosya | OS | Kural Sayısı | Chunk Yöntemi |
-|-------|----|-------------|---------------|
-| `ubuntu_24_04_rules.yaml` | Ubuntu 24.04 | 312 kural | `yaml_rules` |
+| Dosya | OS | Kural Sayısı | Chunk Yöntemi | Durum |
+|-------|----|-------------|---------------|-------|
+| `ubuntu_24_04_rules.yaml` | Ubuntu 24.04 | 312 kural | `yaml_rules` | ✅ Aktif |
+| `windows_11_desktop_rules.yaml` | Windows 11 Desktop | — | `yaml_rules` | ✅ Aktif |
+| `windows_server_2025_rules.yaml` | Windows Server 2025 | — | `yaml_rules` | ⛔ Devre dışı |
 
 YAML dosyaları PDF'leri **tamamlar** — her CIS kuralı için:
 - Tam bash audit script'i
@@ -120,7 +123,7 @@ YAML dosyaları PDF'leri **tamamlar** — her CIS kuralı için:
 - Yapılandırılmış metadata (section, level, tags, config_files)
 - auto_remediate / manual_review flag'leri
 
-> **windows_2025_rules.yaml** şu an boş; Windows hardening için sadece PDF kaynak kullanılmaktadır.
+> **windows_server_2025_rules.yaml** şu an boş ve devre dışı; Windows Server hardening için sadece PDF kaynak kullanılmaktadır.
 
 ---
 
@@ -202,23 +205,25 @@ Remediation Script:
 - **Provider**: Novita API (`https://api.novita.ai/openai`)
 - **Batch size**: 100 chunk/request
 - **Implementasyon**: `rag/embeddings/novita_embeddings.py`
-- **Fallback**: Cohere (`rag/embeddings/cohere_embeddings.py`)
+- **Alternatif client**: `rag/embeddings/cohere_embeddings.py` (config ile değiştirilebilir, aktif değil)
 
 #### Vector Store Upload
 
 **Teknoloji**: Qdrant Cloud
-- **Collection**: `cis_ubuntu_24_04_and_cis_windows_2025_benchmarks`
+- **Collection**: `cis_ubuntu_2404_windows11_winserver2025_with_rules`
 - **Distance metric**: Cosine similarity
 - **Vector dim**: 4096
 - **Implementasyon**: `rag/vector_store/qdrant_store.py`
 
 **Index İstatistikleri (yaklaşık):**
 ```
-PDF chunks (Ubuntu 24.04):   ~800-1200 chunk
-PDF chunks (Windows 2025):   ~1000-1500 chunk
-YAML chunks (Ubuntu rules):  312 chunk (1 kural = 1 chunk)
-Toplam:                      ~2100-3000 chunk
-Embedding dim:               4096
+PDF chunks (Ubuntu 24.04):       ~800-1200 chunk
+PDF chunks (Windows Server 2025): ~1000-1500 chunk
+PDF chunks (Windows 11 Desktop):  ~900-1300 chunk
+YAML chunks (Ubuntu rules):       312 chunk (1 kural = 1 chunk)
+YAML chunks (Windows 11 rules):   ~ chunk (aktif)
+Toplam:                           ~3000-4500 chunk
+Embedding dim:                    4096
 ```
 
 ---
@@ -464,11 +469,12 @@ API yanıtında `rag_sources` alanı olarak da döner:
 ## Mevcut Durum
 
 ### Çalışır Durumda (v1.1)
-- Ubuntu 24.04 CIS PDF indexleme
-- Windows Server 2025 + Windows 11 CIS PDF indexleme
-- Ubuntu 24.04 YAML kurallar indexleme (312 kural)
-- Windows 11 YAML kurallar indexleme
-- Novita 4096-dim embedding
+- Ubuntu 24.04 CIS PDF indexleme ✅
+- Windows Server 2025 CIS PDF indexleme ✅
+- Windows 11 Desktop CIS PDF indexleme ✅
+- Ubuntu 24.04 YAML kurallar indexleme (312 kural) ✅
+- Windows 11 YAML kurallar indexleme ✅
+- Novita 4096-dim embedding ✅
 - Qdrant Cloud vector store
 - Smart RAG triggering (%45 bypass)
 - **✅ Hybrid BM25 + Dense RRF scoring** (`rag.enhanced.use_hybrid`)
@@ -525,10 +531,10 @@ API yanıtında `rag_sources` alanı olarak da döner:
 | **Embedding Modeli** | Novita `qwen/qwen3-embedding-8b` |
 | **Embedding Boyutu** | 4096 |
 | **Vector Database** | Qdrant Cloud |
-| **Collection** | `cis_ubuntu_24_04_and_cis_windows_2025_benchmarks` |
+| **Collection** | `cis_ubuntu_2404_windows11_winserver2025_with_rules` |
 | **Kaynak Türleri** | PDF (CIS Benchmarks) + YAML (Hardening Rules) |
-| **Indexlenen Kaynaklar** | 2 PDF + 1 YAML (312 kural) |
-| **Toplam Chunk (yaklaşık)** | ~2500 |
+| **Indexlenen Kaynaklar** | 3 PDF + 2 YAML (Ubuntu 312 kural + Windows 11) |
+| **Toplam Chunk (yaklaşık)** | ~3000-4500 |
 | **Retrieval Süresi** | ~150ms |
 | **RAG Bypass Oranı** | ~%45 (greetings, pattern responses) |
 

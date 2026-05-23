@@ -5,7 +5,8 @@ from typing import Optional
 from config.schemas import (
     AppConfig, AppConfigRoot, ApiConfig, EmbeddingConfig, LlmConfig,
     RagConfig, RulesConfig, SourceDocumentConfig, VectorStoreConfig,
-    PipelineConfig, MonitoringConfig, DataPathsConfig, LateChunkingConfig
+    PipelineConfig, MonitoringConfig, DataPathsConfig, LateChunkingConfig,
+    RedisConfig,
 )
 
 
@@ -100,6 +101,14 @@ class ConfigLoader:
             cache=dp_raw.get("cache", ".cache"),
         )
 
+        # Redis
+        rd_raw = raw.get("redis", {})
+        redis_cfg = RedisConfig(
+            url=rd_raw.get("url", "redis://localhost:6379/0"),
+            embedding_cache_ttl_seconds=rd_raw.get("embedding_cache_ttl_seconds", 86400),
+            session_ttl_seconds=rd_raw.get("session_ttl_seconds", 3600),
+        )
+
         self._config = AppConfigRoot(
             app=app,
             api=api,
@@ -110,6 +119,7 @@ class ConfigLoader:
             pipeline=pipeline,
             monitoring=monitoring,
             data_paths=data_paths,
+            redis=redis_cfg,
         )
         return self._config
 

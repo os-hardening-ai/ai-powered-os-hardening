@@ -155,15 +155,24 @@ class QdrantVectorStore(IVectorStore):
         top_k: int = 5,
         min_score: float = 0.0,
         doc_type: Optional[str] = None,
+        os_version: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         q = query_emb.astype("float32").tolist()
 
-        # Payload filter for doc_type (e.g., "yaml_rule" or "cis_benchmark")
-        query_filter: Optional[Filter] = None
+        # Payload filter: doc_type + opsiyonel os_version
+        must_conditions = []
         if doc_type:
-            query_filter = Filter(
-                must=[FieldCondition(key="doc_type", match=MatchValue(value=doc_type))]
+            must_conditions.append(
+                FieldCondition(key="doc_type", match=MatchValue(value=doc_type))
             )
+        if os_version:
+            must_conditions.append(
+                FieldCondition(key="os_version", match=MatchValue(value=os_version))
+            )
+
+        query_filter: Optional[Filter] = (
+            Filter(must=must_conditions) if must_conditions else None
+        )
 
         # Bazı qdrant-client sürümlerinde `search` yok, yerine `query_points` var.
         if hasattr(self._client, "search"):

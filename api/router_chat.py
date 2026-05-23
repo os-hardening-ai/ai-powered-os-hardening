@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
 from llm.core.context import RequestContext
+from llm.core.session_store import SessionStore
 from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.clients import get_llm_clients
 from llm.rag.integration import RAGContextBuilder
@@ -25,6 +26,9 @@ from log_manager import get_logger
 _conv_logger = get_logger("conversations")
 
 router = APIRouter()
+
+# Global session store (in-memory; Redis ile değiştirilebilir)
+_session_store = SessionStore(max_history=10)
 
 
 # ──────────────────────────────────────────────
@@ -67,6 +71,7 @@ class ChatRequest(BaseModel):
     rag_min_score: float = Field(0.5, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.5])
     stream: bool = Field(False, description="Enable streaming response (SSE)", examples=[False])
     timeout: Optional[int] = Field(60, description="Request timeout in seconds (default: 60s, max: 300s)", ge=1, le=300, examples=[60])
+    session_id: Optional[str] = Field(None, description="Oturum ID'si — multi-turn konuşma geçmişi için", examples=["user-abc-123"])
 
     @field_validator("question")
     @classmethod
@@ -145,13 +150,38 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         # LLM clients
         llm_small, llm_large = _get_llm_clients()
 
+        # Session history yükle
+        session_id = payload.session_id or ""
+        history: List[Dict[str, str]] = []
+        if session_id:
+            turns = _session_store.get_history(session_id)
+            history = [{"role": t.role, "content": t.content} for t in turns]
+
+        # Context-aware query rewriting (follow-up → standalone)
+        effective_question = payload.question
+        if history:
+            try:
+                from rag.query.query_rewriter import QueryRewriter
+                _rewriter = QueryRewriter(llm_fn=llm_small)
+                rewritten = _rewriter.rewrite(payload.question, history)
+                if rewritten != payload.question:
+                    _conv_logger.info(
+                        "[QueryRewriter] '%s' → '%s'",
+                        payload.question[:60],
+                        rewritten[:60],
+                    )
+                    effective_question = rewritten
+            except Exception as _re:
+                _conv_logger.warning("[QueryRewriter] failed (non-fatal): %s", _re)
+
         # Request context olustur
         ctx = RequestContext(
-            user_question=payload.question,
+            user_question=effective_question,
             os=payload.os,
             role=payload.role,
             security_level=payload.security_level,  # type: ignore
             zt_maturity=payload.zt_maturity,  # type: ignore
+            conversation_history=history,
         )
 
         # Filter agent: os/role verilmemişse sorgudan çıkar
@@ -177,11 +207,19 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         rag_builder = None
         if payload.use_rag:
             try:
+                # OS version: explicit > inferred > None
+                _os_for_rag = payload.os or _inferred_os or None
                 rag_builder = RAGContextBuilder(
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
+                    os_version=_os_for_rag,
                 )
-                _conv_logger.debug(f"[RAG] Builder OK top_k={payload.rag_top_k} min_score={payload.rag_min_score}")
+                _conv_logger.debug(
+                    "[RAG] Builder OK top_k=%d min_score=%.2f os_version=%s",
+                    payload.rag_top_k,
+                    payload.rag_min_score,
+                    _os_for_rag,
+                )
             except Exception as e:
                 _conv_logger.warning(f"[RAG] Builder FAILED: {e}")
         else:
@@ -230,6 +268,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
 
+        # Session history'ye kaydet
+        if session_id:
+            _session_store.add_turn(session_id, "user", effective_question)
+            _session_store.add_turn(session_id, "assistant", sanitized_answer[:500])
+
         # Log conversation (question + answer)
         _conv_logger.info(
             f"--- [{ctx.request_id}] intent={result.intent.type if result.intent else 'unknown'} "
@@ -254,6 +297,9 @@ async def chat(payload: ChatRequest) -> ChatResponse:
                 "model": _meta.get("model"),
                 "complexity": _meta.get("complexity"),
                 "inferred_os": _inferred_os,
+                "session_id": session_id or None,
+                "history_turns": len(history) // 2,
+                "query_rewritten": effective_question != payload.question,
             },
             request_id=ctx.request_id,
             estimated_cost=result.estimated_cost,
@@ -320,13 +366,15 @@ async def chat_stream(payload: ChatRequest):
             except Exception as _fe:
                 _conv_logger.warning("[FilterAgent] stream failed (non-fatal): %s", _fe)
 
-        # RAG builder
+        # RAG builder (stream)
         rag_builder = None
         if payload.use_rag:
             try:
+                _os_for_rag_stream = payload.os or None
                 rag_builder = RAGContextBuilder(
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
+                    os_version=_os_for_rag_stream,
                 )
             except Exception as e:
                 _conv_logger.warning(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")

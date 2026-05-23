@@ -97,6 +97,7 @@ class EmbeddingConfig:
     base_url: Optional[str] = None
     batch_size: int = 100
     cache_enabled: bool = False
+    cache_ttl_seconds: int = 86400
 
 
 @dataclass
@@ -116,6 +117,13 @@ class LlmConfig:
 
 
 @dataclass
+class RedisConfig:
+    url: str = "redis://localhost:6379/0"
+    embedding_cache_ttl_seconds: int = 86400
+    session_ttl_seconds: int = 3600
+
+
+@dataclass
 class AppConfigRoot:
     app: AppConfig
     api: ApiConfig
@@ -126,6 +134,7 @@ class AppConfigRoot:
     pipeline: PipelineConfig
     monitoring: MonitoringConfig
     data_paths: DataPathsConfig
+    redis: RedisConfig = field(default_factory=RedisConfig)
 
 
 @dataclass

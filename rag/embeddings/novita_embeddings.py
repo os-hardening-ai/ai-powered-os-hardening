@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 import os
 import time
+import logging
 from dotenv import load_dotenv
 import numpy as np
 from openai import OpenAI, RateLimitError, APIError
 
 from config.config_loader import get_config
 from rag.embeddings.base import IEmbeddingClient
+
+_logger = logging.getLogger(__name__)
 
 
 class NovitaEmbeddingClient(IEmbeddingClient):
@@ -20,10 +23,11 @@ class NovitaEmbeddingClient(IEmbeddingClient):
       - Dakikadaki istek sayısını sınırlayan basit rate limiter
       - 429 (RATE_LIMIT_EXCEEDED) için backoff + retry
       - 5xx server error'larda batch'i bölüp tekrar dener
+      - Redis embedding cache (cache_enabled=true ise)
     """
 
     def __init__(self) -> None:
-        load_dotenv() 
+        load_dotenv()
         cfg = get_config().embedding
 
         api_key = os.getenv("NOVITA_API_KEY")
@@ -41,13 +45,30 @@ class NovitaEmbeddingClient(IEmbeddingClient):
         self._model_name = cfg.model_name
         self._dim = cfg.dim
 
-        # 🔥 Rate limit ayarları (Novita free/standart için muhafazakâr)
-        self._max_calls_per_minute = 50      # istersen bunu deneyerek artırabilirsin
+        # Rate limit ayarları
+        self._max_calls_per_minute = 50
         self._calls_in_window = 0
         self._window_start = time.time()
 
         # Batch boyutu
-        self._batch_size = 32                # 32 text / çağrı
+        self._batch_size = 32
+
+        # Redis embedding cache (opsiyonel)
+        self._cache: Optional[object] = None
+        cache_enabled = getattr(cfg, "cache_enabled", False)
+        if cache_enabled:
+            try:
+                from rag.cache.embedding_cache import EmbeddingCache
+                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                ttl = int(os.getenv("EMBEDDING_CACHE_TTL", "86400"))
+                self._cache = EmbeddingCache(
+                    redis_url=redis_url,
+                    ttl_seconds=ttl,
+                    model_name=self._model_name,
+                )
+                _logger.info("[NovitaEmbeddingClient] Embedding cache başlatıldı")
+            except Exception as exc:
+                _logger.warning("[NovitaEmbeddingClient] Cache init başarısız (non-fatal): %s", exc)
 
     # ----------------- RATE LIMIT HELPER ----------------- #
     def _before_api_call(self) -> None:
@@ -163,10 +184,27 @@ class NovitaEmbeddingClient(IEmbeddingClient):
         qwen3-embedding-8b asimetrik retrieval modelidir: query'lere instruction
         prefix eklenir, dokümanlar (index) plain text olarak kalır.
         Bu yaklaşım cosine similarity skorlarını ~0.55 → ~0.80+ aralığına taşır.
+
+        Cache: Redis'te bulunursa API çağrısı yapılmaz (~0ms).
         """
         instruction = (
             "Instruct: Given a security hardening question, retrieve the most "
             "relevant CIS benchmark sections and OS hardening guidelines.\nQuery: "
         )
-        vecs = self._embed_batch_with_retry([instruction + text])
-        return vecs[0]
+        full_text = instruction + text
+
+        # Cache hit kontrolü
+        if self._cache is not None:
+            cached = self._cache.get(full_text)  # type: ignore[attr-defined]
+            if cached is not None:
+                _logger.debug("[NovitaEmbeddingClient] Cache HIT for query: '%s'", text[:50])
+                return cached
+
+        vecs = self._embed_batch_with_retry([full_text])
+        result = vecs[0]
+
+        # Cache'e yaz
+        if self._cache is not None:
+            self._cache.set(full_text, result)  # type: ignore[attr-defined]
+
+        return result

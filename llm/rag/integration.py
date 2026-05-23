@@ -48,6 +48,7 @@ class RAGContextBuilder:
         min_score: float | None = None,
         use_hybrid: bool | None = None,
         use_mmr: bool | None = None,
+        os_version: str | None = None,
     ):
         self.top_k = top_k
 
@@ -70,6 +71,9 @@ class RAGContextBuilder:
         enhanced_cfg = self._load_enhanced_config()
         self._use_hybrid = use_hybrid if use_hybrid is not None else enhanced_cfg.get("use_hybrid", False)
         self._use_mmr = use_mmr if use_mmr is not None else enhanced_cfg.get("use_mmr", False)
+
+        # OS metadata filter (soft: filtresiz fallback mevcuttur)
+        self._os_version = os_version
 
         # Lazy-init scorers only when enabled
         self._hybrid_scorer: InContextHybridScorer | None = None
@@ -111,8 +115,29 @@ class RAGContextBuilder:
         return filtered
 
     def _search_with_emb(
-        self, query_emb, top_k: int, doc_type: str | None = None
+        self,
+        query_emb,
+        top_k: int,
+        doc_type: str | None = None,
+        os_version: str | None = None,
     ) -> List[Dict[str, Any]]:
+        effective_os = os_version if os_version is not None else self._os_version
+
+        if effective_os:
+            # Soft filter: önce OS filtreyle dene, yetersizse filtresiz fallback
+            filtered = self._vector_store.search(
+                query_emb, top_k=top_k, doc_type=doc_type, os_version=effective_os
+            )
+            filtered = [r for r in filtered if r.get("score", 0.0) >= self.min_score]
+            if len(filtered) >= max(1, top_k // 2):
+                return filtered
+            # Yeterli sonuç gelmediyse os_version filtresi olmadan dene
+            _logger.debug(
+                "[RAGContextBuilder] OS filter '%s' → %d sonuç, filtresiz fallback",
+                effective_os,
+                len(filtered),
+            )
+
         raw_results = self._vector_store.search(query_emb, top_k=top_k, doc_type=doc_type)
         return [r for r in raw_results if r.get("score", 0.0) >= self.min_score]
 
@@ -158,6 +183,75 @@ class RAGContextBuilder:
             combined = combined[:final_top_n]
 
         return combined
+
+    # ── refinement loop ───────────────────────────────────────────────────────
+
+    def _max_score(self, results: List[Dict[str, Any]]) -> float:
+        return max((r.get("score", 0.0) for r in results), default=0.0)
+
+    def _refinement_retrieve(
+        self,
+        query: str,
+        initial: List[Dict[str, Any]],
+        min_confidence: float = 0.55,
+        max_attempts: int = 2,
+    ) -> List[Dict[str, Any]]:
+        """
+        Başlangıç sonuçlarının max skoru min_confidence'ın altındaysa iki
+        strateji ile yeniden dener:
+
+          1. Top-k'yı iki katına çıkarıp min_score'u gevşet (0.3'e indir).
+          2. Fallback: hiç min_score filtresi olmadan en yüksek top-k.
+
+        Her iki deneme de skoru iyileştirmezse orijinal sonuçlar döner.
+        """
+        if not initial:
+            return initial
+        if self._max_score(initial) >= min_confidence:
+            return initial
+
+        _logger.info(
+            "[RefinementLoop] max_score=%.3f < %.3f — yeniden retrieval başlatılıyor",
+            self._max_score(initial),
+            min_confidence,
+        )
+
+        best = initial
+        relaxed_min = 0.3
+        relaxed_k = self.top_k * 2
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                q_emb = self._embed_client.embed_query(query)
+                hits = (
+                    self._search_with_emb(q_emb, top_k=relaxed_k, doc_type="yaml_rule")
+                    + self._search_with_emb(q_emb, top_k=relaxed_k, doc_type="cis_benchmark")
+                )
+                # min_score filtresi gevşet
+                hits = [r for r in hits if r.get("score", 0.0) >= relaxed_min]
+                hits.sort(key=lambda r: r.get("score", 0.0), reverse=True)
+
+                if hits and self._max_score(hits) > self._max_score(best):
+                    _logger.info(
+                        "[RefinementLoop] attempt=%d: max_score %.3f → %.3f",
+                        attempt,
+                        self._max_score(best),
+                        self._max_score(hits),
+                    )
+                    best = hits
+                    if self._max_score(best) >= min_confidence:
+                        break
+                else:
+                    break
+
+                # İkinci denemede min_score'u tamamen kaldır
+                relaxed_min = 0.0
+
+            except Exception as exc:
+                _logger.warning("[RefinementLoop] attempt=%d failed: %s", attempt, exc)
+                break
+
+        return best
 
     def _format_context(self, filtered_results: List[Dict[str, Any]]) -> str:
         context_parts = []
@@ -252,6 +346,12 @@ class RAGContextBuilder:
                 print("[RAG.retrieve_balanced] No results → fallback")
                 return self._get_fallback_message(), []
 
+            # Refinement loop: düşük skor → otomatik yeniden retrieval
+            combined = self._refinement_retrieve(query, combined)
+
+            if not combined:
+                return self._get_fallback_message(), []
+
             # Enhanced: hybrid + MMR
             final_top_n = yaml_k + pdf_k
             combined = self._apply_hybrid_and_mmr(query, combined, final_top_n)
@@ -321,6 +421,12 @@ class RAGContextBuilder:
 
             if not combined:
                 print("[RAG.retrieve_multi] No results → fallback")
+                return self._get_fallback_message(), []
+
+            # Refinement loop
+            combined = self._refinement_retrieve(original_query, combined)
+
+            if not combined:
                 return self._get_fallback_message(), []
 
             # Enhanced: hybrid + MMR (scored against the ORIGINAL query)
