@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from llm.core.context import RequestContext
 from llm.core.session_store import SessionStore
+from llm.core.redis_session_store import RedisSessionStore
 from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.clients import get_llm_clients
 from llm.rag.integration import RAGContextBuilder
@@ -27,8 +28,27 @@ _conv_logger = get_logger("conversations")
 
 router = APIRouter()
 
-# Global session store (in-memory; Redis ile değiştirilebilir)
-_session_store = SessionStore(max_history=10)
+def _init_session_store():
+    """Use Redis session store when available; fall back to in-memory."""
+    try:
+        import os
+        from config.config_loader import get_config
+        cfg = get_config()
+        # REDIS_URL env var overrides config.json (set by docker-compose)
+        redis_url = os.environ.get("REDIS_URL") or cfg.redis.url
+        store = RedisSessionStore(
+            url=redis_url,
+            ttl_seconds=cfg.redis.session_ttl_seconds,
+            max_history=10,
+        )
+        if store.available:
+            return store
+    except Exception:
+        pass
+    return SessionStore(max_history=10)
+
+
+_session_store = _init_session_store()
 
 
 # ──────────────────────────────────────────────

@@ -18,6 +18,7 @@ from api.router_chat import router as chat_router
 from api.router_health import router as health_router
 from api.router_analytics import router as analytics_router
 from api.router_openai import router as openai_router
+from api.router_artifacts import router as artifacts_router
 from api.security import (
     RateLimitMiddleware,
     RateLimitConfig,
@@ -61,6 +62,7 @@ TAGS_METADATA = [
     {"name": "chat", "description": "RAG + LLM entegre güvenlik danışmanlığı ve hardening script üretimi."},
     {"name": "openai-compat", "description": "OpenAI-compatible endpoint. Herhangi bir OpenAI istemcisi veya araç `base_url=http://localhost:8000/v1` ile doğrudan bağlanabilir."},
     {"name": "rag", "description": "CIS Benchmark üzerinde doğrudan semantik arama."},
+    {"name": "domain", "description": "Rule Engine (bağımlılık çözümü + çakışma tespiti) ve Artifact Generator (Bash/PowerShell/Ansible/REG/GPO)."},
     {"name": "health", "description": "Servis sağlık durumu ve bileşen diagnostiği."},
     {"name": "monitoring", "description": "İstek metrikleri, hata logları ve performans istatistikleri."},
 ]
@@ -154,6 +156,9 @@ def create_app() -> FastAPI:
 
     # OpenAI-compatible endpoint
     app.include_router(openai_router, prefix="/v1", tags=["openai-compat"])
+
+    # Rule Engine + Artifact Generator
+    app.include_router(artifacts_router, prefix="/api", tags=["domain"])
 
     # ── Metrics Endpoint ──
     @app.get("/metrics", tags=["monitoring"])

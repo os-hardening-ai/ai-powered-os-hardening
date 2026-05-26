@@ -66,3 +66,6 @@ opentelemetry-instrumentation-httpx==0.61b0
 # Development & Testing (optional)
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
+
+# --- YAML parsing (Rule Engine) ---
+PyYAML>=6.0
