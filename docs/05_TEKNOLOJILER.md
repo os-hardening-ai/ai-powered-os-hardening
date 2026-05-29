@@ -10,13 +10,17 @@ Bu projede **modern AI/ML teknolojileri** kullanarak production-ready bir güven
 ├─────────────────────────────────────────────────────────────┤
 │  Backend Framework: FastAPI + Uvicorn                       │
 │  Machine Learning: scikit-learn + TF-IDF                    │
-│  LLM: Groq (Llama 3.3 70B, Llama 3.1 8B)                   │
-│  RAG: Cohere Embeddings + Qdrant/FAISS                     │
-│  Orchestration: LangChain                                   │
+│  LLM: Groq (Llama 3.3 70B, Llama 3.1 8B)  ← aktif         │
+│  Embedding: Novita qwen3-embedding-8b (4096 dim)            │
+│  Vector Store: Qdrant Cloud                                 │
+│  Cache: Redis (embedding + session)                         │
 │  Testing: pytest + custom evaluators                        │
 │  Security: Rate limiting, input validation, HSTS            │
+│  Container: Docker + Docker Compose                         │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+> **Not**: LangChain ve FAISS bu projede kullanılmamaktadır. Qdrant SDK doğrudan kullanılır (`rag/vector_store/qdrant_store.py`). Embedding entegrasyonu `rag/embeddings/novita_embeddings.py` üzerinden yapılır.
 
 ---
 

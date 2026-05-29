@@ -1,0 +1,23 @@
+# docker-compose.override.yml — geliştirme ortamı için otomatik yüklenir
+# Kaynak kod volume mount: kod değişince sadece "docker compose restart api" yeterli, rebuild gerekmez
+# Kullanım: docker compose up -d   (override otomatik okunur)
+# Prod için:  docker compose -f docker-compose.yml up -d
+
+services:
+  api:
+    volumes:
+      - ./logs:/app/logs
+      - ./llm:/app/llm
+      - ./api:/app/api
+      - ./rag:/app/rag
+      - ./domain:/app/domain
+      - ./evaluation:/app/evaluation
+      - ./config:/app/config
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./main.py:/app/main.py
+      - ./log_manager.py:/app/log_manager.py
+      - ./prometheus_metrics.py:/app/prometheus_metrics.py
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - ENABLE_DEBUG_LOGS=true

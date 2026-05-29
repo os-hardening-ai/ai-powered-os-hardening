@@ -14,7 +14,9 @@ Core capabilities:
 - Routes requests through a 4-layer security pipeline (Safety → Intent → Routing → Generation)
 - Classifies user intent with a local ML model (90.48% accuracy, 5–10ms, $0 cost)
 - Supports streaming responses via Server-Sent Events (SSE)
-- Provider fallback chain: Novita → Groq → OpenAI → Ollama (configurable via `config/config.json`)
+- **Active LLM provider: Groq** (`llama-3.1-8b-instant` small, `llama-3.3-70b-versatile` large)
+- **Embeddings provider: Novita** (`qwen/qwen3-embedding-8b`, 4096-dim) — RAG için ayrı provider
+- Provider fallback chain: Groq → Novita → OpenAI → Ollama (configurable via `config/config.json`, `LLM_PROVIDER` env var)
 
 **API base**: `http://localhost:8000` | **Swagger UI**: `/docs` | **Metrics**: `/metrics`
 
@@ -26,17 +28,18 @@ Core capabilities:
 ai-powered-os-hardening/
 ├── main.py                    # FastAPI app factory + middleware registration
 ├── log_manager.py             # Custom logging setup (get_logger())
-├── requirements.txt           # Production dependencies (Python 3.12+)
-├── requirements-python311.txt # Python 3.11 compatible dependencies
+├── requirements.txt           # Production dependencies (Python 3.12+, minimum versions)
+├── requirements-python311.txt # Docker dependencies (Python 3.11, pinned versions)
 ├── pytest.ini                 # Pytest configuration
 ├── SECURITY_AUDIT_REPORT.md   # Security audit findings
 ├── .env / .env.example        # Environment variables (API keys, model config)
 ├── config/
-│   ├── config.json            # RAG, embedding, vector store, LLM settings
+│   ├── config.json            # RAG, embedding, vector store, LLM, Redis settings
 │   ├── config_loader.py       # Loads and validates config.json (primary config system)
-│   └── schemas.py             # Pydantic schemas for config validation
+│   └── schemas.py             # Pydantic schemas: AppConfigRoot, RedisConfig, etc.
 ├── api/                       # FastAPI routers and middleware
-│   ├── router_chat.py         # POST /api/chat, POST /api/chat/stream
+│   ├── router_chat.py         # POST /api/chat, POST /api/chat/stream (session_id destekli)
+│   ├── router_artifacts.py    # GET /api/rules, POST /api/rules/plan|conflicts, POST /api/artifacts/generate
 │   ├── router_openai.py       # POST /v1/chat/completions, GET /v1/models (OpenAI-compatible)
 │   ├── router_rag.py          # POST /rag/search
 │   ├── router_health.py       # GET /, GET /health, GET /health/detailed
@@ -51,9 +54,10 @@ ai-powered-os-hardening/
 ├── llm/                       # LLM pipeline and clients
 │   ├── __init__.py
 │   ├── core/
-│   │   ├── context.py         # RequestContext (central pipeline state), SafetyCategory, IntentType
-│   │   ├── config.py          # Legacy Config dataclass (reads .env directly)
-│   │   └── session_store.py   # In-memory session state
+│   │   ├── context.py              # RequestContext (central pipeline state), SafetyCategory, IntentType
+│   │   ├── config.py               # Legacy Config dataclass (reads .env directly)
+│   │   ├── session_store.py        # In-memory session store (dev/single-instance)
+│   │   └── redis_session_store.py  # Redis-backed session store (production, TTL support)
 │   ├── pipelines/
 │   │   ├── secure_v2.py       # SecurePipelineV2 — primary 4-layer pipeline
 │   │   ├── optimized.py       # OptimizedPipeline — complexity-routing pipeline
@@ -71,7 +75,7 @@ ai-powered-os-hardening/
 │   │   ├── groq_client.py         # Groq API (free tier, llama models)
 │   │   ├── openai_client.py       # OpenAI API (fallback)
 │   │   ├── ollama_client.py       # Ollama local (offline fallback)
-│   │   └── novita_llm_client.py   # Novita API (Qwen models — default provider)
+│   │   └── novita_llm_client.py   # Novita API (default provider)
 │   ├── ml/
 │   │   ├── intent_detector.py            # Logistic Regression + TF-IDF classifier
 │   │   └── models/
@@ -84,7 +88,7 @@ ai-powered-os-hardening/
 │   │   ├── loader.py             # Prompt template loader
 │   │   └── templates/            # Prompt template files
 │   ├── rag/
-│   │   └── integration.py        # RAG context builder used by pipelines
+│   │   └── integration.py        # RAGContextBuilder: retrieve_balanced, retrieve_multi, refinement loop
 │   ├── utils/
 │   │   ├── logger.py
 │   │   ├── monitoring.py
@@ -103,6 +107,8 @@ ai-powered-os-hardening/
 │       ├── unit/
 │       └── integration/
 ├── rag/                      # RAG core components
+│   ├── cache/
+│   │   └── embedding_cache.py    # Redis-backed embedding cache (SHA256 key, TTL configurable)
 │   ├── chunking/
 │   │   ├── base.py
 │   │   ├── pdf_chunker.py
@@ -112,18 +118,34 @@ ai-powered-os-hardening/
 │   ├── embeddings/
 │   │   ├── base.py
 │   │   ├── embeddings.py
-│   │   ├── novita_embeddings.py   # Primary: Novita (4096-dim qwen3-embedding-8b)
+│   │   ├── novita_embeddings.py   # Primary: Novita qwen3-embedding-8b (4096-dim), cache-aware
 │   │   └── cohere_embeddings.py
+│   ├── query/
+│   │   ├── query_planner.py    # QueryPlanner: subqueries + HyDE + stepback expansion
+│   │   ├── query_rewriter.py   # QueryRewriter: follow-up → standalone (coreference resolution)
+│   │   └── filter_agent.py     # FilterAgent: OS/role inference from free-text query
+│   ├── retrieval/
+│   │   ├── hybrid_retriever.py  # InContextHybridScorer: BM25 + dense RRF fusion
+│   │   ├── reranker.py          # MMRReranker: diversity-aware reranking
+│   │   └── rag_retriever.py
+│   ├── verify/
+│   │   └── claim_verifier.py    # ClaimVerifier: RAG-grounded fact checking
 │   ├── vector_store/
 │   │   ├── base.py
 │   │   ├── vector_store.py
-│   │   └── qdrant_store.py        # Qdrant cloud vector store
-│   ├── retrieval/
-│   │   └── rag_retriever.py
+│   │   └── qdrant_store.py      # Qdrant cloud vector store (OS soft-filter support)
 │   ├── indexing/
 │   │   └── index_pipeline.py
 │   └── metadata/
 │       └── cis_benchmark_parser.py
+├── domain/                   # Domain logic (Rule Engine + Artifact Generator)
+│   ├── rule_engine/
+│   │   └── rule_engine.py    # RuleEngine: conflict detection, topological ordering, execution plan
+│   └── artifact_generator/
+│       └── generator.py      # ArtifactGenerator: Bash / PowerShell / Ansible / REG / GPO
+├── evaluation/               # Academic evaluation framework
+│   ├── ragas_evaluator.py    # RAGASEvaluator: LLM-as-judge faithfulness/relevancy/precision/recall
+│   └── ablation_study.py     # AblationStudy: baseline vs +hybrid/+mmr/+queryplan/full
 ├── data/
 │   ├── source/
 │   │   ├── CIS_Ubuntu_Linux_24.04_LTS_Benchmark_v1.0.0.pdf
@@ -135,10 +157,11 @@ ai-powered-os-hardening/
 │   └── intent_training_dataset.csv     # 1677 examples across 7 intent categories
 ├── scripts/
 │   ├── build_index.py          # Config-driven: indexes all enabled sources from config.json
+│   ├── run_evaluation.py       # RAGAS + Ablation Study runner (--mode ragas|ablation|both)
 │   └── start_api.py
 ├── src/
 │   └── config_manager.py
-├── logs/                       # Runtime application logs
+├── logs/                       # Runtime application logs + evaluation results (JSON)
 ├── tests/                      # Main test suite
 │   ├── README.md
 │   ├── unit/
@@ -207,14 +230,23 @@ cp .env.example .env
 # Build et ve başlat (ilk build ~10-20dk — torch büyük)
 docker compose up --build
 
-# Sonraki başlatmalar (cache'den)
+# Sonraki başlatmalar (override otomatik yüklenir, kod değişince rebuild gerekmez)
 docker compose up -d
+
+# Kod değişince (rebuild olmadan):
+docker compose restart api
+
+# Sadece production config (override olmadan):
+docker compose -f docker-compose.yml up -d
 ```
 
 Docker yapılandırması:
 - **`Dockerfile`**: `python:3.11-slim` base, `libgomp1` + `libgl1` + `libglib2.0-0` sistem kütüphaneleri, `requirements-python311.txt`
-- **`docker-compose.yml`**: `build.context + dockerfile` belirtilmiş, `logs/` volume mount, `env_file: .env`
-- **`.dockerignore`**: `.git`, `__pycache__`, `.env`, `logs/`, `tests/`, `docs/`, `data/cache/` hariç tutulur
+- **`docker-compose.yml`**: production config — sadece `./logs:/app/logs` volume mount, `env_file: .env`
+- **`docker-compose.override.yml`**: dev config — kaynak klasörler volume mount (`./llm`, `./api`, `./rag`, `./config` vs.), `ENABLE_DEBUG_LOGS=true`. `docker compose up -d` bunu **otomatik** yükler.
+- **`.dockerignore`**: `.git`, `__pycache__`, `.env`, `logs/`, `tests/`, `docs/`, `data/cache/`, `docker-compose.override.yml` hariç tutulur
+
+> **Önemli**: `docker restart api` container'ı yeniden başlatır ama `.env` değişikliklerini okumaz. `.env` değiştirdiysen `docker compose up -d` kullan (container'ı yeniden oluşturur).
 
 ### Seçenek B: Manuel (venv)
 
@@ -252,50 +284,68 @@ python scripts/build_index.py
 
 ## Environment Variables (`.env`)
 
-| Variable | Description | Default |
+| Variable | Description | Aktif Değer |
 |----------|-------------|---------|
-| `LLM_PROVIDER` | Primary provider: `novita`, `groq`, `openai`, `ollama` | `novita` |
-| `GROQ_API_KEY` | Groq API key (free tier) | optional |
+| `LLM_PROVIDER` | Primary provider: `groq`, `novita`, `openai`, `ollama` | **`groq`** |
+| `GROQ_API_KEY` | Groq API key (free tier) | required |
 | `GROQ_SMALL_MODEL_NAME` | Fast/cheap Groq model | `llama-3.1-8b-instant` |
 | `GROQ_LARGE_MODEL_NAME` | Powerful Groq model | `llama-3.3-70b-versatile` |
-| `NOVITA_API_KEY` | Novita API key (LLM + embeddings) | required |
+| `NOVITA_API_KEY` | Novita API key (**embeddings için hâlâ gerekli**) | required |
 | `OPENAI_API_KEY` | OpenAI key (fallback) | optional |
 | `QDRANT_API_KEY` | Qdrant cloud key | required for RAG |
 | `QDRANT_URL` | Qdrant cloud endpoint | required for RAG |
 | `SMALL_MODEL_TEMPERATURE` | Temperature for small model | `0.3` |
 | `LARGE_MODEL_TEMPERATURE` | Temperature for large model | `0.2` |
-| `MAX_TOKENS` | Max response tokens | `2048` |
+| `MAX_TOKENS` | Max response tokens (**Groq TPM limit nedeniyle 2048**) | **`2048`** |
 | `REQUEST_TIMEOUT` | API timeout (seconds) | `60` |
 | `MAX_RETRIES` | Retry attempts on failure | `2` |
 | `ENABLE_DEBUG_LOGS` | Verbose pipeline logging | `false` |
 | `ENABLE_JUDGE_STEP` | Output quality checking | `true` |
 | `ENABLE_CORRECTION_STEP` | Auto-correct bad outputs | `true` |
 
+> **Not**: `NOVITA_API_KEY` LLM için kullanılmıyor (provider=groq) ama embedding için `rag/embeddings/novita_embeddings.py` tarafından hâlâ kullanılıyor — silme.
+
 ---
 
 ## API Endpoints
 
+### Chat
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/chat` | Main chat: RAG + LLM + 4-layer pipeline |
+| `POST` | `/api/chat` | Main chat: RAG + LLM + 4-layer pipeline (session_id destekli) |
 | `POST` | `/api/chat/stream` | Streaming version (SSE) |
+
+### Domain — Rule Engine & Artifact Generator
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/rules` | CIS kural listesi (level/category/auto_remediate filtresi, script blobs hariç) |
+| `POST` | `/api/rules/plan` | Seçili kurallar için execution plan (topological sort + çakışma tespiti) |
+| `POST` | `/api/rules/conflicts` | Kural çakışması tespiti (config_file / kernel_module overlap) |
+| `POST` | `/api/artifacts/generate` | CIS kural ID'lerinden artifact üretimi (bash/powershell/ansible/reg/gpo) |
+
+### OpenAI-Compatible
+| Method | Path | Description |
+|--------|------|-------------|
 | `POST` | `/v1/chat/completions` | **OpenAI-compatible** — herhangi bir OpenAI istemcisi ile kullanılabilir |
-| `GET` | `/v1/models` | OpenAI-compatible model listesi |
+| `GET`  | `/v1/models` | Model listesi |
+
+### RAG / Health / Monitoring
+| Method | Path | Description |
+|--------|------|-------------|
 | `POST` | `/rag/search` | Direct RAG semantic search |
-| `GET` | `/` | Root — API info |
-| `GET` | `/health` | Service health status |
-| `GET` | `/health/detailed` | Component-level health (vector_store, embedding, llm) |
-| `GET` | `/metrics` | Aggregated performance stats |
-| `GET` | `/metrics/errors` | Recent error log |
-| `GET` | `/metrics/slow` | Slowest requests |
-| `GET` | `/api/analytics` | Full analytics dashboard |
-| `GET` | `/api/analytics/cost` | Cost breakdown by intent/complexity/model |
-| `GET` | `/api/analytics/patterns` | Top N common query patterns |
-| `GET` | `/api/analytics/rag` | RAG usage and effectiveness |
-| `GET` | `/api/analytics/errors` | Error analysis and recent errors |
-| `GET` | `/api/analytics/trends` | Performance trends over time window |
-| `GET` | `/docs` | Swagger UI |
-| `GET` | `/redoc` | ReDoc UI |
+| `GET`  | `/health` | Service health status |
+| `GET`  | `/health/detailed` | Component-level health (vector_store, embedding, llm) |
+| `GET`  | `/metrics` | Aggregated performance stats |
+| `GET`  | `/metrics/errors` | Recent error log |
+| `GET`  | `/metrics/slow` | Slowest requests |
+| `GET`  | `/api/analytics` | Full analytics dashboard |
+| `GET`  | `/api/analytics/cost` | Cost breakdown by intent/complexity/model |
+| `GET`  | `/api/analytics/patterns` | Top N common query patterns |
+| `GET`  | `/api/analytics/rag` | RAG usage and effectiveness |
+| `GET`  | `/api/analytics/errors` | Error analysis and recent errors |
+| `GET`  | `/api/analytics/trends` | Performance trends over time window |
+| `GET`  | `/docs` | Swagger UI |
+| `GET`  | `/redoc` | ReDoc UI |
 
 ### `/api/chat` Request Schema
 
@@ -310,9 +360,12 @@ python scripts/build_index.py
   "rag_top_k": 5,
   "rag_min_score": 0.5,
   "stream": false,
-  "timeout": 60
+  "timeout": 60,
+  "session_id": "user-abc-123"
 }
 ```
+
+`session_id` verilirse: geçmiş turlar Redis'ten yüklenir, follow-up sorular QueryRewriter ile standalone hale getirilir, cevap sonrası yeni turlar Redis'e kaydedilir (TTL: `session_ttl_seconds`, default 3600s).
 
 ### `/api/chat` Response Schema
 
@@ -323,11 +376,31 @@ python scripts/build_index.py
   "safety_category": "safe_defensive",
   "layer_path": "1->2->3C->4",
   "rag_sources": [{"id": "source_1", "score": 0.85, "source": "CIS Ubuntu 24.04", "section": "5.2.4"}],
-  "stats": {"total_time_s": 4.2, "layer_path": "1->2->3C->4"},
+  "stats": {
+    "total_time_s": 4.2,
+    "session_id": "user-abc-123",
+    "history_turns": 2,
+    "query_rewritten": false,
+    "inferred_os": null
+  },
   "request_id": "req_abc123",
-  "estimated_cost": 0.0025
+  "estimated_cost": 0.0025,
+  "verification_confidence": 0.87
 }
 ```
+
+### `/api/artifacts/generate` Request Schema
+
+```json
+{
+  "rule_ids": ["1.1.1.1", "5.2.1", "5.2.2"],
+  "format": "bash",
+  "os_target": "ubuntu_24_04",
+  "security_level": "balanced"
+}
+```
+
+`format` seçenekleri: `bash` | `powershell` | `ansible` | `reg` | `gpo`
 
 ---
 
@@ -446,7 +519,7 @@ Intent categories (defined as `IntentType` enum in `llm/core/context.py`):
 ### Architecture
 - **Embeddings**: Novita `qwen/qwen3-embedding-8b` (4096 dimensions) via `rag/embeddings/novita_embeddings.py`
 - **Vector Store**: Qdrant cloud (`rag/vector_store/qdrant_store.py`)
-- **Collection**: `cis_ubuntu_24_04_and_cis_windows_2025_benchmarks_with_ubuntu_rules_yaml`
+- **Collection**: `cis_ubuntu_2404_windows11_winserver2025_with_rules`
 - **Chunkers**: `cis_section` (PDF) and `yaml_rules` (YAML) — see `rag/chunking/`
 - **Late chunking**: Available but **disabled by default** in config.json
 
@@ -470,10 +543,23 @@ RAG is only invoked for security-relevant queries — approximately 45% of queri
 ```json
 {
   "embedding": { "provider": "novita", "model_name": "qwen/qwen3-embedding-8b", "dim": 4096 },
-  "rag": { "retrieval": { "top_k": 5, "min_score": 0.5 }, "late_chunking": { "enabled": false } },
-  "vector_store": { "provider": "qdrant", "qdrant": { "collection_name": "cis_ubuntu_24_04_and_cis_windows_2025_benchmarks_with_ubuntu_rules_yaml" } }
+  "rag": {
+    "retrieval": { "top_k": 3, "min_score": 0.5, "max_results": 6 },
+    "late_chunking": { "enabled": false },
+    "enhanced": {
+      "enabled": true,
+      "use_hybrid": true,
+      "use_query_planning": true,
+      "use_claim_verification": false,
+      "use_filter_agent": true
+    }
+  },
+  "vector_store": { "provider": "qdrant", "qdrant": { "collection_name": "cis_ubuntu_2404_windows11_winserver2025_with_rules" } },
+  "llm": { "default_provider": "groq" }
 }
 ```
+
+> **`use_claim_verification: false`** — ClaimVerifier devre dışı. Aktif olduğunda RAG-tabanlı claim doğrulaması için 3-5 ekstra LLM call yapıyor ve ~38s ekliyor. Groq free tier'da TPM limitini tüketiyor. Ayrıca confidence skoru 0.00 dönüyor (kalibrasyon problemi). Tekrar açmadan önce `rag/verify/claim_verifier.py` düzeltilmeli.
 
 ---
 
@@ -496,17 +582,56 @@ Middleware is applied in **reverse order** (last added = first executed on reque
 
 ## Performance Targets
 
-| Component | Target Latency |
-|-----------|---------------|
+| Component | Measured (Groq) |
+|-----------|----------------|
 | Pattern response (3A) | <20ms |
-| Simple info (no RAG) | ~1.2s |
-| Medium info (with RAG) | ~2.5s |
-| Complex CoT + RAG | ~4.2s |
-| Script generation | ~4.5s |
+| Safety classification | ~250ms |
+| QueryPlanner (3 parallel) | ~500ms |
+| RAG retrieval (Qdrant) | ~4s |
+| LLM generation (large model) | ~3-4s |
+| Total — info_request with RAG | **~8s** |
+| Simple info (no RAG) | ~1.5s |
+| Script generation (action_request) | ~5-7s |
 | ML intent detection | 5–10ms |
-| RAG embedding | ~2.1s |
 
-**Cost target**: $0.0004 average per query (free-tier Groq).
+**Aktif pipeline_metrics.log formatı:**
+```
+intent=info_request path=1→2→3B layer1=0.248s layer2=0.002s layer3=8.018s
+qplan=0.566s rag_ret=4.044s llm=3.405s verify=0.000s total=8.018s
+rag=True chunks=7 cost=$0.0006
+```
+
+**Groq free tier limitleri:**
+
+| Model | RPM | TPM | Darboğaz |
+|-------|-----|-----|---------|
+| `llama-3.1-8b-instant` | 30 | 6,000 | Safety(1) + QueryPlanner(3) + FilterAgent(0-1) = 4-5 call/req |
+| `llama-3.3-70b-versatile` | 30 | 14,400 | Generation = 1 call/req |
+
+6000 TPM / ~1000 token per call = max ~6 small-model call/dakika → eş zamanlı kullanımda rate limit riski var.
+
+**Cost target**: $0.0006 average per query (Groq free tier).
+
+---
+
+## LLM Call Budget (per request)
+
+Her request tipinin toplam LLM API çağrısı:
+
+| Request Tipi | Layer 1 | QueryPlanner | FilterAgent | Generation | ClaimVerifier | **Toplam** |
+|---|---|---|---|---|---|---|
+| Smalltalk (3A) | 1 (small) | — | — | 0 | — | **1** |
+| Info + RAG, simple (3B) | 1 (small) | **0** (atlanır) | 0-1 (small) | 1 (small) | 0 (kapalı) | **2-3** |
+| Info + RAG, medium/complex (3B) | 1 (small) | 3 (small, parallel) | 0-1 (small) | 1 (large) | 0 (kapalı) | **5-6** |
+| Action/Script (3C) | 1 (small) | — | — | 1 (large) | — | **2** |
+
+**QueryPlanner detayı** (`rag/query/query_planner.py`):
+- `_decompose`: 1 call → `max_subqueries=2` subquery üretir
+- `_generate_hyde`: 1 call → hypothetical answer passage
+- `_stepback`: 1 call → broader context query
+- Hepsi `ThreadPoolExecutor(max_workers=3)` ile **parallel** — wall-clock ~500ms
+
+**Rate limit aşıldığında**: `groq_client.py` `RuntimeError` fırlatır, `info_pipeline.py` catch edip Türkçe hata mesajı döner.
 
 ---
 
@@ -516,10 +641,18 @@ The following are missing for production readiness (see `docs/10_ARCHITECTURE_AN
 
 - **Authentication** (P0 critical) — No API key or user auth implemented
 - **Authorization** (P0 critical) — No RBAC
-- **Redis embedding cache** (P1) — RAG is slow without it (~2.1s per embedding)
 - **DDoS protection** (P1) — Rate limiting alone is insufficient
 - **HTTPS/SSL** (P0) — Must configure before public deployment
+- **Groq TPM limit** (P1) — Free tier: 6000 TPM/min for small model; 4-5 small-model calls per request → ~4 concurrent request/min max. Çözüm: paid plan veya QueryPlanner için farklı model.
+- **ClaimVerifier kalibrasyonu** (P2) — `use_claim_verification: false` ayarlı. 0.00 confidence veriyor; düzeltilmeden açma.
 - **Streaming tests** — Not yet covered by test suite
+- **Windows YAML rules** — `windows_2025_rules.yaml` boş; Windows kuralları sadece PDF üzerinden gelir
+
+Tamamlananlar (production blocker olmaktan çıktı):
+- ~~Redis embedding cache~~ ✅ — `rag/cache/embedding_cache.py`, SHA256 key, TTL 24h
+- ~~Session persistence~~ ✅ — `llm/core/redis_session_store.py`, TTL 1h, in-memory fallback
+- ~~Provider latency~~ ✅ — Novita (~64s) → Groq (~8s)
+- ~~Per-step timing~~ ✅ — `pipeline_metrics.log` her layer'ı ayrı ayrı ölçüyor
 
 ---
 
@@ -560,7 +693,11 @@ The following are missing for production readiness (see `docs/10_ARCHITECTURE_AN
 |-------|----------|
 | `ImportError` on startup | `export PYTHONPATH="${PYTHONPATH}:$(pwd)"` |
 | API key not found | Check `.env` file exists and has correct keys |
-| Qdrant connection failed | `docker run -p 6333:6333 qdrant/qdrant` |
-| Slow RAG queries | Add Redis embedding cache (see `docs/10_ARCHITECTURE_ANALYSIS.md`) |
+| Qdrant connection failed | Cloud Qdrant kullanıyoruz — `QDRANT_URL` ve `QDRANT_API_KEY` doğru mu? |
+| Slow RAG queries | Groq ile ~8s normal; darboğaz `rag_ret` (~4s) Qdrant latency |
 | ML model not found | Ensure `llm/ml/models/*.joblib` files are present |
 | sklearn compatibility error | Re-train model with current sklearn version using `data/intent_training_dataset.csv` |
+| Groq 500/rate limit error | `docker compose up -d` ile container yeniden başlat; 1 dakika bekle |
+| `.env` değişikliği çalışmıyor | `docker compose up -d` kullan (restart değil) — restart .env'i yeniden okumaz |
+| Kod değişikliği aktif değil | `docker compose restart api` — override.yml ile mount edildiği için rebuild gerekmez |
+| Empty log files created | `log_manager.py`'de `FileHandler(delay=True)` var, ilk yazıya kadar dosya oluşmaz |

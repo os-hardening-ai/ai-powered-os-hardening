@@ -17,6 +17,9 @@ env/
 # Secrets — docker-compose env_file veya runtime env var kullan
 .env
 
+# Docker Compose override (dev-only, prod image'a girmemeli)
+docker-compose.override.yml
+
 # IDE & AI assistant config
 .claude/
 .idea/

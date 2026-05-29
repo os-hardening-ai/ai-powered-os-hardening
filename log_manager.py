@@ -63,7 +63,7 @@ def get_logger(name: str) -> logging.Logger:
 
     # Only add a handler if none exist yet (extra safety guard)
     if not logger.handlers:
-        handler = logging.FileHandler(log_file, encoding="utf-8")
+        handler = logging.FileHandler(log_file, encoding="utf-8", delay=True)
         handler.setLevel(logging.DEBUG)
 
         # Format: 2026-03-08 14:23:45 | <message>

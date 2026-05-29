@@ -14,7 +14,7 @@ Based on:
 
 from __future__ import annotations
 import logging
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -30,6 +30,7 @@ LLMCallable = Callable[[str], str]
 _logger = logging.getLogger(__name__)
 
 
+
 @dataclass
 class InfoQueryResult:
     """Info pipeline result"""
@@ -42,6 +43,7 @@ class InfoQueryResult:
     estimated_cost: float = 0.0
     rag_sources: list = field(default_factory=list)
     verification_confidence: float | None = None  # None = not checked
+    timing: Dict[str, float] = field(default_factory=dict)  # per-step breakdown (seconds)
 
 
 class InfoPipeline:
@@ -119,6 +121,7 @@ class InfoPipeline:
         4. Return structured result
         """
         start_time = datetime.now()
+        _t: dict[str, float] = {}  # per-step timing accumulator
 
         # Classify complexity
         complexity = classify_question(ctx.user_question)
@@ -137,13 +140,15 @@ class InfoPipeline:
         rag_chunks = 0
         rag_sources = []
         raw_results_for_verify: List[dict] = []
-        print(f"[InfoPipeline] use_rag={use_rag}, rag_builder={'SET' if self.rag_builder else 'NONE'}")
+        _logger.debug("[InfoPipeline] use_rag=%s, rag_builder=%s", use_rag, "SET" if self.rag_builder else "NONE")
         if use_rag and self.rag_builder:
             try:
                 # Query planning: expand query before retrieval
-                if self.query_planner is not None:
+                if self.query_planner is not None and complexity != "simple":
                     try:
+                        _t0 = datetime.now()
                         plan = self.query_planner.plan(ctx.user_question)
+                        _t["query_planner_s"] = (datetime.now() - _t0).total_seconds()
                         all_queries = plan.all_queries()
                         _logger.debug(
                             "[InfoPipeline] QueryPlanner: %d queries for '%s'",
@@ -151,6 +156,7 @@ class InfoPipeline:
                             ctx.user_question[:50],
                         )
                         # Use retrieve_multi if available, else fall back to balanced
+                        _t0 = datetime.now()
                         if hasattr(self.rag_builder, "retrieve_multi"):
                             rag_context, raw_results = self.rag_builder.retrieve_multi(
                                 queries=all_queries,
@@ -160,12 +166,17 @@ class InfoPipeline:
                             rag_context, raw_results = self.rag_builder.retrieve_balanced(
                                 ctx.user_question
                             )
+                        _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
                     except Exception as qp_exc:
                         _logger.warning("[InfoPipeline] QueryPlanner failed, using balanced: %s", qp_exc)
+                        _t0 = datetime.now()
                         rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                        _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
                 else:
                     # Standard balanced retrieval: YAML rules + PDF benchmarks
+                    _t0 = datetime.now()
                     rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                    _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
 
                 if rag_context and raw_results:
                     ctx.retrieved_context = rag_context
@@ -194,42 +205,58 @@ class InfoPipeline:
                             "text": chunk_text[:500] if chunk_text else None,
                         })
 
-                    print(f"[InfoPipeline] RAG OK — {rag_chunks} chunks, {len(rag_sources)} sources")
+                    _logger.info("[InfoPipeline] RAG OK — %d chunks, %d sources", rag_chunks, len(rag_sources))
                 else:
-                    print(f"[InfoPipeline] RAG returned empty — context={bool(rag_context)}, results={len(raw_results)}")
+                    _logger.info(
+                        "[InfoPipeline] RAG returned empty — context=%s, results=%d",
+                        bool(rag_context), len(raw_results)
+                    )
             except Exception as e:
-                print(f"[InfoPipeline] RAG ERROR: {e}")
+                _logger.error("[InfoPipeline] RAG ERROR: %s", e)
         else:
             self.stats["rag_skipped_count"] += 1
-            print("[InfoPipeline] RAG skipped")
+            _logger.debug("[InfoPipeline] RAG skipped")
 
         # RAG kaliteli context getirdiyse simple→medium yükselt
         if complexity == "simple" and rag_chunks >= 2:
             complexity = "medium"
-            print(f"[InfoPipeline] Upgraded simple→medium (rag_chunks={rag_chunks})")
+            _logger.debug("[InfoPipeline] Upgraded simple→medium (rag_chunks=%d)", rag_chunks)
 
-        # Route based on complexity
-        if complexity == "simple":
-            result = self._simple_path(ctx)
-            self.stats["simple_count"] += 1
-            model_used = "small"
-            estimated_cost = 0.0002
-        elif complexity == "medium":
-            result = self._medium_path(ctx)
-            self.stats["medium_count"] += 1
-            model_used = "large"
-            estimated_cost = 0.0005
-        else:  # complex
-            result = self._complex_path(ctx)
-            self.stats["complex_count"] += 1
-            model_used = "large+CoT"
-            estimated_cost = 0.0015
+        # Route based on complexity — time the LLM generation separately
+        _t0 = datetime.now()
+        try:
+            if complexity == "simple":
+                result = self._simple_path(ctx)
+                self.stats["simple_count"] += 1
+                model_used = "small"
+                estimated_cost = 0.0002
+            elif complexity == "medium":
+                result = self._medium_path(ctx)
+                self.stats["medium_count"] += 1
+                model_used = "large"
+                estimated_cost = 0.0005
+            else:  # complex
+                result = self._complex_path(ctx)
+                self.stats["complex_count"] += 1
+                model_used = "large+CoT"
+                estimated_cost = 0.0015
+        except Exception as gen_exc:
+            _logger.error("[InfoPipeline] LLM generation failed: %s", gen_exc)
+            result = (
+                "Şu anda yanıt üretilemedi — LLM sağlayıcısı geçici olarak kullanılamıyor. "
+                "Lütfen birkaç saniye bekleyip tekrar deneyin."
+            )
+            model_used = "error"
+            estimated_cost = 0.0
+        _t["llm_gen_s"] = (datetime.now() - _t0).total_seconds()
 
         # Claim verification (only when RAG was used — no context = no verification)
         verification_confidence: float | None = None
         if self.claim_verifier is not None and raw_results_for_verify:
             try:
+                _t0 = datetime.now()
                 vr = self.claim_verifier.verify(result, raw_results_for_verify)
+                _t["claim_verify_s"] = (datetime.now() - _t0).total_seconds()
                 verification_confidence = vr.confidence
                 if not vr.is_valid:
                     _logger.warning(
@@ -262,6 +289,7 @@ class InfoPipeline:
             estimated_cost=estimated_cost,
             rag_sources=rag_sources,
             verification_confidence=verification_confidence,
+            timing=_t,
         )
 
     def _should_use_rag(self, question: str, complexity: str) -> bool:

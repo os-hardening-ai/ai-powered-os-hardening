@@ -1,6 +1,6 @@
 # Architecture Analysis & Weaknesses Report
 **AI-Powered OS Hardening System**
-Date: 2025-12-24
+Date: 2026-05-29 (güncellendi: 2025-12-24 orijinal)
 
 ## System Architecture Overview
 
@@ -86,77 +86,12 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
         raise HTTPException(status_code=401, detail="Invalid API key")
 ```
 
-#### 2. **No Embedding Cache** 🔴
-**Current State**: Every query re-computes embeddings (2.1s latency)
-**Impact**: HIGH - Unnecessary latency and API costs
-**Recommendation**:
-- Add Redis cache for embedding results
-- Cache TTL: 24 hours
-- Hash query text for cache key
-- Invalidate on index updates
+#### 2. **No Embedding Cache** ✅ ÇÖZÜLDÜ
+**Çözüm**: `rag/cache/embedding_cache.py` — Redis tabanlı, SHA256 anahtar, 24 saatlik TTL.
+Tekrar eden sorgularda embedding latency ~0ms (Redis'ten).
 
-**Implementation Priority**: P0 (Immediate)
-
-**Expected Impact**:
-- Latency reduction: 2.1s → 0.05s (cached queries)
-- Cost reduction: 95%+ for repeated queries
-- Cache hit rate: 60-80% (typical)
-
-**Example**:
-```python
-# core/embeddings/cached_embeddings.py
-import redis
-import hashlib
-
-class CachedEmbeddingClient:
-    def __init__(self, base_client, redis_client):
-        self.base = base_client
-        self.cache = redis_client
-
-    def embed_query(self, text: str):
-        cache_key = f"emb:{hashlib.sha256(text.encode()).hexdigest()}"
-        cached = self.cache.get(cache_key)
-
-        if cached:
-            return json.loads(cached)
-
-        embedding = self.base.embed_query(text)
-        self.cache.setex(cache_key, 86400, json.dumps(embedding))  # 24h TTL
-        return embedding
-```
-
-#### 3. **No Request Timeout Configuration** 🔴
-**Current State**: Requests can hang indefinitely
-**Impact**: HIGH - Resource exhaustion, poor UX
-**Recommendation**:
-- Add configurable timeout (default: 30s)
-- Implement graceful timeout handling
-- Return timeout error with proper status code
-
-**Implementation Priority**: P0 (Immediate)
-
-**Example**:
-```python
-# api/router_chat.py
-import asyncio
-from fastapi import Request
-
-@router.post("/chat")
-async def chat(payload: ChatRequest, request: Request):
-    timeout = payload.timeout or 30  # default 30s
-
-    try:
-        result = await asyncio.wait_for(
-            pipeline.run(ctx),
-            timeout=timeout
-        )
-    except asyncio.TimeoutError:
-        raise APIError(
-            status_code=504,
-            error_code=ErrorCode.TIMEOUT,
-            message=f"Request timeout after {timeout}s"
-        )
-```
+#### 3. **No Request Timeout Configuration** ✅ ÇÖZÜLDÜ
+**Çözüm**: `REQUEST_TIMEOUT=60` env var, `api/router_chat.py` asyncio timeout ile sarılmış.
 
 ### HIGH Priority Issues
 

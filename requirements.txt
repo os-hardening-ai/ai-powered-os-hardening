@@ -1,71 +1,86 @@
 # ============================================================================
-# AI-Powered OS Hardening - Production Dependencies
+# AI-Powered OS Hardening - Production Dependencies (Python 3.12+)
 # ============================================================================
 #
-# This file contains minimal, production-ready dependencies for the
-# AI-powered OS hardening system with RAG (Retrieval-Augmented Generation)
-# and ML-based intent detection.
+# Docker ortamı için: requirements-python311.txt (pinned versions, Python 3.11)
+# Manuel kurulum için: bu dosya (minimum versions, Python 3.12+)
 #
 # Installation:
 #   pip install -r requirements.txt
 #
 # Python Version: 3.12+ recommended
-# Last Updated: 2025-12-26
-# Security Audit: Passed - All critical vulnerabilities fixed
-# - CVE-2024-47081 (requests): Fixed in 2.32.4+
-# - CVE-2025-54121, CVE-2025-62727 (fastapi): Fixed in 0.127.0+
-# - Updated faiss-cpu to 1.13.2 (security and performance improvements)
-# - Updated certifi to 2025.11.12 (latest security certificates)
-#
-# Components:
-#   - FastAPI REST API with Swagger documentation
-#   - LLM integration (Groq, OpenAI)
-#   - RAG system (embeddings + vector store)
-#   - ML intent detection (90%+ accuracy)
-#   - Security layers and validation
+# Last Updated: 2026-05-29
 # ============================================================================
 
-# Core API Framework
-fastapi>=0.127.0  # Latest version with security fixes (CVE-2025-54121, CVE-2025-62727)
+# --- Core API ---
+fastapi>=0.127.0
 uvicorn[standard]>=0.38.0
-pydantic>=2.12.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
 python-dotenv>=1.0.0
 
-# LLM Providers
-groq>=0.14.0
-openai>=1.66.0
+# --- HTTP / Utils ---
+requests>=2.32.4
+httpx>=0.27.0
+orjson>=3.10.0
+tenacity>=8.5.0
 
-# RAG & Embeddings
-sentence-transformers>=4.0.0
-cohere>=5.20.1  # Security updates
-qdrant-client>=1.14.1
-faiss-cpu>=1.13.0  # Security and performance updates
-
-# ML & Data Science
-scikit-learn>=1.5.0
-rank-bm25>=0.2.2  # Hybrid retrieval: in-context BM25 scoring for exact keyword matching
+# --- Data / Parsing ---
+numpy>=1.24.0,<2.0.0
 pandas>=2.0.0
-numpy>=1.24.0,<2.0.0  # Compatibility constraint
-joblib>=1.3.0
+beautifulsoup4>=4.12.0
 
-# Configuration & Utilities
-pyyaml>=6.0.2
-requests>=2.32.4  # CVE-2024-47081 fix
-aiohttp>=3.13.2
-certifi>=2025.11.12  # Latest security certificates
+# --- LLM / RAG ---
+groq>=0.14.0
+openai>=1.55.0
+tiktoken>=0.8.0
+cohere>=5.20.0
+langchain>=0.3.9
+langchain-community>=0.3.8
+langchain-core>=0.3.21
+langchain-text-splitters>=0.3.2
+langgraph>=0.2.55
 
-# Prometheus + OpenTelemetry Monitoring
-prometheus-client==0.24.1
-prometheus-fastapi-instrumentator==7.1.0
-opentelemetry-api==1.40.0
-opentelemetry-sdk==1.40.0
-opentelemetry-exporter-otlp-proto-grpc==1.40.0
-opentelemetry-instrumentation-fastapi==0.61b0
-opentelemetry-instrumentation-httpx==0.61b0
+# --- Embeddings ---
+# sentence-transformers: lokal model kullanılmıyor, provider=novita (API-based)
+# Novita qwen3-embedding-8b API üzerinden embed edildiği için torch gerekmez.
+# Eğer sentence_transformers provider'a geçilirse ekle: torch sentence-transformers
 
-# Development & Testing (optional)
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+# --- Vector DB clients ---
+qdrant-client>=1.12.0
+faiss-cpu>=1.9.0
+
+# --- Hybrid Retrieval ---
+rank-bm25>=0.2.2
 
 # --- YAML parsing (Rule Engine) ---
 PyYAML>=6.0
+
+# --- Cache / Session ---
+redis>=5.0.0  # Embedding cache + Redis session store
+
+# --- PDF parsing ---
+PyMuPDF>=1.24.0
+pymupdf4llm>=0.0.17
+
+# --- ML ---
+scikit-learn>=1.5.0
+joblib>=1.3.0
+
+# --- Prometheus + OpenTelemetry Monitoring ---
+prometheus-client>=0.24.0
+prometheus-fastapi-instrumentator>=7.1.0
+opentelemetry-api>=1.40.0
+opentelemetry-sdk>=1.40.0
+opentelemetry-exporter-otlp-proto-grpc>=1.40.0
+opentelemetry-instrumentation-fastapi>=0.61b0
+opentelemetry-instrumentation-httpx>=0.61b0
+
+# --- Testing ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# --- Dev / Visualization (optional) ---
+rich>=13.9.0
+matplotlib>=3.9.0
+openpyxl>=3.1.0
