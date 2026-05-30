@@ -9,7 +9,7 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
     os.system('chcp 65001 > nul 2>&1')
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -40,6 +40,7 @@ from api.metrics import (
     MetricsMiddleware,
     metrics_collector,
 )
+from api.auth import require_api_key
 from prometheus_metrics import setup_metrics, setup_tracing
 from config.config_loader import get_config
 import uvicorn
@@ -127,45 +128,58 @@ def create_app() -> FastAPI:
     # 7. Compression
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-    # 8. Trusted host
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["*"]  # Production'da specific domains kullan
-    )
+    # 8. Trusted host — ALLOWED_HOSTS env ile override edilebilir (virgülle ayrık).
+    #    Varsayılan açık ("*") bırakıldı; production'da env ile kısıtlayın.
+    _allowed_hosts = [
+        h.strip() for h in os.environ.get("ALLOWED_HOSTS", "*").split(",") if h.strip()
+    ] or ["*"]
+    if _allowed_hosts == ["*"]:
+        print("[WARNING] TrustedHost açık ('*'). Production'da ALLOWED_HOSTS env'i ayarlayın.")
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts)
 
-    # CORS middleware — origins config.json'dan okunur
+    # CORS middleware — origins config.json'dan okunur.
+    # Güvenlik: wildcard origin + credentials birlikte güvenli değildir (tarayıcı
+    # zaten reddeder). Wildcard'ta credentials'ı kapatıyoruz; açık olduğunda uyarı.
+    _cors_origins = cfg.api.cors_origins
+    _wildcard_cors = "*" in _cors_origins
+    if _wildcard_cors:
+        print("[WARNING] CORS origins '*'. Production'da config.json'da spesifik origin'ler tanımlayın.")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cfg.api.cors_origins,
-        allow_credentials=True,
+        allow_origins=_cors_origins,
+        allow_credentials=not _wildcard_cors,  # '*' ile credentials kombinasyonunu engelle
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
         max_age=600,
     )
 
+    # API-key auth: health hariç tüm uçlar korunur (API_KEY env set ise zorunlu,
+    # değilse dev modda açık + uyarı). Dependency router seviyesinde uygulanır.
+    _auth = [Depends(require_api_key)]
+
     # RAG-only endpoint (backward compatibility)
-    app.include_router(rag_router, prefix="/rag", tags=["rag"])
+    app.include_router(rag_router, prefix="/rag", tags=["rag"], dependencies=_auth)
 
     # RAG + LLM combined endpoint (yeni!)
-    app.include_router(chat_router, prefix="/api", tags=["chat"])
+    app.include_router(chat_router, prefix="/api", tags=["chat"], dependencies=_auth)
 
-    # Health check
+    # Health check — PUBLIC (liveness/readiness probe'ları için)
     app.include_router(health_router)
 
     # Advanced analytics
-    app.include_router(analytics_router, prefix="/api", tags=["monitoring"])
+    app.include_router(analytics_router, prefix="/api", tags=["monitoring"], dependencies=_auth)
 
     # OpenAI-compatible endpoint
-    app.include_router(openai_router, prefix="/v1", tags=["openai-compat"])
+    app.include_router(openai_router, prefix="/v1", tags=["openai-compat"], dependencies=_auth)
 
     # Rule Engine + Artifact Generator
-    app.include_router(artifacts_router, prefix="/api", tags=["domain"])
+    app.include_router(artifacts_router, prefix="/api", tags=["domain"], dependencies=_auth)
 
     # Agentic AI — İP-6 Görev Planlayıcı + İP-7 multi-step ajan
-    app.include_router(agent_router, prefix="/api", tags=["agents"])
+    app.include_router(agent_router, prefix="/api", tags=["agents"], dependencies=_auth)
 
     # ── Metrics Endpoint ──
-    @app.get("/metrics", tags=["monitoring"])
+    @app.get("/metrics", tags=["monitoring"], dependencies=_auth)
     async def get_metrics(
         endpoint: str = None,
         window_minutes: int = None
@@ -208,7 +222,7 @@ def create_app() -> FastAPI:
             "llm_models": agg_metrics.model_stats,
         }
 
-    @app.get("/metrics/errors", tags=["monitoring"])
+    @app.get("/metrics/errors", tags=["monitoring"], dependencies=_auth)
     async def get_recent_errors(limit: int = 10):
         """
         Get recent errors.
@@ -236,7 +250,7 @@ def create_app() -> FastAPI:
             ]
         }
 
-    @app.get("/metrics/slow", tags=["monitoring"])
+    @app.get("/metrics/slow", tags=["monitoring"], dependencies=_auth)
     async def get_slow_requests(limit: int = 10):
         """
         Get slowest requests.
