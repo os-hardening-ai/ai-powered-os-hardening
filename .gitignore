@@ -133,3 +133,6 @@ dmypy.json
 # Documentation builds
 docs/_build/
 site/
+
+# Generated evaluation artifacts (run outputs/logs)
+evaluation/results/
