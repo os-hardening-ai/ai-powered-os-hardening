@@ -167,6 +167,7 @@ def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCalla
     Dönüş:
         (llm_small, llm_large)  # her ikisi de Callable[[str], str]
     """
+    import os
     from llm.clients.registry import build_order, get_spec, Cost
 
     provider = (LLM_PROVIDER or "groq").lower()
@@ -179,10 +180,19 @@ def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCalla
     if not enable_fallback:
         return _PROVIDER_BUILDERS[provider]()
 
-    # Sıra registry'den: ücretsiz-first (groq → huggingface → ollama); PAID dışarıda.
-    # Birincil sağlayıcı PAID ise (kullanıcı açıkça seçtiyse) yine başa alınır.
-    primary_is_paid = get_spec(provider).cost is Cost.PAID
-    order = build_order(primary=provider, include_paid=primary_is_paid)
+    # Sıra registry'den. Varsayılan: ücretsiz-first (groq → huggingface → ollama).
+    # LLM_INCLUDE_CHEAP=1 → düşük ücretli kotasız Novita 429 güvenlik ağı olarak sona
+    # eklenir (kullanıcı "düşük ücretler de ok" dedi). LLM_INCLUDE_PAID=1 → pahalı dahil.
+    # Birincil sağlayıcı cheap/paid ise (açık tercih) yine başa alınır.
+    _truthy = ("1", "true", "yes", "on")
+    include_cheap = os.environ.get("LLM_INCLUDE_CHEAP", "").lower() in _truthy
+    include_paid = os.environ.get("LLM_INCLUDE_PAID", "").lower() in _truthy
+    primary_cost = get_spec(provider).cost
+    if primary_cost is Cost.CHEAP_PAID:
+        include_cheap = True
+    if primary_cost is Cost.PAID:
+        include_paid = True
+    order = build_order(primary=provider, include_cheap=include_cheap, include_paid=include_paid)
     shared_cache: Dict[str, Optional[Tuple[LLMCallable, LLMCallable]]] = {}
     shared_stats = {"total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {}}
     small = FallbackLLM("small", order, shared_cache, shared_stats)

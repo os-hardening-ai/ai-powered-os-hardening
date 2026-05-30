@@ -20,9 +20,10 @@ ProviderBuilder = Callable[[], Tuple[LLMCallable, LLMCallable]]  # () -> (small,
 
 
 class Cost(Enum):
-    FREE = "free"            # Tamamen ücretsiz, limitsiz (yerel) — Ollama
-    FREE_TIER = "free_tier"  # Ücretsiz ama kotalı/rate-limit — Groq, HuggingFace
-    PAID = "paid"            # Ücretli — Novita, OpenAI
+    FREE = "free"             # Tamamen ücretsiz, limitsiz (yerel) — Ollama
+    FREE_TIER = "free_tier"   # Ücretsiz ama kotalı/rate-limit — Groq, HuggingFace
+    CHEAP_PAID = "cheap_paid" # Düşük ücretli, kullandıkça-öde (kotasız) — Novita
+    PAID = "paid"             # Pahalı — OpenAI gpt-4o vb.
 
 
 @dataclass(frozen=True)
@@ -58,14 +59,17 @@ _REGISTRY: Dict[str, ProviderSpec] = {
         "ollama", "llm.clients.ollama_client:get_small_ollama_llm,get_large_ollama_llm",
         Cost.FREE, free_priority=30, notes="Yerel, limitsiz, offline (kurulum gerekir)",
     ),
-    # PAID — kayıtlı ama ücretsiz-first sıraya girmez.
+    # CHEAP_PAID — düşük ücretli, kotasız. Ücretsizler bittiğinde 429'a karşı
+    # güvenlik ağı olarak istenirse zincire alınır (kullanıcı: "düşük ücretler de ok").
     "novita": ProviderSpec(
         "novita", "llm.clients.novita_llm_client:get_small_novita_llm,get_large_novita_llm",
-        Cost.PAID, free_priority=900, notes="ÜCRETLI — yalnızca açıkça istenirse",
+        Cost.CHEAP_PAID, free_priority=800,
+        notes="Düşük ücretli + kotasız — 429 güvenlik ağı (include_cheap ile)",
     ),
+    # PAID — pahalı; yalnızca açıkça primary seçilirse.
     "openai": ProviderSpec(
         "openai", "llm.clients.openai_client:get_small_openai_llm,get_large_openai_llm",
-        Cost.PAID, free_priority=910, notes="ÜCRETLI — yalnızca açıkça istenirse",
+        Cost.PAID, free_priority=910, notes="Pahalı — yalnızca açıkça istenirse",
     ),
 }
 
@@ -81,23 +85,34 @@ def all_specs() -> Dict[str, ProviderSpec]:
     return dict(_REGISTRY)
 
 
-def free_first_order(include_paid: bool = False) -> List[str]:
-    """Ücretsiz/ücretsiz-tier sağlayıcıları free_priority sırasında döndürür.
+def free_first_order(include_cheap: bool = False, include_paid: bool = False) -> List[str]:
+    """Sağlayıcıları free_priority sırasında döndürür.
 
-    include_paid=True ise PAID sağlayıcılar da en sona eklenir (açık tercih).
+    Varsayılan: yalnızca FREE/FREE_TIER (ücretsiz-first).
+    include_cheap=True: CHEAP_PAID (Novita) de en sona eklenir → 429 güvenlik ağı.
+    include_paid=True : pahalı PAID (OpenAI) de eklenir.
     """
-    specs = [s for s in _REGISTRY.values() if include_paid or s.cost is not Cost.PAID]
-    specs.sort(key=lambda s: s.free_priority)
+    def _ok(s: ProviderSpec) -> bool:
+        if s.cost in (Cost.FREE, Cost.FREE_TIER):
+            return True
+        if s.cost is Cost.CHEAP_PAID:
+            return include_cheap or include_paid
+        return include_paid  # Cost.PAID
+    specs = sorted((s for s in _REGISTRY.values() if _ok(s)), key=lambda s: s.free_priority)
     return [s.name for s in specs]
 
 
-def build_order(primary: str | None = None, include_paid: bool = False) -> List[str]:
+def build_order(
+    primary: str | None = None,
+    include_cheap: bool = False,
+    include_paid: bool = False,
+) -> List[str]:
     """Fallback sırası: varsa `primary` önce, ardından ücretsiz-first kalan sıra (tekrarsız)."""
-    order = free_first_order(include_paid=include_paid)
+    order = free_first_order(include_cheap=include_cheap, include_paid=include_paid)
     if primary:
         primary = primary.lower()
-        # primary PAID olsa bile kullanıcı açıkça seçtiyse başa koy
-        order = [primary] + [p for p in order if p != primary]
         if primary not in _REGISTRY:
             raise ValueError(f"Bilinmeyen primary sağlayıcı: {primary!r}")
+        # primary listede yoksa (örn. cheap/paid ama flag kapalı) yine başa eklenir.
+        order = [primary] + [p for p in order if p != primary]
     return order
