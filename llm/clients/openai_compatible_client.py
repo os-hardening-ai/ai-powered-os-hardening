@@ -161,9 +161,10 @@ _CHAIN_RETRIES = 0
 
 def get_small_cerebras_llm() -> OpenAICompatibleClient:
     from llm.core.config import SMALL_MODEL_TEMPERATURE
-    # İKİ-KATMAN: small = llama3.1-8b ($0.10/$0.10, en hızlı) — sınıflandırma/router/doğrulama.
-    # Cerebras'ta gpt-oss-120b'nin yanında llama3.1-8b de serverless mevcut (canlı console).
-    model = os.environ.get("CEREBRAS_SMALL_MODEL", "llama3.1-8b")
+    # NOT: Cerebras'ta llama3.1-8b ($0.10) UI'da görünüyor ama API id'si canlı testte
+    # erişilemez döndü → small DA gpt-oss-120b (kanıtlı 1.36s; free tier'da maliyet $0).
+    # Daha ucuz small isteniyorsa CEREBRAS_SMALL_MODEL ile doğru API id verilmeli.
+    model = os.environ.get("CEREBRAS_SMALL_MODEL", "gpt-oss-120b")
     return build_from_preset("cerebras", model=model, temperature=SMALL_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
 
 
