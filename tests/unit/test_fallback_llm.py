@@ -53,6 +53,24 @@ class TestFallbackLLM:
             fb = FallbackLLM("large", ["groq", "openai"], cache)
             assert fb("hi") == "openai-large"  # groq 429 -> openai
 
+    def test_small_large_roles_preserved_across_fallback(self):
+        """KRİTİK: birincil 429'da bile small küçük modele, large büyük modele gider.
+
+        Karmaşıklık-yönlendirmesi (complex→large) fallback sonrası da geçerli kalmalı:
+        yedek sağlayıcıya düşünce zor görev yanlışlıkla küçük modele DÜŞMEZ.
+        """
+        cache = {}
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(clients, "_PROVIDER_BUILDERS", {
+                "groq": _provider("groq", call_error=RuntimeError("rate limit 429")),
+                "ollama": _provider("ollama"),
+            })
+            # small ve large aynı paylaşımlı cache'i kullanır (get_llm_clients gibi)
+            small = FallbackLLM("small", ["groq", "ollama"], cache)
+            large = FallbackLLM("large", ["groq", "ollama"], cache)
+            assert small("hi") == "ollama-small"   # küçük rol korundu
+            assert large("hi") == "ollama-large"   # büyük rol korundu (complex görev güvende)
+
     def test_skips_provider_that_fails_to_build(self):
         """Missing API key (builder raises) -> provider skipped, not fatal."""
         cache = {}

@@ -45,10 +45,15 @@ RAW_RESULTS = [
 
 
 class FakeRag:
+    def __init__(self):
+        self.calls = []  # çağrı izleme — RAG atlandığında boş kalmalı
+
     def retrieve_balanced(self, query):
+        self.calls.append(query)
         return CONTEXT_STR, RAW_RESULTS
 
     def retrieve_multi(self, queries, original_query):
+        self.calls.append(original_query)
         return CONTEXT_STR, RAW_RESULTS
 
 
@@ -105,6 +110,44 @@ class TestInfoPipelineRag:
         # low-confidence disclaimer should be appended
         assert res.verification_confidence == pytest.approx(0.4)
         assert "Güven skoru" in res.answer or "güven" in res.answer.lower()
+
+
+class TestSmartRagTriggering:
+    """Akıllı RAG tetikleme: jenerik tanım → atla, spesifik/zor → kullan."""
+
+    def _pipe(self, rb):
+        return InfoPipeline(
+            llm_small=lambda _p: "Kısa cevap.",
+            llm_large=lambda _p: LONG_ANSWER,
+            rag_builder=rb,
+        )
+
+    def test_generic_definition_skips_rag(self):
+        """'Firewall nedir?' → RAG ATLANIR (gereksiz embedding/Qdrant çağrısı yok)."""
+        rb = FakeRag()
+        res = self._pipe(rb).handle(RequestContext(user_question="Firewall nedir?"))
+        assert res.used_rag is False
+        assert rb.calls == []              # retriever hiç çağrılmadı
+        assert res.model_used == "small"   # basit → küçük model
+
+    def test_specific_question_uses_rag(self):
+        """Spesifik OS/config sorusu → RAG çalışır + büyük modele yönlenir."""
+        rb = FakeRag()
+        res = self._pipe(rb).handle(
+            RequestContext(user_question="Ubuntu 24.04 sshd_config PermitRootLogin nasıl ayarlanır?")
+        )
+        assert res.used_rag is True
+        assert len(rb.calls) >= 1
+        assert res.model_used in ("large", "large+CoT")
+
+    def test_generic_plus_specific_indicator_uses_rag(self):
+        """'ubuntu ... nedir' jenerik+spesifik karışımı → spesifik baskın, RAG çalışır."""
+        rb = FakeRag()
+        res = self._pipe(rb).handle(
+            RequestContext(user_question="Ubuntu 24.04 ufw nedir ve nasıl yapılandırılır?")
+        )
+        assert res.used_rag is True
+        assert len(rb.calls) >= 1
 
 
 class TestActionPipelineRag:
