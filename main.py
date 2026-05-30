@@ -137,10 +137,12 @@ def create_app() -> FastAPI:
         print("[WARNING] TrustedHost açık ('*'). Production'da ALLOWED_HOSTS env'i ayarlayın.")
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts)
 
-    # CORS middleware — origins config.json'dan okunur.
-    # Güvenlik: wildcard origin + credentials birlikte güvenli değildir (tarayıcı
-    # zaten reddeder). Wildcard'ta credentials'ı kapatıyoruz; açık olduğunda uyarı.
-    _cors_origins = cfg.api.cors_origins
+    # CORS middleware — CORS_ALLOW_ORIGINS env (virgülle ayrık) > config.json > varsayılan.
+    _env_cors = os.environ.get("CORS_ALLOW_ORIGINS", "").strip()
+    if _env_cors:
+        _cors_origins = [o.strip() for o in _env_cors.split(",") if o.strip()]
+    else:
+        _cors_origins = cfg.api.cors_origins or ["http://localhost:5173", "http://localhost:8080"]
     _wildcard_cors = "*" in _cors_origins
     if _wildcard_cors:
         print("[WARNING] CORS origins '*'. Production'da config.json'da spesifik origin'ler tanımlayın.")

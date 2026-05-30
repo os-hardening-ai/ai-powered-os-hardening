@@ -137,6 +137,23 @@ _llm_small = None
 _llm_large = None
 
 
+def _parse_rag_sources(metadata: dict) -> List["RAGSource"]:
+    """Metadata dict'inden RAGSource listesi üret. Hem /chat hem /chat/stream kullanır."""
+    sources: List[RAGSource] = []
+    for idx, sd in enumerate(metadata.get("rag_sources", []), start=1):
+        try:
+            sources.append(RAGSource(
+                id=f"source_{idx}",
+                score=sd.get("score", 0.0),
+                source=sd.get("source") or "Unknown",
+                section=sd.get("section") or "N/A",
+                text=sd.get("text"),
+            ))
+        except Exception:
+            pass
+    return sources
+
+
 def _get_llm_clients():
     """Get or initialize LLM clients"""
     global _llm_small, _llm_large
@@ -269,21 +286,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             )
 
         # RAG kaynaklarini parse et (eger varsa - metadata'dan)
-        rag_sources: List[RAGSource] = []
-        if result.metadata and "rag_sources" in result.metadata:
-            try:
-                for idx, source_data in enumerate(result.metadata["rag_sources"], start=1):
-                    rag_sources.append(
-                        RAGSource(
-                            id=f"source_{idx}",
-                            score=source_data.get("score", 0.0),
-                            source=source_data.get("source") or "Unknown",
-                            section=source_data.get("section") or "N/A",
-                            text=source_data.get("text"),
-                        )
-                    )
-            except Exception as e:
-                _conv_logger.warning(f"[ChatAPI] Failed to parse RAG sources: {e}")
+        rag_sources = _parse_rag_sources(result.metadata or {})
 
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
@@ -348,38 +351,51 @@ async def chat_stream(payload: ChatRequest):
     """
     Streaming version of /chat endpoint using Server-Sent Events (SSE).
 
-    Returns token-by-token streaming response for better user experience.
-
-    Response format (SSE):
-        event: metadata
-        data: {"intent": "info_request", "rag_used": true}
-
-        event: message
-        data: {"token": "SSH "}
-
-        event: message
-        data: {"token": "güvenliği "}
-
-        event: done
-        data: {"total_tokens": 150}
+    SSE event order:
+        event: metadata  — intent, safety, rag_used, layer_path, session info
+        event: sources   — rag_sources (same structure as /chat, only when RAG returned results)
+        event: message   — one per word/token
+        event: done      — total_tokens, total_time_s, estimated_cost, verification_confidence
     """
-    # Set timeout (default: 60s for streaming)
     timeout_seconds = payload.timeout or 60
 
     try:
-        # LLM clients
         llm_small, llm_large = _get_llm_clients()
 
-        # Request context
+        # Session history (P0-2)
+        session_id = payload.session_id or ""
+        history: List[Dict[str, str]] = []
+        if session_id:
+            turns = _session_store.get_history(session_id)
+            history = [{"role": t.role, "content": t.content} for t in turns]
+
+        # Context-aware query rewrite (P0-2)
+        effective_question = payload.question
+        if history:
+            try:
+                from rag.query.query_rewriter import QueryRewriter
+                _rewriter = QueryRewriter(llm_fn=llm_small)
+                rewritten = _rewriter.rewrite(payload.question, history)
+                if rewritten != payload.question:
+                    _conv_logger.info(
+                        "[QueryRewriter][stream] '%s' → '%s'",
+                        payload.question[:60], rewritten[:60],
+                    )
+                    effective_question = rewritten
+            except Exception as _re:
+                _conv_logger.warning("[QueryRewriter][stream] failed (non-fatal): %s", _re)
+
         ctx = RequestContext(
-            user_question=payload.question,
+            user_question=effective_question,
             os=payload.os,
             role=payload.role,
             security_level=payload.security_level,  # type: ignore
             zt_maturity=payload.zt_maturity,  # type: ignore
+            conversation_history=history,
         )
 
-        # Filter agent: os/role verilmemişse sorgudan çıkar
+        # FilterAgent (P0-2: uses effective_question via ctx)
+        _inferred_os: str | None = None
         if ctx.os is None or ctx.role is None:
             try:
                 from rag.query.filter_agent import FilterAgent
@@ -387,25 +403,24 @@ async def chat_stream(payload: ChatRequest):
                 _filters = _fa.infer(payload.question)
                 if _filters.os_type and ctx.os is None:
                     ctx.os = _filters.os_type
+                    _inferred_os = _filters.os_type
                 if _filters.role and ctx.role is None:
                     ctx.role = _filters.role
             except Exception as _fe:
-                _conv_logger.warning("[FilterAgent] stream failed (non-fatal): %s", _fe)
+                _conv_logger.warning("[FilterAgent][stream] failed (non-fatal): %s", _fe)
 
-        # RAG builder (stream)
         rag_builder = None
         if payload.use_rag:
             try:
-                _os_for_rag_stream = payload.os or None
+                _os_for_rag = payload.os or _inferred_os or None
                 rag_builder = RAGContextBuilder(
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
-                    os_version=_os_for_rag_stream,
+                    os_version=_os_for_rag,
                 )
             except Exception as e:
-                _conv_logger.warning(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+                _conv_logger.warning("[ChatAPI][stream] RAG init failed, devam ediliyor: %s", e)
 
-        # Pipeline
         pipeline = SecurePipelineV2(
             llm_ultra_fast=llm_small,
             llm_small=llm_small,
@@ -414,37 +429,58 @@ async def chat_stream(payload: ChatRequest):
             debug=False,
         )
 
-        # Run with timeout
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(pipeline.run, ctx),
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
         except asyncio.TimeoutError:
             raise APIError(
                 status_code=504,
                 error_code=ErrorCode.TIMEOUT,
                 message=f"Streaming request timeout after {timeout_seconds} seconds",
-                details={"timeout": timeout_seconds}
+                details={"timeout": timeout_seconds},
             )
 
-        # Stream the answer token by token
+        # P0-1: RAG sources — same structure as /chat
+        rag_sources = _parse_rag_sources(result.metadata or {})
+        sources_data = [s.model_dump() for s in rag_sources] if rag_sources else None
+
+        sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
+
+        # P0-2: Save session history
+        if session_id:
+            _session_store.add_turn(session_id, "user", effective_question)
+            _session_store.add_turn(session_id, "assistant", sanitized_answer[:500])
+
         async def token_generator():
-            # Split answer into words and stream
-            words = (result.answer or "No response").split()
-            for word in words:
+            for word in sanitized_answer.split():
                 yield word + " "
 
-        # Prepare metadata
-        metadata = {
+        _meta = result.metadata or {}
+        sse_metadata = {
             "intent": result.intent.type if result.intent else None,
             "safety": result.safety.category if result.safety else None,
             "rag_used": payload.use_rag,
             "layer_path": result.layer_path,
+            "session_id": session_id or None,
+            "history_turns": len(history) // 2,
+        }
+        done_extra = {
+            "total_time_s": result.total_time_s,
+            "estimated_cost": result.estimated_cost,
+            "verification_confidence": _meta.get("verification_confidence"),
         }
 
-        return await stream_chat_response(token_generator(), metadata=metadata)
+        return await stream_chat_response(
+            token_generator(),
+            metadata=sse_metadata,
+            sources=sources_data,
+            done_extra=done_extra,
+        )
 
+    except APIError:
+        raise
     except Exception as e:
         raise_internal_error("streaming", e, error_code=ErrorCode.PIPELINE_ERROR)
 

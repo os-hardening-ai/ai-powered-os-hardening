@@ -1,4 +1,6 @@
 from __future__ import annotations
+import asyncio
+import os
 from fastapi import APIRouter
 from log_manager import get_logger
 
@@ -13,15 +15,58 @@ async def root() -> dict:
 
 @router.get("/health", tags=["health"])
 async def health_check() -> dict:
-    return {"status": "ok"}
+    """Gerçek bağımlılık kontrolü: Qdrant, LLM, Redis ping.
+
+    Her zaman 200 döner. Kritik bağımlılık başarısızsa status='degraded'.
+    """
+    dependencies: dict[str, str] = {}
+    rag_available = False
+
+    # Qdrant — cached store üzerinden hafif ping
+    try:
+        from rag.vector_store import get_vector_store
+        vs = get_vector_store()
+        # Gerçek ağ çağrısı: mevcut collection'ı sorgula
+        await asyncio.wait_for(
+            asyncio.to_thread(vs._client.get_collection, vs._collection),
+            timeout=5.0,
+        )
+        dependencies["qdrant"] = "ok"
+        rag_available = True
+    except Exception:
+        dependencies["qdrant"] = "error"
+
+    # LLM — client init (provider API key varlığını doğrular)
+    try:
+        from llm.clients import get_llm_clients
+        get_llm_clients()
+        dependencies["llm"] = "ok"
+    except Exception:
+        dependencies["llm"] = "error"
+
+    # Redis — ping with short timeout
+    try:
+        redis_url = os.environ.get("REDIS_URL", "")
+        if redis_url:
+            import redis as _redis
+            _r = _redis.from_url(redis_url, socket_connect_timeout=2)
+            await asyncio.wait_for(asyncio.to_thread(_r.ping), timeout=3.0)
+            dependencies["redis"] = "ok"
+        else:
+            dependencies["redis"] = "disabled"
+    except Exception:
+        dependencies["redis"] = "error"
+
+    overall = "ok" if all(v in ("ok", "disabled") for v in dependencies.values()) else "degraded"
+    _health_logger.info("status=%s deps=%s", overall, dependencies)
+    return {"status": overall, "rag_available": rag_available, "dependencies": dependencies}
 
 
 @router.get("/health/detailed", tags=["health"])
 async def health_detailed() -> dict:
-    """Bileşen bazlı sağlık durumu."""
+    """Bileşen bazlı sağlık durumu (embedding dahil)."""
     components: dict[str, str] = {}
 
-    # RAG bağlantısı
     try:
         from rag.vector_store import get_vector_store
         get_vector_store()
@@ -29,7 +74,6 @@ async def health_detailed() -> dict:
     except Exception as e:
         components["vector_store"] = f"error: {e}"
 
-    # Embedding client
     try:
         from rag.embeddings import get_embedding_client
         get_embedding_client()
@@ -37,7 +81,6 @@ async def health_detailed() -> dict:
     except Exception as e:
         components["embedding"] = f"error: {e}"
 
-    # LLM client (Groq)
     try:
         from llm.clients import get_llm_clients
         get_llm_clients()
@@ -46,5 +89,5 @@ async def health_detailed() -> dict:
         components["llm"] = f"error: {e}"
 
     overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
-    _health_logger.info(f"status={overall} components={components}")
+    _health_logger.info("status=%s components=%s", overall, components)
     return {"status": overall, "components": components}
