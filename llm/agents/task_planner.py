@@ -37,8 +37,67 @@ _LEVEL_MAP: Dict[str, List[int]] = {
     "strict": [1, 2],
 }
 
-# Aday havuzu / prompt boyutu sınırı (token kontrolü)
-_MAX_CANDIDATES = 60
+# LLM'e gönderilecek (ve deterministik fallback'te kullanılacak) aday sayısı.
+# Tüm level kuralları hedefe göre alaka sırasına dizilir; en alakalı ilk N tanesi
+# LLM prompt'una girer → küçük prompt = düşük latency + odaklı seçim.
+_LLM_CANDIDATES = 24
+
+# Türkçe diakritik → ASCII (lexical eşleştirmeyi dil-bağımsız yapar)
+_TR_FOLD = str.maketrans("çğıöşüâîû", "cgiosuaiu")
+
+# Eşleştirmede gürültü yapan dolgu kelimeleri
+_STOPWORDS = {
+    "ve", "ile", "icin", "için", "bir", "bu", "su", "su", "the", "and", "for",
+    "ayarla", "yap", "yapilandir", "yapılandır", "sikilastir", "sıkılaştır",
+    "politika", "politikasi", "politikası", "ayarlar", "ayarlari",
+}
+
+# TR hedef kelimesi → ilgili (genelde İngilizce) CIS terimleri.
+# Anahtarlar ASCII-fold edilmiş halde tutulur (tokenizer da fold uygular).
+_SYNONYMS: Dict[str, set] = {
+    "ssh": {"ssh", "sshd"},
+    "parola": {"password", "passwd", "pam", "pwquality", "shadow"},
+    "sifre": {"password", "passwd", "pwquality"},
+    "guvenlik": {"security"},
+    "duvari": {"firewall", "ufw", "iptables", "nftables"},
+    "atesduvari": {"firewall", "ufw", "iptables", "nftables"},
+    "firewall": {"firewall", "ufw", "iptables", "nftables"},
+    "cekirdek": {"kernel", "module", "modprobe", "sysctl"},
+    "kernel": {"kernel", "module", "modprobe", "sysctl"},
+    "network": {"network", "ipv4", "ipv6", "tcp"},
+    "denetim": {"audit", "auditd"},
+    "audit": {"audit", "auditd"},
+    "gunluk": {"log", "logging", "syslog", "journald", "rsyslog"},
+    "log": {"log", "logging", "syslog", "journald", "rsyslog"},
+    "dosya": {"file", "filesystem", "mount", "partition"},
+    "kullanici": {"user", "account", "sudo"},
+    "zaman": {"time", "ntp", "chrony", "timesync"},
+    "servis": {"service", "daemon", "systemd"},
+    "hizmet": {"service", "daemon", "systemd"},
+    "izin": {"permission", "chmod", "umask"},
+}
+
+
+def _fold(text: str) -> str:
+    return text.lower().translate(_TR_FOLD)
+
+
+def _tokenize(text: str) -> set:
+    """ASCII-fold + sözcüklere ayır; kısa token ve dolgu kelimelerini at."""
+    folded = _fold(text)
+    return {
+        t for t in re.split(r"[^a-z0-9]+", folded)
+        if len(t) >= 3 and t not in _STOPWORDS
+    }
+
+
+def _expand(tokens: set) -> set:
+    """Hedef token'larını eşanlamlı CIS terimleriyle genişlet (TR↔EN köprüsü)."""
+    expanded = set(tokens)
+    for tok in tokens:
+        if tok in _SYNONYMS:
+            expanded |= _SYNONYMS[tok]
+    return expanded
 
 
 @dataclass
@@ -112,17 +171,22 @@ class TaskPlanner:
                 summary="Bu güvenlik seviyesi için uygun kural bulunamadı.",
             )
 
-        # 1) LLM ile seçim + önceliklendirme (varsa)
-        selections = self._llm_select(goal, candidates) if self.llm else {}
+        # 0) Adayları hedefe göre alaka sırasına diz ve LLM prompt'u için kıs.
+        #    (Tüm level kuralları sıralanır → bölüm-sırası kaynaklı "ilk 60" hatası
+        #     ortadan kalkar; SSH gibi geç bölümdeki kurallar da aday olabilir.)
+        llm_pool = self._rank_candidates(goal, candidates)[:_LLM_CANDIDATES]
 
-        # 2) Seçilen kural id'leri (LLM boşsa → tüm adaylar)
+        # 1) LLM ile seçim + önceliklendirme (varsa)
+        selections = self._llm_select(goal, llm_pool) if self.llm else {}
+
+        # 2) Seçilen kural id'leri (LLM boşsa → alaka-sıralı havuz)
         if selections:
             selected_ids = [rid for rid in selections if self.rule_engine.get_rule(rid)]
         else:
-            selected_ids = [r["id"] for r in candidates]
+            selected_ids = [r["id"] for r in llm_pool]
 
         if not selected_ids:
-            selected_ids = [r["id"] for r in candidates]
+            selected_ids = [r["id"] for r in llm_pool]
 
         # 3) RuleEngine: deterministik sıra + çakışma tespiti
         exec_plan = self.rule_engine.get_execution_plan(selected_ids)
@@ -166,8 +230,32 @@ class TaskPlanner:
         for lvl in levels:
             for rule in self.rule_engine.list_rules(level=lvl):
                 seen[rule["id"]] = rule
-        candidates = list(seen.values())
-        return candidates[:_MAX_CANDIDATES]
+        # Tam level havuzu döner; kısma (alaka-sıralaması sonrası) plan()'da yapılır.
+        return list(seen.values())
+
+    def _rank_candidates(self, goal: str, candidates: List[dict]) -> List[dict]:
+        """Adayları hedefle leksik örtüşmeye göre sırala (alakalı önce, kalanı korunur).
+
+        Eşleşme yoksa orijinal sıra korunur — böylece recall asla kaybolmaz,
+        yalnızca alakalı kurallar öne çekilir.
+        """
+        goal_tokens = _expand(_tokenize(goal))
+        if not goal_tokens:
+            return list(candidates)
+
+        def _score(rule: dict) -> int:
+            hay = _tokenize(" ".join([
+                str(rule.get("title", "")),
+                str(rule.get("category", "")),
+                " ".join(rule.get("tags", []) or []),
+                str(rule.get("description", "")),
+            ]))
+            return len(goal_tokens & hay)
+
+        # Stabil sıralama: yüksek skor önce, eşitlikte orijinal sıra (CIS bölüm no).
+        indexed = list(enumerate(candidates))
+        indexed.sort(key=lambda pair: (-_score(pair[1]), pair[0]))
+        return [rule for _, rule in indexed]
 
     def _llm_select(self, goal: str, candidates: List[dict]) -> Dict[str, dict]:
         """LLM'e adayları verir; hedefe uygun seçim + önceliklendirme JSON'u alır."""

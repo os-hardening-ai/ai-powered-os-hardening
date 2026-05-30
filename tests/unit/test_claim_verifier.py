@@ -17,18 +17,29 @@ CHUNKS = [
 
 
 class _ScriptedLLM:
-    """Returns claim-extraction JSON first, then a verdict per claim."""
+    """Returns claim-extraction JSON first, then a verdict per claim.
+
+    Thread-safe: per-claim checks now run concurrently, so the call counter
+    and verdict queue are guarded by a lock. Verdict order across claims is
+    non-deterministic under parallelism, but the assertions that use this
+    fake only depend on the multiset of verdicts (confidence / unsupported
+    count), not on which claim got which verdict.
+    """
 
     def __init__(self, claims, verdicts):
+        import threading
         self._claims_json = "[" + ", ".join(f'"{c}"' for c in claims) + "]"
         self._verdicts = list(verdicts)
         self._calls = 0
+        self._lock = threading.Lock()
 
     def __call__(self, prompt: str) -> str:
-        self._calls += 1
-        if self._calls == 1:
-            return self._claims_json  # extraction call
-        verdict = self._verdicts.pop(0) if self._verdicts else True
+        with self._lock:
+            self._calls += 1
+            is_extraction = self._calls == 1
+            if is_extraction:
+                return self._claims_json  # extraction call (always first, sequential)
+            verdict = self._verdicts.pop(0) if self._verdicts else True
         return '{"supported": %s, "reason": "x"}' % ("true" if verdict else "false")
 
 

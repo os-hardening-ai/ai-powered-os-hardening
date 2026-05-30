@@ -131,6 +131,45 @@ class TestLLMSelection:
         assert len(plan.items) == 3
 
 
+class TestRelevanceRanking:
+    """İP-6 latency+doğruluk: adaylar LLM'e gönderilmeden önce hedefe göre sıralanır."""
+
+    def test_ranking_surfaces_goal_relevant_rules_first(self, engine):
+        planner = TaskPlanner(rule_engine=engine, llm_fn=None)
+        candidates = planner._candidate_rules("strict")  # 4 rule
+        ranked = planner._rank_candidates("audit denetim", candidates)
+        # 'audit' kategorili 2.3.1 en üste çıkmalı (kategori+başlık+tag eşleşmesi)
+        assert ranked[0]["id"] == "2.3.1"
+
+    def test_turkish_goal_matches_english_rule_via_synonyms(self, engine):
+        planner = TaskPlanner(rule_engine=engine, llm_fn=None)
+        candidates = planner._candidate_rules("balanced")
+        # "parola" (TR) → "password" (EN) sinonimiyle 1.2.1 öne çekilmeli
+        ranked = planner._rank_candidates("parola sıkılaştır", candidates)
+        assert ranked[0]["id"] == "1.2.1"
+
+    def test_ranking_preserves_all_candidates(self, engine):
+        planner = TaskPlanner(rule_engine=engine, llm_fn=None)
+        candidates = planner._candidate_rules("strict")
+        ranked = planner._rank_candidates("alakasız hedef xyz", candidates)
+        # eşleşme olmasa bile hiçbir aday düşmez (recall korunur)
+        assert {r["id"] for r in ranked} == {r["id"] for r in candidates}
+
+    def test_llm_pool_capped_relevant_subset(self, engine):
+        """LLM'e giden aday sayısı _LLM_CANDIDATES ile sınırlı ve alaka-öncelikli."""
+        captured = {}
+
+        def fake_llm(prompt: str) -> str:
+            captured["prompt"] = prompt
+            return "[]"  # boş → fallback, ama prompt'u yakaladık
+
+        planner = TaskPlanner(rule_engine=engine, llm_fn=fake_llm)
+        planner.plan("ssh", security_level="balanced")
+        # SSH kuralları (1.1.1, 1.1.3) prompt'ta görünmeli
+        assert "1.1.1" in captured["prompt"]
+        assert "1.1.3" in captured["prompt"]
+
+
 class TestSerialization:
     def test_to_dict(self, engine):
         plan = TaskPlanner(rule_engine=engine, llm_fn=None).plan("ssh", security_level="balanced")
