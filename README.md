@@ -184,6 +184,7 @@ ai-powered-os-hardening/
 | 14 | [Değerlendirme](docs/14_DEGERLENDIRME.md) | İP-5/6/7/8 + H1/H3 ölçümleri |
 | 15 | [Eksikler](docs/15_EKSIKLER.md) | Kalan iş listesi |
 | 16 | [Kullanıcı Çalışması](docs/16_KULLANICI_CALISMASI.md) | H2/H4 anket protokolü |
+| 17 | [LLM Sağlayıcı Seçimi](docs/17_LLM_SAGLAYICI_SECIMI.md) | Provider testleri, alternatifler, performans kıyası |
 
 ---
 

@@ -80,68 +80,45 @@ ilk açılışta `users` boşsa `admin` hesabı `AUTH_ADMIN_PASSWORD`'dan oluşt
 | Rol yetersiz | `403 FORBIDDEN` | Uç için gerekli rol(ler) sağlanmadı |
 | Kota aşımı | `429 RATE_LIMITED` | Kullanıcı-bazlı (`user:{name}`) veya IP limiti |
 
-### Frontend Yazarken Ara Bağlantı Nasıl Etkilenir?
+### Frontend Yazarken JWT Akışı
 
-**ŞU ANKİ DURUM (Auth yok):**
 ```typescript
-// React component - Basit
-const sendMessage = async () => {
-  const response = await axios.post('/api/chat', {
-    question: userInput
-  });
-  // Başarılı!
+// 1. Login → token'ı sakla (memory veya httpOnly cookie tercih edilir)
+const login = async (username: string, password: string) => {
+  const { data } = await axios.post('/auth/login', { username, password });
+  setToken(data.access_token);          // data.role da gelir (RBAC için)
+  return data;
 };
-```
 
-**PRODUCTION (Auth var):**
-```typescript
-// React component - API key management gerekli
-const API_KEY = process.env.REACT_APP_API_KEY;
-
-// 1. API key validation on app load
-useEffect(() => {
-  if (!API_KEY) {
-    setError('API key not configured!');
-  }
-}, []);
-
-// 2. API call with auth header
+// 2. Her istekte Bearer header
 const sendMessage = async () => {
   try {
-    const response = await axios.post('/api/chat',
-      { question: userInput },
-      {
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`
-        }
-      }
+    const { data } = await axios.post('/api/chat',
+      { question: userInput, use_rag: true },
+      { headers: { Authorization: `Bearer ${token}` } }
     );
+    setAnswer(data.answer);
   } catch (error) {
-    if (error.response?.status === 401) {
-      setError('Invalid API key. Please check your credentials.');
-    } else if (error.response?.status === 429) {
-      setError('Quota exceeded. Please upgrade your plan.');
-    }
+    if (error.response?.status === 401) setError('Oturum süresi doldu — tekrar giriş yapın.');
+    else if (error.response?.status === 403) setError('Bu işlem için yetkiniz yok.');
+    else if (error.response?.status === 429) setError('İstek limiti aşıldı, lütfen yavaşlayın.');
   }
 };
 
-// 3. API key input (user-facing)
-// Kullanıcıdan API key isteme:
-<input
-  type="password"
-  placeholder="Enter your API key"
-  onChange={(e) => setApiKey(e.target.value)}
-/>
+// 3. SSE streaming (EventSource header gönderemez → query param)
+const es = new EventSource(`/api/chat/stream?access_token=${token}`);
 ```
 
-### Production Deployment İçin Öneriler
+### Production Deployment Durumu
 
-1. **JWT-based Authentication**: Token expiry, refresh tokens
-2. **OAuth2/OpenID Connect**: Google, GitHub login
-3. **API Key Tiers**: Free (1000/day), Pro (unlimited)
-4. **Rate Limiting**: User-based quotas
-5. **Audit Logging**: User activity tracking
-6. **IP Whitelisting**: Ek güvenlik katmanı
+| Özellik | Durum |
+|---------|-------|
+| **JWT Authentication** (login/logout/blacklist) | ✅ Mevcut |
+| **RBAC** (sysadmin/security/developer/end_user) | ✅ Mevcut |
+| **Audit Logging** (kim-ne-zaman, SQLite) | ✅ Mevcut |
+| **User-based Rate Limiting** | ✅ Mevcut |
+| HTTPS/TLS + spesifik CORS/ALLOWED_HOSTS | ⏳ Deployment'ta yapılandırılır |
+| OAuth2/SSO, refresh token | ◯ Kapsam dışı (opsiyonel gelecek) |
 
 ---
 
@@ -510,7 +487,7 @@ if use_rag_final and self.rag_builder:
     "layer_path": "1→2→3C",
     "rag_used": true,
     "rag_chunks": 6,
-    "model": "llama-3.3-70b-versatile",
+    "model": "gpt-oss-120b",
     "complexity": "complex"
   },
   "request_id": "req_1701234567890_abc123",
@@ -611,7 +588,7 @@ curl -X POST http://localhost:8000/api/chat \
     "total_time_s": 2.1,
     "rag_used": false,
     "rag_chunks": 0,
-    "model": "llama-3.1-8b-instant",
+    "model": "gpt-oss-120b",
     "complexity": "simple"
   },
   "estimated_cost": 0.0012,
@@ -657,7 +634,7 @@ curl -X POST http://localhost:8000/api/chat \
     "total_time_s": 3.8,
     "rag_used": true,
     "rag_chunks": 6,
-    "model": "llama-3.3-70b-versatile",
+    "model": "gpt-oss-120b",
     "complexity": "complex"
   },
   "estimated_cost": 0.0021,

@@ -18,11 +18,10 @@ from typing import Callable, Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from llm.core.context import RequestContext, SafetyResult
+from llm.core.context import RequestContext
 from llm.utils.question_classifier import classify_question
 from llm.prompts.simple_prompts import get_prompt_for_complexity
 from llm.prompts.cot_prompts import CoTSecurityAnalyzer
-from llm.core.config import CONFIG
 
 # Type alias
 LLMCallable = Callable[[str], str]

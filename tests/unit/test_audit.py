@@ -8,7 +8,7 @@ middleware, and the /api/audit query endpoint guarded by RBAC.
 from __future__ import annotations
 
 import pytest
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import db

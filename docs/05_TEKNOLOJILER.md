@@ -113,7 +113,7 @@ TfidfVectorizer(
 )
 ```
 
-**Çıktı**: 544 özellik (1,230 örnek dataset'ten)
+**Çıktı**: TF-IDF özellik matrisi (1.677 örnekli `intent_training_dataset.csv`'den)
 
 #### LogisticRegression
 **Amaç**: Intent classification (ana model)
@@ -129,10 +129,9 @@ LogisticRegression(
 )
 ```
 
-**Performans**:
-- Training accuracy: 91.16%
-- Test accuracy: 82.52%
-- CV accuracy: 85.37% ± 2.72%
+**Performans** (güncel model, 1.677 örnek):
+- Test accuracy: 90.48%
+- CV accuracy: 82.10% ± 3.46% (5-fold)
 
 #### LinearSVC (Secondary Model)
 **Amaç**: Alternative classifier (currently not used in hybrid, but available)

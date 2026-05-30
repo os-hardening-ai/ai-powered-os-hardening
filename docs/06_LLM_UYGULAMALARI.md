@@ -167,9 +167,9 @@ TfidfVectorizer(
 )
 ```
 
-**Çıktı**:
-- Vocabulary: 544 features (1,230 örnekten)
-- Sparse matrix: (1230, 544)
+**Çıktı** (güncel: 1.677 örnek):
+- TF-IDF feature matrix (örnek × vocabulary)
+- Eğitim/test bölünmesi → test accuracy %90.48, 5-fold CV %82.10 (±3.46)
 
 ---
 
@@ -209,17 +209,13 @@ model.fit(X_train_vec, y_train)
 
 #### 4. Evaluation
 ```python
-# Training accuracy
-train_acc = model.score(X_train_vec, y_train)
-# 91.16%
-
-# Test accuracy
+# Test accuracy (güncel model — 1677 örnek)
 test_acc = model.score(X_test_vec, y_test)
-# 82.52%
+# 90.48%
 
 # Cross-validation (5-fold)
 cv_scores = cross_val_score(model, X_train_vec, y_train, cv=5)
-# Mean: 85.37%, Std: 2.72%
+# Mean: 82.10%, Std: 3.46%
 ```
 
 #### 5. Model Persistence
@@ -741,8 +737,7 @@ Script:"""
 **Cross-validation (5-fold):**
 ```python
 cv_scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
-# [0.87, 0.83, 0.86, 0.85, 0.84]
-# Mean: 0.85 ± 0.027
+# Mean: 0.821 ± 0.035  (5-fold); test accuracy: 0.9048
 ```
 
 **Confusion Matrix:**

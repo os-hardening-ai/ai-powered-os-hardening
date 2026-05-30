@@ -6,7 +6,7 @@ from typing import Optional
 from config.schemas import (
     AppConfig, AppConfigRoot, ApiConfig, EmbeddingConfig, LlmConfig,
     RagConfig, RulesConfig, SourceDocumentConfig, VectorStoreConfig,
-    PipelineConfig, MonitoringConfig, DataPathsConfig, LateChunkingConfig,
+    PipelineConfig, MonitoringConfig, DataPathsConfig,
     RedisConfig, AuthConfig,
 )
 
@@ -135,6 +135,7 @@ class ConfigLoader:
             monitoring=monitoring,
             data_paths=data_paths,
             redis=redis_cfg,
+            auth=auth_cfg,
         )
         return self._config
 

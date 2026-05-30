@@ -163,7 +163,7 @@ Classification:"""
 
 ### Performans
 - **Süre**: 500-800ms
-- **Maliyet**: $0 (Groq ücretsiz)
+- **Maliyet**: $0 (Cerebras ücretsiz tier)
 - **Doğruluk**: ~99%
 
 ### Layer Path
@@ -252,7 +252,7 @@ ML + Pattern kombinasyonu ile final karar:
 ### Performans
 - **Süre**: <10ms (ML), <1ms (pattern)
 - **Maliyet**: $0
-- **Doğruluk**: %85.37 (ML), %100 (pattern for smalltalk)
+- **Doğruluk**: %90.48 test (ML), %82.10 5-fold CV (±3.46), %100 (pattern for smalltalk)
 
 ### Layer Path'ler
 - **Smalltalk**: `1→2→3A`
@@ -338,7 +338,7 @@ User Question: {soru}
 
 Answer (Türkçe, detaylı, CIS Benchmark'a göre):"""
 
-answer = groq.chat(prompt, model="llama-3.3-70b-versatile")
+answer = llm_large(prompt)  # Cerebras gpt-oss-120b (FallbackLLM)
 ```
 
 ### Akıllı RAG Tetikleme (Smart RAG Triggering)
@@ -467,7 +467,7 @@ Requirements:
 
 Script:"""
 
-script = groq.chat(prompt, model="llama-3.3-70b-versatile")
+script = llm_large(prompt)  # Cerebras gpt-oss-120b (FallbackLLM)
 ```
 
 #### 4. Zero Trust Enrichment
@@ -669,7 +669,7 @@ Her katmanın ne aldığını, nasıl işlediğini ve ne ürettiğini adım adı
 
 **PROCESSING (İşlem):**
 1. LLM'e safety classification prompt gönder
-2. Groq llama-3.1-8b-instant modeli kullan (hızlı)
+2. Cerebras gpt-oss-120b modeli kullan (hızlı)
 3. 5 kategori arasında sınıflandır:
    - safe_defensive, safe_educational, ambiguous, unsafe_offensive, unsafe_spam
 
@@ -779,7 +779,7 @@ prompt = """Sen bir siber güvenlik uzmanısın.
 Kullanıcı sorusu: SSH nedir ve nasıl çalışır?
 Türkçe, detaylı açıkla."""
 
-answer = llm_small(prompt)  # Groq llama-3.1-8b-instant
+answer = llm_small(prompt)  # Cerebras gpt-oss-120b
 # Time: ~800ms
 ```
 
@@ -815,7 +815,7 @@ Kullanıcı sorusu: {question}
 
 Context'i kullanarak Türkçe, detaylı yanıt ver."""
 
-answer = llm_large(prompt)  # Groq llama-3.3-70b-versatile
+answer = llm_large(prompt)  # Cerebras gpt-oss-120b
 # Time: ~1.5s (RAG) + ~800ms (LLM) = ~2.3s
 ```
 

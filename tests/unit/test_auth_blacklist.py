@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import time
 
-from api import auth_blacklist
 from api.auth_blacklist import _InMemoryBlacklist, block_token, is_blocked, reset_for_tests
 
 

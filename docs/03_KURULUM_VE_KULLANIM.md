@@ -14,9 +14,9 @@
   - Model files: ~50MB (intent detection)
 
 ### Yazılım
-- **Python**: **3.12 veya üzeri** (ZORUNLU)
-  - ⚠️ **Önemli**: Python 3.11 ve altı desteklenmez (sklearn 1.8 uyumsuzluğu)
-  - ✅ Test edildi: Python 3.12.10 (Windows/Linux)
+- **Python**: **3.11 veya üzeri**
+  - ✅ Geliştirme/test: Python 3.12.10 (Windows/Linux) — önerilen
+  - 🐳 Docker image tabanı: `python:3.11-slim` (scikit-learn 1.8 Python 3.11'i destekler)
 - **İşletim Sistemi**: Windows 10/11, Linux (Ubuntu 20.04+), macOS
 - **İsteğe Bağlı**: Docker (Qdrant için, yoksa FAISS kullanılabilir)
 - **İnternet Bağlantısı**: API key alma ve dependency kurulumu için gerekli
@@ -56,10 +56,22 @@ cp .env.example .env
 Zorunlu key'leri doldur:
 
 ```env
-LLM_PROVIDER=novita
-NOVITA_API_KEY=your-novita-api-key
+# LLM (primary Cerebras; fallback SambaNova → Gemini/OpenRouter → Novita)
+LLM_PROVIDER=cerebras
+CEREBRAS_API_KEY=your-cerebras-api-key
+SAMBANOVA_API_KEY=your-sambanova-api-key      # fallback
+OPENROUTER_API_KEY=your-openrouter-api-key    # Gemini 3.1 Flash Lite için
+NOVITA_API_KEY=your-novita-api-key            # embedding + ucuz fallback
+
+# RAG (Qdrant Cloud)
+QDRANT_URL=https://your-cluster.qdrant.io
 QDRANT_API_KEY=your-qdrant-api-key
-GROQ_API_KEY=your-groq-api-key        # opsiyonel, fallback için
+
+# Auth (boşsa dev-mode: demo hesaplar admin/sec/dev/user, parola changeme123)
+JWT_SECRET=                                    # production'da >=32 karakter
+
+# Opsiyonel
+REDIS_URL=redis://localhost:6379/0             # yoksa in-memory fallback
 ```
 
 ### 3. Image'ı build et ve başlat
@@ -222,10 +234,12 @@ python -c "import qdrant_client; print('Qdrant: OK')"
 | **torch** | 2.x | Embeddings (transformers) | 🟡 Yüksek |
 | **transformers** | 4.x | NLP models | 🟡 Yüksek |
 | **langchain** | 0.1+ | LLM orchestration | 🟡 Yüksek |
-| **qdrant-client** | 1.7+ | Vector DB (or faiss-cpu) | 🟡 Yüksek |
-| **cohere** | 5.x | Embeddings API | 🟢 Orta |
-| **groq** | 0.4+ | LLM API (ücretsiz) | 🟢 Orta |
-| **slowapi** | 0.1.9+ | Rate limiting | 🟢 Orta |
+| **qdrant-client** | 1.12+ | Vector DB | 🟡 Yüksek |
+| **openai** | 1.55+ | OpenAI-uyumlu istemci (Cerebras/SambaNova/Gemini) | 🟡 Yüksek |
+| **PyJWT** | 2.8+ | JWT auth | 🟡 Yüksek |
+| **bcrypt** | 4.1+ | Parola hash | 🟡 Yüksek |
+| **redis** | 5.0+ | Session + blacklist + rate limit | 🟢 Orta |
+| **cohere / groq** | — | (legacy/opsiyonel; aktif kullanılmaz) | ⚪ Düşük |
 
 ### Yaygın Kurulum Sorunları ve Çözümleri
 
@@ -275,43 +289,49 @@ Proje kök dizininde `.env` dosyası oluşturun:
 # .env dosyası
 # =============
 
-# LLM Provider (groq, openai, ollama)
-LLM_PROVIDER=groq
-GROQ_API_KEY=gsk_your_groq_api_key_here
+# LLM (fail-fast fallback: cerebras → sambanova → gemini → novita)
+LLM_PROVIDER=cerebras
+CEREBRAS_API_KEY=csk_your_cerebras_key
+SAMBANOVA_API_KEY=your_sambanova_key
+OPENROUTER_API_KEY=sk-or-v1-...          # Gemini 3.1 Flash Lite (OpenRouter)
+NOVITA_API_KEY=your_novita_key           # embedding + ucuz fallback
 
-# Embedding Provider
-EMBEDDING_PROVIDER=cohere
-COHERE_API_KEY=your_cohere_api_key_here
+# Embedding (Novita qwen3-embedding-8b, 4096 dim — LLM'den ayrı)
+# (Novita anahtarı yukarıda; embedding ayrı sağlayıcı gerektirmez)
 
-# Vector Store (qdrant veya faiss)
-VECTOR_STORE_PROVIDER=qdrant
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION_NAME=cis_benchmarks
+# Vector Store (Qdrant Cloud)
+QDRANT_URL=https://your-cluster.qdrant.io
+QDRANT_API_KEY=your-qdrant-api-key
 
-# Optional: OpenAI
-# OPENAI_API_KEY=sk-your-openai-key
+# Auth (JWT). Boşsa dev-mode + demo hesaplar; production'da set edin (>=32 char)
+JWT_SECRET=
+# JWT_EXPIRY_MINUTES=60
+# AUTH_ADMIN_PASSWORD=...   # prod ilk açılışta admin parolası
 
-# Optional: Ollama (local)
-# OLLAMA_BASE_URL=http://localhost:11434
+# Opsiyonel
+REDIS_URL=redis://localhost:6379/0       # session + JWT blacklist + rate limit (yoksa in-memory)
 ```
 
 ### API Key Alma Rehberi
 
-#### Groq API Key (ÜCRETSİZ)
-1. https://console.groq.com/keys adresine gidin
-2. Google hesabınızla giriş yapın
-3. "Create API Key" butonuna tıklayın
-4. Key'i kopyalayın ve `.env` dosyasına ekleyin
+> Sağlayıcı seçim gerekçeleri ve performans kıyası: [17_LLM_SAGLAYICI_SECIMI.md](17_LLM_SAGLAYICI_SECIMI.md)
 
-**Not**: Groq tamamen ücretsizdir ve çok hızlıdır (500+ token/s).
+#### Cerebras API Key (ÜCRETSİZ — PRIMARY)
+1. https://cloud.cerebras.ai/ adresine gidin, hesap oluşturun
+2. API Keys → "Create" → key'i `.env`'e `CEREBRAS_API_KEY` olarak ekleyin
 
-#### Cohere API Key (ÜCRETSİZ Trial)
-1. https://dashboard.cohere.com/api-keys adresine gidin
-2. Hesap oluşturun
-3. API key'i kopyalayın
-4. `.env` dosyasına ekleyin
+**Not**: Ücretsiz tier 1M token/gün (30 RPM). `gpt-oss-120b`, özel donanım (~1.4s).
 
-**Not**: Free tier ayda 100 istek sınırı vardır. Prototip için yeterlidir.
+#### SambaNova / OpenRouter (Gemini) / Novita
+- **SambaNova** (fallback): https://cloud.sambanova.ai/ → API key → `SAMBANOVA_API_KEY`
+- **OpenRouter** (Gemini 3.1 Flash Lite, 1M context): https://openrouter.ai/keys → `OPENROUTER_API_KEY`
+- **Novita** (embedding + ucuz fallback): https://novita.ai/ → `NOVITA_API_KEY`
+
+#### Qdrant Cloud
+1. https://cloud.qdrant.io/ → cluster oluştur → `QDRANT_URL` + `QDRANT_API_KEY`
+
+> Groq / Ollama / HuggingFace **deprecated** (otomatik zincirden çıkarıldı); gerekirse açıkça
+> `LLM_PROVIDER=<x>` ile kullanılabilir.
 
 ---
 
@@ -320,23 +340,22 @@ QDRANT_COLLECTION_NAME=cis_benchmarks
 Intent detection modeli henüz eğitilmemişse:
 
 ```bash
-python llm/ml_intent_detector.py
+python -m llm.ml.intent_detector
 ```
 
-**Çıktı:**
+**Çıktı (yaklaşık):**
 ```
 Training ML Intent Detector...
-Dataset loaded: 1230 samples
-Features extracted: 544 TF-IDF features
-Training Logistic Regression...
-Cross-validation: 85.37% ± 2.72%
-Test accuracy: 82.52%
+Dataset loaded: 1677 samples
+Training Logistic Regression + TF-IDF...
+Cross-validation: 82.10% ± 3.46%   (5-fold)
+Test accuracy: 90.48%
 Model saved: models/intent_model.joblib
 Vectorizer saved: models/intent_vectorizer.joblib
 ✓ Training complete!
 ```
 
-**Not**: Eğitimli modeller (`models/` klasöründe) zaten repo'da mevcutsa bu adımı atlayabilirsiniz.
+**Not**: Eğitimli modeller (`models/` klasöründe) zaten repo'da mevcuttur — bu adımı normalde atlayabilirsiniz.
 
 ---
 
@@ -361,29 +380,23 @@ VECTOR_STORE_PROVIDER=faiss
 
 ## Adım 7: RAG Index Oluşturma
 
-CIS Benchmark dokümanlarını vektör veritabanına yükleyin:
+CIS Benchmark dokümanlarını + YAML kurallarını vektör veritabanına yükleyin:
 
 ```bash
-python scripts/build_index_ubuntu.py
+python scripts/build_index.py
 ```
 
-**Çıktı:**
+**Çıktı (yaklaşık):**
 ```
-Loading CIS Ubuntu 24.04 Benchmark...
-Splitting into chunks...
-Generating embeddings (Cohere)...
-Uploading to Qdrant...
-✓ Index created: 1,245 chunks
-✓ Collection: cis_benchmarks
+Loading CIS Ubuntu 24.04 + Windows 11 benchmarks + YAML rules...
+Generating embeddings (Novita qwen3-embedding-8b, 4096 dim)...
+Uploading to Qdrant Cloud...
+✓ Collection: cis_ubuntu_2404_windows11_winserver2025_with_rules
 ```
 
-### Diğer OS'ler için:
-```bash
-python scripts/build_index_centos.py    # CentOS 9
-python scripts/build_index_windows.py   # Windows Server 2022
-```
-
-**Not**: Her OS için ayrı script çalıştırmanız gerekmez. İhtiyacınız olan OS'ler için index oluşturun.
+**Not**: Üretim Qdrant **Cloud** üzerindedir; koleksiyon zaten doludur (Ubuntu 24.04 = 312 kural,
+Windows 11 = 516 kural). Yeni kaynak eklemek için `scripts/index_new_sources.py` kullanılır.
+Embedding **Novita** (`qwen3-embedding-8b`, 4096) ile üretilir — Cohere kullanılmaz.
 
 ---
 
@@ -435,25 +448,34 @@ API artık çalışıyor! Şu adreslere erişebilirsiniz:
 
 ### 2. cURL ile API Kullanımı
 
+> **Önemli:** API artık **JWT auth** ister. Önce `/auth/login` ile token alın, sonra her isteğe
+> `Authorization: Bearer <token>` ekleyin. (Dev-mode demo hesabı: `admin` / `changeme123`.)
+
+#### 0. Giriş yap → token al:
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"changeme123"}' | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+```
+
 #### Basit Bilgi Sorusu:
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "question": "SSH nedir ve nasıl çalışır?"
-  }'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{ "question": "SSH nedir ve nasıl çalışır?" }'
 ```
 
 #### Script Oluşturma:
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "question": "Ubuntu 22.04 için SSH hardening scripti oluştur",
-    "os": "ubuntu_22_04",
+    "question": "Ubuntu 24.04 için SSH hardening scripti oluştur",
+    "os": "ubuntu_24_04",
     "role": "admin",
     "security_level": "strict",
-    "zt_maturity": "high",
     "use_rag": true
   }'
 ```
@@ -462,106 +484,89 @@ curl -X POST http://localhost:8000/api/chat \
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "question": "Zero Trust nedir?",
-    "use_rag": false
-  }'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{ "question": "Zero Trust nedir?", "use_rag": false }'
 ```
 
 ### 3. Python ile Kullanım
 
-#### Basit Örnek:
+#### Basit Örnek (JWT ile):
 ```python
 import requests
 
-url = "http://localhost:8000/api/chat"
-payload = {
-    "question": "CentOS 9 için firewall yapılandırması oluştur",
-    "os": "centos_9",
-    "role": "sysadmin"
-}
+BASE = "http://localhost:8000"
 
-response = requests.post(url, json=payload)
-result = response.json()
+# 1) Giriş → token
+tok = requests.post(f"{BASE}/auth/login",
+                    json={"username": "admin", "password": "changeme123"}).json()["access_token"]
+headers = {"Authorization": f"Bearer {tok}"}
+
+# 2) Chat
+payload = {
+    "question": "Ubuntu 24.04 için firewall yapılandırması oluştur",
+    "os": "ubuntu_24_04",
+    "role": "sysadmin",
+    "use_rag": True,
+}
+result = requests.post(f"{BASE}/api/chat", json=payload, headers=headers).json()
 
 print("Answer:", result["answer"])
 print("Intent:", result["intent"])
-print("Layer Path:", result["stats"]["layer_path"])
+print("Layer Path:", result["layer_path"])
 print("Time:", result["stats"]["total_time_s"], "seconds")
-```
-
-#### Örnek Scriptleri Çalıştırma:
-```bash
-# Basit sohbet testi
-python examples/simple_chat.py
-
-# Script oluşturma örnekleri
-python examples/script_generation.py
-
-# Bilgi soruları
-python examples/info_queries.py
-
-# Farklı OS tipleri
-python examples/different_os_types.py
 ```
 
 ### 4. Python ile Direct Pipeline Kullanımı (API olmadan)
 
 ```python
-from llm.pipeline_v2 import create_pipeline_v2
-from llm.models import RequestContext
+from llm.pipelines.secure_v2 import run_secure_pipeline_v2
+from llm.core.context import RequestContext
+from llm.clients import get_llm_clients
 
-# Pipeline oluştur
-pipeline = create_pipeline_v2(use_ml=True, debug=True)
+llm_small, llm_large = get_llm_clients()
 
-# Request context
 ctx = RequestContext(
     user_question="Ubuntu 24.04 için SSH hardening scripti oluştur",
     os="ubuntu_24_04",
     role="admin",
     security_level="balanced",
-    zt_maturity="medium"
 )
 
-# İşle
-result = pipeline.process(ctx)
-
-# Sonuç
+result = run_secure_pipeline_v2(ctx, llm_small=llm_small, llm_large=llm_large)
 print(result.answer)
-print(f"Intent: {result.intent.type}")
-print(f"Layer Path: {result.stats.layer_path}")
-print(f"Time: {result.stats.total_time_s:.2f}s")
+print(f"Intent: {result.intent}")
+print(f"Layer Path: {result.layer_path}")
 ```
+
+> Not: `examples/` dizini yoktur — örnekler için yukarıdaki cURL/Python snippet'lerini veya
+> `tests/integration/` altındaki testleri kullanın.
 
 ---
 
 ## Test Etme
 
-### 1. Tek Soruluk Chat Testi
+### 1. Birim Testleri (pytest)
 ```bash
-python tests/integration/test_single_turn_chat.py
+python -m pytest tests/unit/ -q
+# → 516 test geçiyor (auth, RAG, pipeline, refinement, rule engine, ...)
 ```
 
-### 2. Tüm 50 Test Case ile Değerlendirme
+### 2. Coverage ile
 ```bash
-python tests/pipeline_evaluator.py
+python -m pytest tests/unit/ --cov=api --cov=llm --cov=rag --cov=domain --cov=config --cov-report=term
+# → overall ~%56; güvenlik/auth modülleri ~%83
 ```
 
-**Çıktı:**
-```
-Running 50 test cases...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50/50 (100%)
-
-Results:
-✓ Passed: 48/50 (96%)
-✗ Failed: 2/50 (4%)
-Avg time: 2.1s
-Total cost: $0.082
-```
-
-### 3. Tüm Unit ve Integration Testlerini Çalıştırma
+### 3. API sözleşme testi (Newman / Postman)
 ```bash
-python tests/run_all_tests.py
+# Sunucu ayakta iken (başka terminalde python main.py):
+newman run tests/postman/hardening_api.postman_collection.json --env-var baseUrl=http://localhost:8000
+# → 17 istek / 25 assertion, JWT login→Bearer akışı dahil
+```
+
+### 4. Lint
+```bash
+python -m flake8 --select=F,E9 api/ llm/ rag/ domain/ config/ main.py
 ```
 
 ---
@@ -575,31 +580,21 @@ python tests/run_all_tests.py
 
 **Optional Parametreler:**
 - `os` (string): İşletim sistemi
-  - Seçenekler: `ubuntu_22_04`, `ubuntu_24_04`, `centos_9`, `windows_server_2022`, `debian_12`
-  - Varsayılan: `None` (action request'lerde gerekli)
+  - **Kural verisi mevcut**: `ubuntu_24_04` (312 kural), `windows_11` (516 kural)
+  - (`ubuntu_22_04` vb. kabul edilir ama henüz kural seti yok; Windows Server 2025 boş)
+  - Varsayılan: `None` (verilmezse FilterAgent sorgudan çıkarmayı dener)
 
-- `role` (string): Kullanıcı rolü
-  - Seçenekler: `admin`, `sysadmin`, `soc`, `developer`, `devops`
-  - Varsayılan: `None` (action request'lerde gerekli)
+- `role` (string): Kullanıcı rolü ipucu (örn. `admin`, `sysadmin`, `developer`)
+  - Varsayılan: `None`
+  - > Not: Bu, prompt bağlamı içindir; **API erişim rolü** (RBAC) JWT token'ındaki `role`'dür.
 
-- `security_level` (string): Güvenlik seviyesi
-  - Seçenekler: `minimal`, `balanced`, `strict`
-  - Varsayılan: `balanced`
+- `security_level` (string): `minimal` | `balanced` | `strict` — Varsayılan: `balanced`
 
-- `zt_maturity` (string): Zero Trust maturity level
-  - Seçenekler: `low`, `medium`, `high`
-  - Varsayılan: `medium`
+- `use_rag` (bool): RAG kullanılsın mı? — Varsayılan: `true` (akıllı tetikleme son kararı verir)
 
-- `use_rag` (bool): RAG kullanılsın mı?
-  - Varsayılan: `true`
+- `rag_top_k` (int): Her kaynaktan kaç chunk (1-20) — Varsayılan: **3**
 
-- `rag_top_k` (int): RAG'den kaç chunk çekilsin?
-  - Aralık: 1-20
-  - Varsayılan: `5`
-
-- `rag_min_score` (float): Minimum relevance score
-  - Aralık: 0.0-1.0
-  - Varsayılan: `0.7`
+- `rag_min_score` (float): Minimum relevance score (0.0-1.0) — Varsayılan: **0.5**
 
 ### Response Formatı
 
@@ -677,8 +672,8 @@ AuthenticationError: Invalid API key
 **Çözüm:**
 1. `.env` dosyasını kontrol edin
 2. API key'lerin doğru olduğundan emin olun
-3. Groq: https://console.groq.com/keys
-4. Cohere: https://dashboard.cohere.com/api-keys
+3. Cerebras: https://cloud.cerebras.ai/ · SambaNova: https://cloud.sambanova.ai/
+4. OpenRouter: https://openrouter.ai/keys · Novita: https://novita.ai/ · Qdrant: https://cloud.qdrant.io/
 
 ---
 
@@ -742,30 +737,31 @@ uvicorn main:app --port 8001
 - `rag_top_k` değerini düşürün (default: 5 → 3)
 - `rag_min_score` değerini artırın (default: 0.7 → 0.75) daha alakalı sonuçlar için
 
-### 2. LLM Model Seçimi
+### 2. LLM Sağlayıcı Seçimi
 ```bash
-# Hız için (8B model)
-LLM_PROVIDER=groq
-GROQ_MODEL=llama-3.1-8b-instant
+# Varsayılan (en hızlı + ücretsiz, özel donanım ~1.4s)
+LLM_PROVIDER=cerebras
+CEREBRAS_MODEL=gpt-oss-120b
 
-# Kalite için (70B model)
-LLM_PROVIDER=groq
-GROQ_MODEL=llama-3.3-70b-versatile
+# Fail-fast fallback otomatik: cerebras → sambanova → gemini → novita
+# (registry.py free_priority sırasına göre; deprecated sağlayıcılar zincir dışı)
 ```
 
-### 3. Caching (Gelecek Özellik)
-Aynı soruları cache'lemek için Redis kullanabilirsiniz.
+### 3. Session / Rate-limit / Blacklist (Redis)
+`REDIS_URL` ayarlıysa oturum geçmişi, JWT blacklist ve kullanıcı-bazlı rate-limit Redis'te
+tutulur; yoksa in-memory fallback devreye girer. (Embedding cache opsiyonel/kapalı.)
 
 ---
 
 ## Güvenlik Notları
 
 ### Production Deployment için:
-1. **Rate Limiting**: `.env`'de `RATE_LIMIT=100` (default)
-2. **HTTPS**: Reverse proxy (nginx) kullanın
-3. **API Key Authentication**: Eklenebilir (şu an yok)
-4. **Input Validation**: Zaten mevcut (Pydantic)
-5. **CORS**: `api/middleware.py`'de yapılandırın
+1. **Authentication**: **JWT + RBAC mevcut** ✅ — production'da `JWT_SECRET` (>=32 char) ayarlayın (dev demo hesapları devre dışı kalır)
+2. **Audit Log**: `data/auth.db` `audit_log` tablosu (kim-ne-zaman) ✅
+3. **Rate Limiting**: kullanıcı-bazlı (`user:{name}`) / IP ✅ — `config.json` `api.rate_limit`
+4. **HTTPS**: Reverse proxy (nginx) + TLS
+5. **Input Validation**: mevcut (Pydantic + `api/security.py`) ✅
+6. **CORS / TrustedHost**: `ALLOWED_HOSTS` + `CORS_ALLOW_ORIGINS` env ile kısıtlayın
 
 ### .env Dosyası Güvenliği:
 - `.env` dosyasını **asla** Git'e commit etmeyin (`.gitignore`'da olmalı)
@@ -788,7 +784,7 @@ Aynı soruları cache'lemek için Redis kullanabilirsiniz.
 ## Yardım ve Destek
 
 - **Dokümantasyon**: [docs/](.)
-- **Örnek Kodlar**: [examples/](../examples/)
+- **API sözleşme örnekleri**: [tests/postman/](../tests/postman/) (Newman)
 - **Testler**: [tests/](../tests/)
 - **Issues**: GitHub Issues
 
