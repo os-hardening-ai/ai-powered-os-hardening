@@ -11,6 +11,7 @@ Anahtar yoksa client kurulurken AuthError verir → registry/fallback onu atlar.
 
 from __future__ import annotations
 
+import os
 import logging
 import threading
 
@@ -42,6 +43,7 @@ class HuggingFaceClient:
         temperature: float = 0.3,
         max_tokens: int = 512,
         max_retries: int | None = None,
+        provider: str | None = None,
     ) -> None:
         if not HF_API_KEY:
             raise AuthError(
@@ -60,8 +62,12 @@ class HuggingFaceClient:
         self.max_tokens = max_tokens
         self.max_retries = int(max_retries if max_retries is not None else MAX_RETRIES)
         self._lock = threading.Lock()
-        self.client = InferenceClient(token=HF_API_KEY, provider="hf-inference")
-        logger.info("[OK] HuggingFace - Model: %s", model_name)
+        # provider=None → HF Router otomatik uygun (partner) sağlayıcıya yönlendirir.
+        # "hf-inference" sabitlemek artık başarısız oluyor: HF birçok modeli partner
+        # provider'lara taşıdı; auto-route bunları çözüyor. HF_PROVIDER env ile sabitlenebilir.
+        _provider = provider if provider is not None else (os.environ.get("HF_PROVIDER") or None)
+        self.client = InferenceClient(token=HF_API_KEY, provider=_provider)
+        logger.info("[OK] HuggingFace - Model: %s (provider=%s)", model_name, _provider or "auto")
 
     def __call__(self, prompt: str) -> str:
         try:

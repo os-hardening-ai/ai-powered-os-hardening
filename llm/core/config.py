@@ -165,8 +165,11 @@ def load_config() -> Config:
     return Config(
         llm_provider=provider,
         hf_api_key=_env("HF_API_KEY"),
-        hf_small_model=_env("SMALL_MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.2"),
-        hf_large_model=_env("LARGE_MODEL_NAME", "mistralai/Mixtral-8x7B-Instruct-v0.1"),
+        # Ücretsiz HF Inference API'de canlı doğrulanmış modeller (2026-05): chat
+        # destekli, gated değil. Eski Mistral/Mixtral default'ları ya gated ya da
+        # dağınık yanıt veriyordu. SMALL/LARGE_MODEL_NAME env ile override edilebilir.
+        hf_small_model=_env("SMALL_MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct"),
+        hf_large_model=_env("LARGE_MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct"),
         openai_api_key=_env("OPENAI_API_KEY"),
         openai_small_model=openai_small,
         openai_large_model=openai_large,
