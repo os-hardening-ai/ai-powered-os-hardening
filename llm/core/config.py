@@ -223,6 +223,10 @@ SMALL_MODEL_TEMPERATURE = CONFIG.small_model_temperature
 LARGE_MODEL_TEMPERATURE = CONFIG.large_model_temperature
 MAX_TOKENS              = CONFIG.max_tokens
 
+# Network reliability — SDK'lara timeout + retry (exp backoff + Retry-After) geçirmek için
+REQUEST_TIMEOUT         = CONFIG.request_timeout
+MAX_RETRIES             = CONFIG.max_retries
+
 ENABLE_DEBUG_LOGS      = CONFIG.enable_debug_logs
 ENABLE_JUDGE_STEP      = CONFIG.enable_judge_step
 ENABLE_CORRECTION_STEP = CONFIG.enable_correction_step
