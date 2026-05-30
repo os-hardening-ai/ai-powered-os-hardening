@@ -21,8 +21,12 @@ from dataclasses import dataclass
 import re
 
 # Import ML detector
+# NOTE: the real implementation lives in llm/ml/intent_detector.py. The previous
+# relative path (``..ml_intent_detector``) pointed at a non-existent module, so
+# ML_AVAILABLE was always False and the hybrid detector silently degraded to
+# pattern-only matching. Fixed to the correct absolute import.
 try:
-    from ..ml_intent_detector import MLIntentDetector, MLIntent
+    from llm.ml.intent_detector import MLIntentDetector, MLIntent
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False

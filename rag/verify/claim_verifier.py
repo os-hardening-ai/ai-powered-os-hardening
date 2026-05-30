@@ -72,10 +72,19 @@ class ClaimVerifier:
             for i, c in enumerate(chunks)
         )
 
-        checked: List[ClaimCheck] = []
-        for claim in claims[: self.max_claims]:
-            supported, reason = self._check_claim(claim, context)
-            checked.append(ClaimCheck(claim=claim, supported=supported, reason=reason))
+        # Her iddia bağımsız olarak aynı context'e karşı denetlenir → I/O-bound
+        # LLM çağrılarını paralelleştir (sıralı 1+N yerine ~tek çağrı süresi).
+        to_check = claims[: self.max_claims]
+        if len(to_check) <= 1:
+            results = [self._check_claim(c, context) for c in to_check]
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(self.max_claims, len(to_check))) as pool:
+                results = list(pool.map(lambda c: self._check_claim(c, context), to_check))
+        checked: List[ClaimCheck] = [
+            ClaimCheck(claim=claim, supported=supported, reason=reason)
+            for claim, (supported, reason) in zip(to_check, results)
+        ]
 
         unsupported = [c.claim for c in checked if not c.supported]
         confidence = 1.0 - len(unsupported) / max(len(checked), 1)

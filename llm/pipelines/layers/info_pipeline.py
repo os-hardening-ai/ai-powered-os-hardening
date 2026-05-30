@@ -129,12 +129,17 @@ class InfoPipeline:
         if self.debug:
             print(f"[InfoPipeline] Complexity: {complexity}")
 
-        # RAG: rag_builder yalnızca API'dan use_rag=True geldiğinde set edilir,
-        # dolayısıyla rag_builder mevcutsa her zaman kullan.
-        use_rag = self.rag_builder is not None
+        # RAG kararı iki koşula bağlı:
+        #  1) rag_builder mevcut (API'dan use_rag=True geldi), VE
+        #  2) _should_use_rag akıllı tetikleme: jenerik tanım sorularında
+        #     ("firewall nedir") RAG'i ATLA → gereksiz embedding + Qdrant çağrısı yok,
+        #     daha hızlı + daha az kota tüketimi. Spesifik/zor sorularda RAG çalışır.
+        use_rag = self.rag_builder is not None and self._should_use_rag(
+            ctx.user_question, complexity
+        )
 
         if self.debug:
-            print(f"[InfoPipeline] RAG usage: {use_rag}")
+            print(f"[InfoPipeline] RAG usage: {use_rag} (builder={self.rag_builder is not None})")
 
         # RAG retrieval (if needed)
         rag_chunks = 0

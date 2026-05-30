@@ -136,6 +136,9 @@ class SecurePipelineV2:
                     _claim_verifier = ClaimVerifier(
                         llm_fn=llm_small,
                         min_confidence=_enhanced.get("min_verification_confidence", 0.6),
+                        # Cap claims checked per answer to bound added latency
+                        # (each claim = 1 fast small-model call). 4 keeps P95 < 5s.
+                        max_claims=_enhanced.get("max_verification_claims", 4),
                     )
         except Exception as _exc:
             import warnings
@@ -521,6 +524,16 @@ Lutfen guvenlik veya sistem sikilaştirma ile ilgili bir soru sorun."""
 
     def _build_rejection_message(self, safety: SafetyResult) -> str:
         """Build user-friendly rejection message for unsafe queries"""
+        # Fail-closed (classifier unavailable) → honest "service" message, not a
+        # policy-violation accusation. The user did nothing wrong.
+        if safety.category == "unverified":
+            return (
+                "GUVENLIK DOGRULAMASI GECICI OLARAK YAPILAMADI\n\n"
+                "Sorunuzun guvenlik kontrolu su anda tamamlanamadi (siniflandirma "
+                "servisi gecici olarak erisilemez). Guvenlik gerekcesiyle istek "
+                "islenmedi.\n\n"
+                "Lutfen birkac saniye sonra tekrar deneyin."
+            )
         return f"""GUVENLIK UYARISI
 
 Bu soru guvenlik politikalarimiz kapsaminda yanitlanamıyor.

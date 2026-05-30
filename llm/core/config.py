@@ -165,8 +165,11 @@ def load_config() -> Config:
     return Config(
         llm_provider=provider,
         hf_api_key=_env("HF_API_KEY"),
-        hf_small_model=_env("SMALL_MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.2"),
-        hf_large_model=_env("LARGE_MODEL_NAME", "mistralai/Mixtral-8x7B-Instruct-v0.1"),
+        # Ücretsiz HF Inference API'de canlı doğrulanmış modeller (2026-05): chat
+        # destekli, gated değil. Eski Mistral/Mixtral default'ları ya gated ya da
+        # dağınık yanıt veriyordu. SMALL/LARGE_MODEL_NAME env ile override edilebilir.
+        hf_small_model=_env("SMALL_MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct"),
+        hf_large_model=_env("LARGE_MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct"),
         openai_api_key=_env("OPENAI_API_KEY"),
         openai_small_model=openai_small,
         openai_large_model=openai_large,
@@ -215,6 +218,14 @@ GROQ_API_KEY           = CONFIG.groq_api_key
 GROQ_SMALL_MODEL_NAME  = CONFIG.groq_small_model
 GROQ_LARGE_MODEL_NAME  = CONFIG.groq_large_model
 
+# Novita API anahtarı/base_url Config dataclass'ında tutulmuyor; doğrudan env'den
+# okunur (model adları config.json'dan gelir). Anahtar yoksa boş string → client
+# çağrıldığında anlamlı hata verir (sessiz boş değil).
+NOVITA_API_KEY           = os.getenv("NOVITA_API_KEY", "")
+NOVITA_BASE_URL          = os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/openai")
+NOVITA_SMALL_MODEL_NAME  = CONFIG.novita_small_model
+NOVITA_LARGE_MODEL_NAME  = CONFIG.novita_large_model
+
 OLLAMA_BASE_URL          = CONFIG.ollama_base_url
 OLLAMA_SMALL_MODEL_NAME  = CONFIG.ollama_small_model
 OLLAMA_LARGE_MODEL_NAME  = CONFIG.ollama_large_model
@@ -222,6 +233,10 @@ OLLAMA_LARGE_MODEL_NAME  = CONFIG.ollama_large_model
 SMALL_MODEL_TEMPERATURE = CONFIG.small_model_temperature
 LARGE_MODEL_TEMPERATURE = CONFIG.large_model_temperature
 MAX_TOKENS              = CONFIG.max_tokens
+
+# Network reliability — SDK'lara timeout + retry (exp backoff + Retry-After) geçirmek için
+REQUEST_TIMEOUT         = CONFIG.request_timeout
+MAX_RETRIES             = CONFIG.max_retries
 
 ENABLE_DEBUG_LOGS      = CONFIG.enable_debug_logs
 ENABLE_JUDGE_STEP      = CONFIG.enable_judge_step

@@ -54,8 +54,9 @@
       "hyde": true,
       "stepback": true,
       "max_subqueries": 2,
-      "use_claim_verification": false,
+      "use_claim_verification": true,
       "min_verification_confidence": 0.6,
+      "max_verification_claims": 4,
       "use_filter_agent": true
     },
     "source_documents": [
@@ -175,16 +176,32 @@
         }
       },
       "ollama": {
-        "enabled": false,
+        "enabled": true,
         "base_url": "http://localhost:11434",
         "models": {
           "small": {
-            "name": "llama3.1:8b",
+            "name": "llama3.2:1b",
             "max_tokens": 2048,
             "temperature": 0.3
           },
           "large": {
-            "name": "llama3.1:70b",
+            "name": "llama3.2:3b",
+            "max_tokens": 4096,
+            "temperature": 0.2
+          }
+        }
+      },
+      "huggingface": {
+        "enabled": true,
+        "base_url": "https://router.huggingface.co",
+        "models": {
+          "small": {
+            "name": "meta-llama/Llama-3.2-3B-Instruct",
+            "max_tokens": 2048,
+            "temperature": 0.3
+          },
+          "large": {
+            "name": "meta-llama/Llama-3.1-8B-Instruct",
             "max_tokens": 4096,
             "temperature": 0.2
           }

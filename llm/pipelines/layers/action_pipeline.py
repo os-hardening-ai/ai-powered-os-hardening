@@ -211,7 +211,27 @@ class ActionPipeline:
                     print(f"[ActionPipeline] RAG failed: {e}")
 
         # STEP 2C: CoT script generation
-        script = self._generate_script_with_cot(ctx)
+        # GUARDED: the large-model call can raise (provider 429 after retries,
+        # timeout, empty content). Unlike the info pipeline, an uncaught error
+        # here would propagate to the API as a 500 / crash. Degrade gracefully
+        # to a user-facing "try again" message instead.
+        try:
+            script = self._generate_script_with_cot(ctx)
+        except Exception as gen_exc:
+            if self.debug:
+                print(f"[ActionPipeline] Script generation failed: {gen_exc}")
+            response_time = (datetime.now() - start_time).total_seconds()
+            return ActionQueryResult(
+                success=False,
+                user_prompt_message=(
+                    "⚠️ Script üretimi şu anda tamamlanamadı (LLM servisi geçici "
+                    "olarak erişilemez veya hız limiti aşıldı). Lütfen birkaç "
+                    "saniye sonra tekrar deneyin."
+                ),
+                response_time_s=response_time,
+                estimated_cost=0.0,
+                rag_sources=rag_sources,
+            )
 
         # STEP 2D: Output Validation
         validation = self.validator.validate(

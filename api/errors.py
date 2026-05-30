@@ -209,3 +209,29 @@ def raise_pipeline_error(stage: str, error_message: str) -> None:
         error_type=ErrorType.INTERNAL_ERROR,
         details={"stage": stage}
     )
+
+
+def raise_internal_error(
+    stage: str,
+    exc: Exception,
+    *,
+    error_code: ErrorCode = ErrorCode.INTERNAL_ERROR,
+    status_code: int = 500,
+) -> None:
+    """
+    Log the real exception server-side and raise a SANITIZED client error.
+
+    Routers previously did `message=f"...: {str(e)}"`, leaking internal
+    implementation details (stack/exception text, sometimes secrets) to the
+    client. This helper keeps the real cause in server logs (correlatable via
+    request_id) while the client only sees a generic message + request_id.
+    """
+    request_id = f"req_{uuid.uuid4().hex[:16]}"
+    _logger.error("%s: [%s] %s: %s", request_id, stage, type(exc).__name__, str(exc))
+    raise APIError(
+        status_code=status_code,
+        error_code=error_code,
+        message="An internal error occurred while processing the request.",
+        request_id=request_id,
+        details={"stage": stage},
+    )
