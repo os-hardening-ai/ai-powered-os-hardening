@@ -4,14 +4,19 @@ Security utilities for the API including rate limiting, input validation, and ou
 
 from __future__ import annotations
 
+import os
 import time
 import re
+import logging
 from typing import Optional, Dict
 from dataclasses import dataclass
 from collections import defaultdict
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+_logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -27,77 +32,132 @@ class RateLimitConfig:
     cleanup_interval: int = 300  # 5 minutes
 
 
+class _InMemoryRateLimiter:
+    """Process-local sliding-window limiter (default / fallback)."""
+
+    def __init__(self, config: RateLimitConfig):
+        self.config = config
+        self.request_times: Dict[str, list] = defaultdict(list)
+        self.last_cleanup = time.time()
+
+    def allow(self, client_id: str, now: float) -> bool:
+        if now - self.last_cleanup > self.config.cleanup_interval:
+            self._cleanup(now)
+            self.last_cleanup = now
+        reqs = self.request_times[client_id]
+        one_hour_ago = now - 3600
+        reqs[:] = [t for t in reqs if t > one_hour_ago]
+        if len(reqs) >= self.config.requests_per_hour:
+            return False
+        one_minute_ago = now - 60
+        if sum(1 for t in reqs if t > one_minute_ago) >= self.config.requests_per_minute:
+            return False
+        reqs.append(now)
+        return True
+
+    def _cleanup(self, now: float) -> None:
+        one_day_ago = now - 86400
+        for client_id in list(self.request_times.keys()):
+            kept = [t for t in self.request_times[client_id] if t > one_day_ago]
+            if kept:
+                self.request_times[client_id] = kept
+            else:
+                del self.request_times[client_id]
+
+
+class _RedisRateLimiter:
+    """
+    Redis-backed fixed-window limiter — distributed & restart-persistent.
+
+    Uses atomic INCR + EXPIRE per (client, minute) and (client, hour) window.
+    On any Redis hiccup it FAILS OPEN (allows the request) so an infra blip never
+    takes the whole API down — availability over strict limiting, logged.
+    """
+
+    def __init__(self, client, config: RateLimitConfig):
+        self.client = client
+        self.config = config
+
+    def allow(self, client_id: str, now: float) -> bool:
+        try:
+            minute = int(now // 60)
+            hour = int(now // 3600)
+            mkey = f"rl:{client_id}:m:{minute}"
+            hkey = f"rl:{client_id}:h:{hour}"
+            pipe = self.client.pipeline()
+            pipe.incr(mkey)
+            pipe.expire(mkey, 60)
+            pipe.incr(hkey)
+            pipe.expire(hkey, 3600)
+            m_count, _, h_count, _ = pipe.execute()
+            if int(m_count) > self.config.requests_per_minute:
+                return False
+            if int(h_count) > self.config.requests_per_hour:
+                return False
+            return True
+        except Exception as exc:  # Redis blip → fail open (don't block legit traffic)
+            _logger.warning("[RateLimit] Redis error, allowing request (fail-open): %s", exc)
+            return True
+
+
+def _build_rate_limiter(config: RateLimitConfig):
+    """Redis-backed limiter when REDIS_URL/config is reachable; else in-memory."""
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        try:
+            from config.config_loader import get_config
+            url = get_config().redis.url
+        except Exception:
+            url = None
+    if url:
+        try:
+            import redis as _redis
+            c = _redis.from_url(url, socket_connect_timeout=2)
+            c.ping()
+            _logger.info("[RateLimit] Redis-backed limiter active: %s", url)
+            return _RedisRateLimiter(c, config)
+        except Exception as exc:
+            _logger.warning("[RateLimit] Redis unavailable, in-memory fallback: %s", exc)
+    return _InMemoryRateLimiter(config)
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Middleware for rate limiting based on client IP."""
-    
+    """Rate limiting per client IP — Redis-backed when available, else in-memory."""
+
     def __init__(self, app, config: Optional[RateLimitConfig] = None):
         super().__init__(app)
         self.config = config or RateLimitConfig()
-        self.request_times: Dict[str, list] = defaultdict(list)
-        self.last_cleanup = time.time()
-    
+        self.limiter = _build_rate_limiter(self.config)
+        # X-Forwarded-For is client-controlled; only trust it behind a known proxy.
+        self.trust_proxy = os.environ.get("TRUST_PROXY", "").lower() in ("1", "true", "yes")
+
     async def dispatch(self, request: Request, call_next):
-        """Process request and apply rate limiting."""
         client_ip = self._get_client_ip(request)
-        current_time = time.time()
-        
-        # Cleanup old entries periodically
-        if current_time - self.last_cleanup > self.config.cleanup_interval:
-            self._cleanup_old_entries(current_time)
-            self.last_cleanup = current_time
-        
-        # Check rate limits
-        if not self._check_rate_limit(client_ip, current_time):
-            return Response("Rate limit exceeded", status_code=429)
-        
-        # Record this request
-        self.request_times[client_ip].append(current_time)
-        
-        response = await call_next(request)
-        return response
-    
+        if not self.limiter.allow(client_ip, time.time()):
+            return self._rate_limited_response()
+        return await call_next(request)
+
     def _get_client_ip(self, request: Request) -> str:
-        """Get client IP from request headers or connection."""
-        if "x-forwarded-for" in request.headers:
+        # Default: real peer address (spoof-resistant). Only honour XFF when the
+        # deployment explicitly opts in via TRUST_PROXY (i.e. behind a trusted LB).
+        if self.trust_proxy and "x-forwarded-for" in request.headers:
             return request.headers["x-forwarded-for"].split(",")[0].strip()
         if request.client:
             return request.client.host
         return "unknown"
-    
-    def _check_rate_limit(self, client_ip: str, current_time: float) -> bool:
-        """Check if client is within rate limits."""
-        requests = self.request_times[client_ip]
-        
-        # Remove requests older than 1 hour
-        one_hour_ago = current_time - 3600
-        requests[:] = [t for t in requests if t > one_hour_ago]
-        
-        # Check hourly limit
-        if len(requests) >= self.config.requests_per_hour:
-            return False
-        
-        # Check per-minute limit
-        one_minute_ago = current_time - 60
-        recent_requests = [t for t in requests if t > one_minute_ago]
-        if len(recent_requests) >= self.config.requests_per_minute:
-            return False
-        
-        return True
-    
-    def _cleanup_old_entries(self, current_time: float):
-        """Remove old client entries from tracking."""
-        one_day_ago = current_time - 86400
-        keys_to_remove = []
-        
-        for client_ip, requests in self.request_times.items():
-            self.request_times[client_ip] = [
-                t for t in requests if t > one_day_ago
-            ]
-            if not self.request_times[client_ip]:
-                keys_to_remove.append(client_ip)
-        
-        for key in keys_to_remove:
-            del self.request_times[key]
+
+    @staticmethod
+    def _rate_limited_response() -> JSONResponse:
+        # Standard error envelope (consistent with api_error_handler) + Retry-After.
+        return JSONResponse(
+            status_code=429,
+            content={"error": {
+                "code": "RATE_LIMITED",
+                "message": "Rate limit exceeded. Please slow down and retry shortly.",
+                "type": "rate_limit_error",
+            }},
+            headers={"Retry-After": "60", "X-Error-Code": "RATE_LIMITED"},
+        )
 
 
 # ─────────────────────────────────────────────────────────────────
