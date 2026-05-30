@@ -35,6 +35,20 @@ class TestSimplePrompts:
         p = build_medium_prompt(c)
         assert "PermitRootLogin" in p
 
+    def test_grounding_directive_present_with_rag(self):
+        """RAG bağlamı varken bağlam-bağlılığı (groundedness) direktifi prompt'a girmeli."""
+        from llm.prompts.simple_prompts import GROUNDING_DIRECTIVE
+        c = ctx(retrieved_context="CIS 5.2: PermitRootLogin no")
+        for p in (build_simple_prompt(c), build_medium_prompt(c)):
+            assert "UYDURMA" in p                       # anti-halüsinasyon kısıtı
+            assert GROUNDING_DIRECTIVE.strip() in p
+
+    def test_grounding_directive_absent_without_rag(self):
+        """Bağlam yokken direktif eklenmemeli (uydurmayı yasaklayacak bağlam da yok)."""
+        c = ctx(retrieved_context=None)
+        assert "UYDURMA" not in build_simple_prompt(c)
+        assert "UYDURMA" not in build_medium_prompt(c)
+
     def test_get_prompt_for_complexity_routes(self):
         c = ctx()
         for level in ("simple", "medium", "complex"):

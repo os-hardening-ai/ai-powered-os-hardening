@@ -265,6 +265,7 @@ class IPMetricsHarness:
     def _measure_ip5(self, sc: Scenario) -> IP5Sample:
         from rag.verify.claim_verifier import ClaimVerifier
         from llm.rag.integration import RAGContextBuilder
+        from llm.prompts.simple_prompts import GROUNDING_DIRECTIVE
         # gerçek bağlam çek
         try:
             rag = RAGContextBuilder(top_k=5, min_score=0.4)
@@ -272,11 +273,17 @@ class IPMetricsHarness:
         except Exception as exc:
             logger.warning("[İP-5] RAG retrieval başarısız: %s", exc)
             chunks = []
-        # bağlamla cevap üret, sonra aynı bağlama karşı doğrula
-        ctx_txt = "\n\n".join(c.get("text", "")[:600] for c in chunks)
-        prompt = (f"CIS bağlamını kullanarak '{sc.goal}' için kısa, teknik bir sıkılaştırma "
-                  f"önerisi yaz (yalnızca bağlamdaki bilgilere dayan).\n\nBAĞLAM:\n{ctx_txt}\n\nYANIT:")
-        answer = self._llm(prompt) if chunks else self._llm(f"'{sc.goal}' için kısa öneri:")
+        # Bağlam KISALTILMAZ: önceki 600-kr kesme modeli aç bırakıp bağlam-dışı bilgi
+        # uydurmaya itiyordu (halüsinasyon ↑). Üretimle AYNI GROUNDING_DIRECTIVE uygulanır
+        # → İP-5, ürünün gerçek bağlam-bağlılığı politikasını ölçer (test'e özel prompt değil).
+        ctx_txt = "\n\n".join(c.get("text", "") for c in chunks)
+        if chunks:
+            prompt = (f"SORU: '{sc.goal}' için kısa, teknik bir sıkılaştırma önerisi yaz.\n\n"
+                      f"CIS BENCHMARK REFERANSLARI:\n{ctx_txt}\n"
+                      f"{GROUNDING_DIRECTIVE}\n\nYANIT:")
+        else:
+            prompt = f"'{sc.goal}' için kısa öneri:"
+        answer = self._llm(prompt)
         cv = ClaimVerifier(llm_fn=self._verifier_llm, min_confidence=0.9, max_claims=self.max_claims)
         vr = cv.verify(answer, chunks)
         return IP5Sample(goal=sc.goal, groundedness=round(vr.confidence, 4),
@@ -372,6 +379,8 @@ def print_report(rep: IPReport) -> None:
 
 
 def main() -> None:
+    from evaluation import force_utf8_output
+    force_utf8_output()                       # Türkçe log Windows'ta bozulmasın
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     from llm.clients import get_llm_clients
     small, large = get_llm_clients()

@@ -11,6 +11,17 @@ from llm.core.context import RequestContext
 from .loader import render_template
 
 
+# Bağlam-bağlılığı (groundedness) direktifi — halüsinasyonu azaltmanın ANA kaldıracı.
+# RAG ile CIS bağlamı geldiğinde modeli bağlama bağlar: bağlamda olmayan değer/komut
+# uydurmaz, eksikse açıkça söyler. (İP-5 ölçümü de aynı direktifi kullanır → tutarlı.)
+GROUNDING_DIRECTIVE = (
+    " ÖNEMLİ — KANITA DAYAN: Yanıtındaki spesifik değer, parametre, dosya yolu ve "
+    "direktifleri YALNIZCA yukarıdaki CIS BENCHMARK REFERANSLARI'ndan al. Referanslarda "
+    "geçmeyen bir değeri/komutu UYDURMA. İstenen ayrıntı bağlamda yoksa bunu açıkça belirt "
+    "('CIS bağlamında bu ayrıntı yer almıyor'), tahmin yürütme."
+)
+
+
 def _build_history_section(ctx: RequestContext) -> str:
     """Son 3 turu (6 mesaj) kısa bir context bloğuna çevirir."""
     if not ctx.conversation_history:
@@ -33,7 +44,7 @@ def build_simple_prompt(ctx: RequestContext) -> str:
         os=ctx.os or "genel",
         role=ctx.role or "sysadmin",
         rag_section=rag_section,
-        rag_instruction=" CIS Benchmark referanslarına dayan." if ctx.retrieved_context else "",
+        rag_instruction=GROUNDING_DIRECTIVE if ctx.retrieved_context else "",
         history_section=history_section,
     )
 
@@ -52,7 +63,7 @@ def build_medium_prompt(ctx: RequestContext) -> str:
         role=ctx.role or "sysadmin",
         security_level=ctx.security_level,
         rag_section=rag_section,
-        rag_instruction=" CIS Benchmark referanslarını kullan." if ctx.retrieved_context else "",
+        rag_instruction=GROUNDING_DIRECTIVE if ctx.retrieved_context else "",
         history_section=history_section,
     )
 
