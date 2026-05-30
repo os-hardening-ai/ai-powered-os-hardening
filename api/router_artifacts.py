@@ -144,13 +144,31 @@ async def detect_conflicts(body: RulePlanRequest):
         raise_internal_error("rules_conflicts", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
+@router.get("/rules/categories", response_model=List[str], tags=["domain"])
+async def list_rule_categories(
+    os: Optional[str] = Query(None, description="OS identifier"),
+) -> List[str]:
+    """Return all unique category names for the given OS."""
+    try:
+        os_key = os or "ubuntu_24_04"
+        engine = _get_rule_engine(os_key)
+        if engine is None:
+            return []
+        rules = engine.list_rules()
+        return sorted({r["category"] for r in rules if r.get("category")})
+    except APIError:
+        raise
+    except Exception as exc:
+        raise_internal_error("rules_categories", exc, error_code=ErrorCode.PIPELINE_ERROR)
+
+
 @router.get("/rules", response_model=RuleListResponse, tags=["domain"])
 async def list_rules(
     level: Optional[int] = Query(None, description="CIS level filter (1 or 2)"),
     category: Optional[str] = Query(None, description="Category name substring filter"),
     auto_remediate: Optional[bool] = Query(None, description="Filter by auto_remediate flag"),
     os: Optional[str] = Query(None, description="OS: ubuntu_24_04 | ubuntu_22_04 | windows_11 | windows_server_2025"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=2000),
     offset: int = Query(0, ge=0),
 ):
     """List CIS rules for the given OS. Script content is stripped from list responses."""
