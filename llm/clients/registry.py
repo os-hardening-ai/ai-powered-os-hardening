@@ -62,13 +62,24 @@ _REGISTRY: Dict[str, ProviderSpec] = {
         Cost.FREE_TIER, free_priority=8,
         notes="Hızlı + güvenilir fallback (gpt-oss-120b ~3.2s); dar ücretsiz kota",
     ),
+    # Gemini 3.1 Flash Lite — OpenRouter üzerinden (validated 3.06s, H3✓, 1M context).
+    # CHEAP_PAID ($0.25/$1.50) → include_cheap ile zincire girer (kullanıcı isteği).
+    "gemini": ProviderSpec(
+        "gemini", "llm.clients.openai_compatible_client:get_small_gemini_llm,get_large_gemini_llm",
+        Cost.CHEAP_PAID, free_priority=750,
+        notes="Gemini 3.1 Flash Lite (OpenRouter) — hızlı + 1M context (uzun RAG); $0.25/$1.50",
+    ),
+    # DEPRECATED — kullanıcı kararıyla otomatik fallback zincirinden ÇIKARILDI
+    # (yalnızca açıkça LLM_PROVIDER=<x> ile kullanılabilir).
     "groq": ProviderSpec(
         "groq", "llm.clients.groq_client:get_small_groq_llm,get_large_groq_llm",
-        Cost.FREE_TIER, free_priority=10, notes="Hızlı ama dar rate-limit (free tier 429)",
+        Cost.FREE_TIER, free_priority=10, deprecated=True,
+        notes="DEPRECATED (flaky/riskli free-tier rate-limit) — zincirden çıkarıldı",
     ),
     "ollama": ProviderSpec(
         "ollama", "llm.clients.ollama_client:get_small_ollama_llm,get_large_ollama_llm",
-        Cost.FREE, free_priority=850, notes="Yerel/offline son-çare (GPU yoksa yavaş)",
+        Cost.FREE, free_priority=850, deprecated=True,
+        notes="DEPRECATED (GPU yok, CPU yavaş) — zincirden çıkarıldı",
     ),
     "huggingface": ProviderSpec(
         "huggingface", "llm.clients.huggingface_client:get_small_hf_llm,get_large_hf_llm",

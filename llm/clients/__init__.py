@@ -80,16 +80,27 @@ def _get_sambanova_clients() -> Tuple[LLMCallable, LLMCallable]:
     return get_small_sambanova_llm(), get_large_sambanova_llm()
 
 
+def _get_gemini_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """Gemini 3.1 Flash Lite (OpenRouter üzerinden) — hızlı + 1M context fallback."""
+    from .openai_compatible_client import get_small_gemini_llm, get_large_gemini_llm
+
+    return get_small_gemini_llm(), get_large_gemini_llm()
+
+
 # Sağlayıcı adı → (small, large) çifti kuran fonksiyon.
 # Not: builder'lar burada tutulur (ollama özel kwargs gerektirir); registry yalnızca
 # SIRA + maliyet metaverisi için kullanılır (ücretsiz-first politikası tek yerde).
 _PROVIDER_BUILDERS: Dict[str, Callable[[], Tuple[LLMCallable, LLMCallable]]] = {
     "cerebras": _get_cerebras_clients,
     "sambanova": _get_sambanova_clients,
-    "groq": _get_groq_clients,
-    "huggingface": _get_huggingface_clients,
-    "ollama": _get_ollama_clients,
+    "gemini": _get_gemini_clients,
     "novita": _get_novita_clients,
+    # Aşağıdakiler registry'de deprecated (varsayılan zincirde DEĞİL); yalnızca açıkça
+    # LLM_PROVIDER=<x> seçilirse kullanılır. Kullanıcı kararı: groq (riskli/flaky),
+    # ollama (GPU yok), huggingface (bozuk) → otomatik akıştan çıkarıldı.
+    "groq": _get_groq_clients,
+    "ollama": _get_ollama_clients,
+    "huggingface": _get_huggingface_clients,
     "openai": _get_openai_clients,
 }
 

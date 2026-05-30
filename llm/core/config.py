@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 
-LLMProvider = Literal["cerebras", "sambanova", "huggingface", "openai", "groq", "ollama", "novita"]
+LLMProvider = Literal["cerebras", "sambanova", "gemini", "huggingface", "openai", "groq", "ollama", "novita"]
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,8 @@ class Config:
             raise ValueError("LLM_PROVIDER=cerebras but CEREBRAS_API_KEY is empty")
         if self.llm_provider == "sambanova" and not os.getenv("SAMBANOVA_API_KEY"):
             raise ValueError("LLM_PROVIDER=sambanova but SAMBANOVA_API_KEY is empty")
+        if self.llm_provider == "gemini" and not os.getenv("OPENROUTER_API_KEY"):
+            raise ValueError("LLM_PROVIDER=gemini (OpenRouter üzerinden) but OPENROUTER_API_KEY is empty")
 
     def get_active_models(self) -> tuple[str, str]:
         if self.llm_provider == "openai":
@@ -78,6 +80,9 @@ class Config:
             # Generic client (PROVIDER_PRESETS/env); model adı <PROVIDER>_MODEL env'i veya
             # preset varsayılanı (gpt-oss-120b). Yalnızca özet/gösterim amaçlı.
             m = os.getenv(f"{self.llm_provider.upper()}_MODEL", "gpt-oss-120b")
+            return (m, m)
+        elif self.llm_provider == "gemini":
+            m = os.getenv("GEMINI_FLASH_MODEL", "google/gemini-3.1-flash-lite")
             return (m, m)
         return (self.hf_small_model, self.hf_large_model)
 
@@ -153,7 +158,7 @@ def load_config() -> Config:
         json_correction = True
 
     provider_str = _env("LLM_PROVIDER", json_provider).lower()
-    if provider_str not in ("cerebras", "sambanova", "huggingface", "openai", "groq", "ollama", "novita"):
+    if provider_str not in ("cerebras", "sambanova", "gemini", "huggingface", "openai", "groq", "ollama", "novita"):
         raise ValueError(f"Invalid LLM_PROVIDER: {provider_str!r}")
     provider: LLMProvider = provider_str  # type: ignore[assignment]
 

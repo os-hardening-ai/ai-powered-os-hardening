@@ -183,3 +183,25 @@ def get_small_sambanova_llm() -> OpenAICompatibleClient:
 def get_large_sambanova_llm() -> OpenAICompatibleClient:
     from llm.core.config import LARGE_MODEL_TEMPERATURE
     return build_from_preset("sambanova", temperature=LARGE_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
+
+
+def _gemini_client(temperature: float) -> OpenAICompatibleClient:
+    # Gemini 3.1 Flash Lite — OpenRouter üzerinden (Google AI Studio'ya yönlenir, ~3s + 1M context).
+    # Validated: 3.06s, H3✓. Tam Flash (thinking) yavaş (6-11s) → Lite tercih edildi.
+    return OpenAICompatibleClient(
+        provider="gemini",
+        model_name=os.environ.get("GEMINI_FLASH_MODEL", "google/gemini-3.1-flash-lite"),
+        api_key=os.environ.get("OPENROUTER_API_KEY", "") or "",
+        base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        temperature=temperature, max_retries=_CHAIN_RETRIES,
+    )
+
+
+def get_small_gemini_llm() -> OpenAICompatibleClient:
+    from llm.core.config import SMALL_MODEL_TEMPERATURE
+    return _gemini_client(SMALL_MODEL_TEMPERATURE)
+
+
+def get_large_gemini_llm() -> OpenAICompatibleClient:
+    from llm.core.config import LARGE_MODEL_TEMPERATURE
+    return _gemini_client(LARGE_MODEL_TEMPERATURE)
