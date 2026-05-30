@@ -168,7 +168,7 @@ async def list_rules(
     category: Optional[str] = Query(None, description="Category name substring filter"),
     auto_remediate: Optional[bool] = Query(None, description="Filter by auto_remediate flag"),
     os: Optional[str] = Query(None, description="OS: ubuntu_24_04 | ubuntu_22_04 | windows_11 | windows_server_2025"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=2000),
     offset: int = Query(0, ge=0),
 ):
     """List CIS rules for the given OS. Script content is stripped from list responses."""
