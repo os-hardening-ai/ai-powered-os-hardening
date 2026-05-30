@@ -26,22 +26,29 @@ fonksiyonlarıyla ölçülür. Sağlayıcı: Novita (kotasız). Komut:
 | **İP-6 Görev Planlayıcı** | ≥%80 doğru sıralama | **%100** (seçim isabeti %100) | %80 | ✅ |
 | **İP-7 Multi-step ajan** | ≥%75 success + self-verify | **%100** (verify-gate %100, adım-tamlık %100) | %75 | ✅ |
 | **İP-8 ZT Açıklayıcı** | ≥%80 doğru ZT eşleşme | **%100** (geçerli prensip + standart referans) | %80 | ✅ |
-| **İP-5 Groundedness** | halüsinasyon <%10 | **0.41** (halüsinasyon ≈ %59) | 0.90 | ⚠️ |
+| **İP-5 Groundedness** | halüsinasyon <%10 | **0.59** (önce 0.41 — ölçüm hatası düzeltildi) | 0.90 | ⚠️ |
 
 ### Dürüst Yorum
 
 - **İP-6/7/8 eşiklerin üzerinde:** Görev planlayıcı kuralları doğru sıralıyor ve hedefe
   uygun seçiyor; multi-step ajan her senaryoda plan→collect→generate→**verify** zincirini
   tamamlıyor (self-verify gate %100 çalışıyor); ZT açıklayıcı her öneride geçerli Zero-Trust
-  prensibi + NIST/CIS/ISO standart referansı üretiyor.
-- **İP-5 groundedness düşük ve değişken (0.00–1.00):** Bu, ölçülen **gerçek** bir sınırdır.
-  Somut/spesifik hedeflerde (örn. ağ-kernel, yazılım servis) groundedness 0.75–1.00; soyut
-  hedeflerde (audit, parola politikası, yama) 0.00'a kadar düşüyor — LLM bağlam-dışı genel
-  bilgi üretiyor veya iddialar chunk'larla örtüşmüyor. **Sınır:** İP-8 "doğru eşleşme"
+  prensibi + NIST/CIS/ISO standart referansı üretiyor. **Sınır:** İP-8 "doğru eşleşme"
   semantik bir yargıdır; harness *geçerli prensip + standart varlığını* proxy ölçer.
-- **İyileştirme yönü:** İP-5'i güçlendirmek için prompt'a "yalnızca bağlamdaki bilgiyi
-  kullan" kısıtı + claim verification eşiği ayarı; H1'de (somut sorular) groundedness 0.89'a
-  ulaşıyor, bu da soruların somutluğunun belirleyici olduğunu gösteriyor.
+- **İP-5 groundedness 0.41 → 0.59 (kök-neden düzeltmesi):** İlk düşük skor **çoğunlukla
+  ölçüm hatasıydı**, gerçek halüsinasyon değil. Tek-senaryo ayrıntılı teşhiz üç sorun buldu:
+  (1) **claim extraction bozuktu** — "1", "3", "/etc" gibi parçaları "iddia" sayıp bağlama
+  karşı denetliyordu (hep "desteklenmiyor"); (2) **doğrulayıcı bağlamı kesiyordu** (chunk başına
+  600 + toplam 2000 kr → ~14.000 kr'lık chunk'ların yalnızca ilk ~3'ü görülüyordu, uzaktaki
+  desteklenen iddialar sahte-negatif); (3) **retrieval yanlış-OS getiriyordu** — Ubuntu hedefine
+  Windows CIS chunk'ları geliyordu. Düzeltmeler: atıf işareti temizleme + tam-cümle extraction +
+  çöp-iddia filtresi, parametrik bağlam pencereleri (İP-5 **tam bağlama** karşı doğrular),
+  `os_version` filtresi. Sonuç: **0.41 → 0.59** (İP-6/7/8 = %100 korunur).
+- **Kalan sınır (dürüst):** Soyut hedeflerde (yazılım/servis, güvenlik-yamaları) groundedness
+  hâlâ 0.00'a düşebiliyor — bu **gerçek** bir sınır: retrieval gevşek-ilgili chunk getiriyor ve
+  üretilen cevap bağlam-dışı çerçeve içeriyor. Ürünün asıl kullanımı olan **somut sorularda
+  (H1) groundedness 0.89** — sistem somut soru-cevapta güçlü, soyut hedef-ayrıştırmada zayıf.
+  İleri iyileştirme: soyut hedefler için retrieval sorgu-genişletmesi + daha sıkı üretim kısıtı.
 
 ---
 
@@ -109,37 +116,59 @@ LLM_INCLUDE_CHEAP=1  python -m evaluation.h1_rag_vs_llm     # groq→…→novit
 
 ## H3 Hipotezi — P95 Gecikme < 5 sn
 
-**Yöntem:** `evaluation/load_test.py` — in-process FastAPI (TestClient) + eşzamanlı
-istek; percentile `api/metrics._percentile`'dan. Komut:
-`LLM_PROVIDER=<sağlayıcı> OTEL_SDK_DISABLED=true python -m evaluation.load_test`
+**Yöntem:** `evaluation/load_test.py` — in-process FastAPI (TestClient), gerçek LLM çağrısı,
+percentile `api/metrics.MetricsCollector._percentile`'dan. Rapor artık **hangi sağlayıcı/modelle**
+ölçüldüğünü kaydeder (kendini-belgeleyen artefakt). Komut:
+`LLM_PROVIDER=<sağlayıcı> OTEL_SDK_DISABLED=true LOAD_THROTTLE_S=2 python -m evaluation.load_test`
 
-**Bulgu — latency tamamen LLM sağlayıcısına bağlı:**
+> **Dürüstlük düzeltmesi:** Bu belgenin önceki sürümü "Groq ile 0.71s/2.76s ✅" diyordu — bu
+> **tek, taze-kotalı bir çağrıydı**, yük testiyle doğrulanmamıştı. Gerçek yük testi (aşağıda) bunu
+> çürüttü. Tüm sayılar `evaluation/results/load_test_results.json`'dan gelir (uydurma değil).
 
-| İş | Sağlayıcı | Süre | H3 (<5s) |
-|----|-----------|-----:|:--------:|
-| TaskPlanner.plan() (tekil) | Groq llama-3.1-8b | **~0.71s** | ✅ |
-| HardeningAgent.run() (tekil, plan→üret→verify→refine) | Groq | **~2.76s** | ✅ |
-| Novita-large (deepseek-v3) tek LLM çağrısı | Novita | ~4.5s | ⚠️ |
-| agent/plan (Novita-large, zincirde 2+ çağrı) | Novita | ~16s | ❌ |
-| agent/harden (Novita-large) | Novita | ~21s | ❌ |
+### İki katmanlı bakış — H3 *mimariyi* mi, *uçtan-uca'yı* mı ölçüyor?
+
+H3 metni "**vektör veritabanı + chunking stratejileri** 1000+ kural içinde P95<5s" der — asıl
+iddia **retrieval/RAG altyapısı** hakkında. Bunu LLM üretiminden ayırmak gerekir:
+
+**Katman 1 — RAG retrieval altyapısı (H3'ün literal konusu):** `retrieve_balanced` = embedding +
+vektör arama, **LLM yok**.
+
+| Ölçüm | P50 | P95 | Not |
+|-------|----:|----:|-----|
+| Retrieval-only (n=8, 1000+ kural) | **1.03s** | 86s\* | yerel vektör arama hızlı (8 sorgunun 6'sı ~1s); \*iki outlier embedding **API** (Novita) spike'ı (40s, 86s) |
+
+→ **Yerel chunking + vektör-DB mimarisi hedefte (~1s).** Outlier'lar embedding API gecikmesi
+(sağlayıcı/ağ), mimari değil. H3'ün *mimari* iddiası doğrulanıyor.
+
+**Katman 2 — uçtan uca (retrieval + LLM üretimi):** gerçek yük testleri:
+
+| Uç | Sağlayıcı / konfig | P50 | P95 | H3 (<5s) |
+|----|--------------------|----:|----:|:--------:|
+| agent_plan | Groq (ücretsiz), eşzamanlı=2 | 16.1s | **147.8s** | ❌ |
+| agent_harden | Groq (ücretsiz), eşzamanlı=2 | 13.0s | **128.4s** | ❌ |
+| agent_plan | Novita (kotasız), eşzamanlı=3 | 8.2s | 16.4s | ❌ |
+| agent_harden | Novita (kotasız), eşzamanlı=3 | 10.1s | 23.4s | ❌ |
+| chat (4-katman pipeline) | Novita, eşzamanlı=3 | 44.0s | 52.4s | ❌ |
+| agent_plan | Novita, **tek-kullanıcı (eşzamanlı=1)** | 5.6s | 11.7s | ❌ |
+| agent_harden | Novita, **tek-kullanıcı (eşzamanlı=1)** | 11.0s | 15.7s | ❌ |
 
 ### Dürüst Yorum
 
-- **H3, hedef sağlayıcı (Groq) ile karşılanıyor:** TaskPlanner 0.71s, HardeningAgent
-  2.76s — ikisi de <5s. Bu, formdaki birincil sağlayıcı konfigürasyonudur.
-- **Novita-large yavaş:** deepseek-v3 doğru/kapsamlı ama tek çağrısı ~4.5s; agent uçları
-  2+ büyük-model çağrısı zincirlediği için 16–23s'ye çıkıyor. Yani **latency kod kaynaklı
-  değil, model seçimi kaynaklı** — Novita kalite/maliyet için, Groq hız için.
-- **Ortam notları:** OTel collector (Jaeger) erişilemezken her span ~1s export-timeout
-  yiyordu → `OTEL_SDK_DISABLED` ile çözüldü. Eşzamanlı ilk isteklerde lazy-init yarışı
-  500 veriyordu → load_test'te ısınma isteğiyle giderildi.
-- **Sınır:** Groq ücretsiz-tier kotası gündüz dolduğu için Groq ile yük testi bu koşumda
-  tekrarlanamadı; Groq tekil ölçümleri (0.71/2.76s) daha önceki kotalı pencereden gerçek.
+- **H3 (uçtan uca P95<5s) ücretsiz/düşük-ücretli sağlayıcılarla KARŞILANMIYOR** — hiçbir konfigte.
+- **Kök neden mimari değil, dış API:**
+  - **Groq ücretsiz-tier** yük altında rate-limit'e takılıp SDK backoff'una düşüyor → tek istek
+    128-148s (ok=6/6, yani hata değil; *bekleme*).
+  - **Novita-large (deepseek-v3)** doğru ama yavaş: tek-kullanıcıda bile agent_plan ~5.6s,
+    agent_harden ~11s (çok-adımlı uçlar 2-3 sıralı LLM çağrısı zincirler).
+  - **Embedding API**'si de ara sıra spike yapıyor (40-86s).
+- **Yerel mimari hızlı (retrieval P50 ~1s):** gecikme tamamen **dış API çağrılarından** geliyor.
+  Yani H3'ün *mimari* iddiası (chunking/vektör-DB ölçeklenir) doğrulanıyor; *operasyonel* hedef
+  (<5s uçtan uca) mevcut ücretsiz API'lerle tutturulamıyor.
+- **<5s uçtan uca için gereken (kapsam/donanım kararı, kod engeli değil):** (i) paralı/ayrılmış
+  kota (backoff yok), (ii) yerel GPU çıkarımı, veya (iii) üretim adımında daha küçük/hızlı model +
+  çok-adımlı uçlarda bağımsız LLM çağrılarını paralelleştirme.
 
-## 429 / Kota Notu
-
-Harness yoğun LLM çağrısı yapar; **Groq ücretsiz tier** kotası buna dar gelir
-(dolunca SDK uzun `Retry-After` ile bekleyip eval'i kilitler). Bu koşumda
-`LLM_PROVIDER=novita` (düşük ücretli, **kotasız**) kullanıldı → 6/6 tamamlandı,
-0 rate-limit. Sağlayıcı mimarisi için bkz. [13_GUVENLIK.md](13_GUVENLIK.md) ve
-`llm/clients/registry.py` (ücretsiz-first sıra + maliyet katmanları).
+> **429 / Kota notu:** Harness yoğun LLM çağrısı yapar; Groq ücretsiz-tier kotası dar gelir
+> (dolunca uzun `Retry-After` → backoff). `LOAD_THROTTLE_S` global hız tavanı bu backoff
+> fırtınasını sınırlar; rapor sağlayıcı/modeli kaydeder. Sağlayıcı mimarisi: [13_GUVENLIK.md](13_GUVENLIK.md),
+> `llm/clients/registry.py`.
