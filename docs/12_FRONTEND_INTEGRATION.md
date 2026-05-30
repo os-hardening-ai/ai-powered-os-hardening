@@ -223,97 +223,107 @@ export default ChatComponent;
 
 #### 2. Streaming Chat (SSE)
 
+> **Not:** `/api/chat/stream` bir **POST** endpoint'idir. `EventSource` yalnızca GET destekler
+> ve kullanılamaz. Bunun yerine `fetch` + `ReadableStream` + manuel SSE frame parser kullanın.
+
+SSE event sırası:
+```
+event: metadata  → intent, safety, rag_used, layer_path, session_id, history_turns
+event: sources   → rag_sources listesi (RAG kullanıldıysa token'lardan ÖNCE gelir)
+event: message   → token-by-token yanıt
+event: done      → total_tokens, total_time_s, estimated_cost, verification_confidence
+```
+
 ```typescript
 import { useState, useRef } from 'react';
 
 function StreamingChat() {
   const [question, setQuestion] = useState('');
   const [streamingResponse, setStreamingResponse] = useState('');
+  const [ragSources, setRagSources] = useState<any[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [metadata, setMetadata] = useState<any>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const API_BASE_URL = 'http://localhost:8000';
 
   const sendStreamingMessage = async () => {
     setIsStreaming(true);
     setStreamingResponse('');
+    setRagSources([]);
     setMetadata(null);
+    setStats(null);
 
-    // Close any existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      // Create EventSource for SSE
-      const eventSource = new EventSource(
-        `${API_BASE_URL}/api/chat/stream?question=${encodeURIComponent(question)}&os=ubuntu_24_04&use_rag=true`
-      );
-
-      eventSourceRef.current = eventSource;
-
-      // Handle metadata event
-      eventSource.addEventListener('metadata', (e) => {
-        const data = JSON.parse(e.data);
-        setMetadata(data);
+      const res = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify({ question, os: 'ubuntu_24_04', use_rag: true, rag_top_k: 3 }),
+        signal: controller.signal,
       });
 
-      // Handle message events (tokens)
-      eventSource.addEventListener('message', (e) => {
-        const data = JSON.parse(e.data);
-        if (data.token) {
-          setStreamingResponse((prev) => prev + data.token);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.body) throw new Error('No response body');
+
+      // Manuel SSE frame parser — '\n\n' ile ayrılmış event blokları
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() ?? '';
+
+        for (const frame of frames) {
+          const eventMatch = frame.match(/^event: (\w+)/m);
+          const dataMatch  = frame.match(/^data: (.+)/ms);
+          if (!dataMatch) continue;
+
+          const eventType = eventMatch?.[1] ?? 'message';
+          const data = JSON.parse(dataMatch[1]);
+
+          if (eventType === 'metadata') setMetadata(data);
+          else if (eventType === 'sources') setRagSources(data.rag_sources ?? []);
+          else if (eventType === 'message' && data.token) setStreamingResponse(p => p + data.token);
+          else if (eventType === 'done') setStats(data);
         }
-      });
-
-      // Handle done event
-      eventSource.addEventListener('done', (e) => {
-        const data = JSON.parse(e.data);
-        console.log('Stream completed:', data);
-        setIsStreaming(false);
-        eventSource.close();
-      });
-
-      // Handle errors
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
-        setIsStreaming(false);
-        eventSource.close();
-      };
-    } catch (error) {
-      console.error('Stream error:', error);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') console.error('Stream error:', err);
+    } finally {
       setIsStreaming(false);
     }
   };
 
   const stopStreaming = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      setIsStreaming(false);
-    }
+    abortRef.current?.abort();
+    setIsStreaming(false);
   };
 
   return (
     <div className="streaming-chat">
       <div className="input-section">
-        <textarea
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask a security question..."
-          rows={4}
-        />
+        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4}
+          placeholder="Ask a security question..." />
         <button onClick={sendStreamingMessage} disabled={isStreaming}>
           {isStreaming ? 'Streaming...' : 'Send'}
         </button>
-        {isStreaming && (
-          <button onClick={stopStreaming}>Stop</button>
-        )}
+        {isStreaming && <button onClick={stopStreaming}>Stop</button>}
       </div>
 
       {metadata && (
         <div className="metadata">
-          Intent: {metadata.intent} | RAG Used: {metadata.rag_used ? 'Yes' : 'No'}
+          Intent: {metadata.intent} | RAG: {metadata.rag_used ? 'Yes' : 'No'}
+          {stats && ` | Time: ${stats.total_time_s?.toFixed(2)}s`}
         </div>
       )}
 
@@ -321,6 +331,17 @@ function StreamingChat() {
         <div className="response">
           {streamingResponse}
           {isStreaming && <span className="cursor">▋</span>}
+        </div>
+      )}
+
+      {ragSources.length > 0 && (
+        <div className="evidence-panel">
+          <h4>Sources</h4>
+          <ul>
+            {ragSources.map((src, i) => (
+              <li key={i}>{src.section} — {src.source} (score: {src.score.toFixed(2)})</li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -469,92 +490,102 @@ document.getElementById('sendBtn').addEventListener('click', () => {
 
 ## SSE Streaming Client
 
-### Generic SSE Handler
+### Generic SSE Handler (fetch tabanlı — POST)
+
+> `EventSource` yalnızca GET destekler; `/api/chat/stream` POST endpoint'idir.
+> Aşağıdaki istemci `fetch` + `ReadableStream` + manuel SSE parser kullanır.
 
 ```javascript
 class StreamingChatClient {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
-    this.eventSource = null;
+    this._abort = null;
   }
 
-  streamChat(question, options = {}, callbacks = {}) {
-    // Close existing connection
-    if (this.eventSource) {
-      this.eventSource.close();
+  async streamChat(question, options = {}, callbacks = {}) {
+    this.stop();
+    const controller = new AbortController();
+    this._abort = controller;
+
+    try {
+      const res = await fetch(`${this.baseUrl}/api/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify({
+          question,
+          os:         options.os        ?? 'ubuntu_24_04',
+          use_rag:    options.use_rag   !== false,
+          rag_top_k:  options.rag_top_k ?? 3,
+          session_id: options.session_id,
+          timeout:    options.timeout   ?? 60,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.body) throw new Error('No response body');
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() ?? '';
+
+        for (const frame of frames) {
+          const eventMatch = frame.match(/^event: (\w+)/m);
+          const dataMatch  = frame.match(/^data: (.+)/ms);
+          if (!dataMatch) continue;
+
+          const eventType = eventMatch?.[1] ?? 'message';
+          const data = JSON.parse(dataMatch[1]);
+
+          switch (eventType) {
+            case 'metadata': callbacks.onMetadata?.(data);                   break;
+            case 'sources':  callbacks.onSources?.(data.rag_sources ?? []);  break;
+            case 'message':  if (data.token) callbacks.onToken?.(data.token); break;
+            case 'done':     callbacks.onComplete?.(data);                   break;
+            case 'error':    callbacks.onError?.(new Error(data.message));   break;
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') callbacks.onError?.(err);
     }
-
-    const params = new URLSearchParams({
-      question,
-      os: options.os || 'ubuntu_24_04',
-      use_rag: options.use_rag !== false,
-      timeout: options.timeout || 60
-    });
-
-    this.eventSource = new EventSource(
-      `${this.baseUrl}/api/chat/stream?${params}`
-    );
-
-    // Metadata event
-    this.eventSource.addEventListener('metadata', (e) => {
-      const data = JSON.parse(e.data);
-      if (callbacks.onMetadata) {
-        callbacks.onMetadata(data);
-      }
-    });
-
-    // Message events (tokens)
-    this.eventSource.addEventListener('message', (e) => {
-      const data = JSON.parse(e.data);
-      if (callbacks.onToken && data.token) {
-        callbacks.onToken(data.token);
-      }
-    });
-
-    // Done event
-    this.eventSource.addEventListener('done', (e) => {
-      const data = JSON.parse(e.data);
-      if (callbacks.onComplete) {
-        callbacks.onComplete(data);
-      }
-      this.eventSource.close();
-    });
-
-    // Error handling
-    this.eventSource.onerror = (error) => {
-      if (callbacks.onError) {
-        callbacks.onError(error);
-      }
-      this.eventSource.close();
-    };
   }
 
   stop() {
-    if (this.eventSource) {
-      this.eventSource.close();
-    }
+    this._abort?.abort();
+    this._abort = null;
   }
 }
 
-// Usage
+// Kullanım
 const client = new StreamingChatClient('http://localhost:8000');
 
 client.streamChat(
-  'Ubuntu SSH portunu nasıl değiştiririm?',
-  { os: 'ubuntu_24_04', use_rag: true },
+  'Ubuntu SSH nasıl sıkılaştırılır?',
+  { os: 'ubuntu_24_04', use_rag: true, session_id: 'user-abc-123' },
   {
-    onMetadata: (metadata) => {
-      console.log('Intent:', metadata.intent);
+    onMetadata: (meta) => {
+      console.log('Intent:', meta.intent, '| History turns:', meta.history_turns);
+    },
+    onSources: (sources) => {
+      // Evidence paneli — token'lardan önce gelir
+      sources.forEach(s => console.log(`[${s.score.toFixed(2)}] ${s.section}`));
     },
     onToken: (token) => {
       document.getElementById('response').textContent += token;
     },
     onComplete: (stats) => {
-      console.log('Completed in', stats.total_time_s, 'seconds');
+      console.log(`Tamamlandı: ${stats.total_time_s?.toFixed(2)}s, maliyet: $${stats.estimated_cost}`);
     },
-    onError: (error) => {
-      console.error('Stream error:', error);
-    }
+    onError: (err) => console.error('Hata:', err),
   }
 );
 ```

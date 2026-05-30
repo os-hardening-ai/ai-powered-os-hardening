@@ -11,29 +11,28 @@ from api.errors import APIError, ErrorCode, raise_internal_error
 
 router = APIRouter()
 
-_UBUNTU_RULES_PATH = Path("data/rules/ubuntu_24_04_rules.yaml")
+_OS_RULES_PATHS: dict[str, Path] = {
+    "ubuntu_24_04": Path("data/rules/ubuntu_24_04_rules.yaml"),
+    "ubuntu_22_04": Path("data/rules/ubuntu_24_04_rules.yaml"),  # same benchmark
+    "windows_11": Path("data/rules/windows_11_desktop_rules.yaml"),
+    "windows_server_2025": Path("data/rules/windows_server_2025_rules.yaml"),
+}
 
-# Lazy singletons — eşzamanlı ilk isteklerde çift-init yarışını önlemek için kilit.
-_rule_engine = None
+_rule_engines: dict[str, object] = {}
 _artifact_gen = None
 _init_lock = threading.Lock()
 
 
-def _get_rule_engine():
-    global _rule_engine
-    if _rule_engine is None:
+def _get_rule_engine(os_key: str = "ubuntu_24_04"):
+    path = _OS_RULES_PATHS.get(os_key)
+    if path is None or not path.exists():
+        return None
+    if os_key not in _rule_engines:
         with _init_lock:
-            if _rule_engine is None:  # double-checked locking
+            if os_key not in _rule_engines:
                 from domain.rule_engine.rule_engine import RuleEngine
-                if not _UBUNTU_RULES_PATH.exists():
-                    raise APIError(
-                        status_code=503,
-                        error_code=ErrorCode.SERVICE_UNAVAILABLE,
-                        message="Rules YAML not found — ensure data/rules/ubuntu_24_04_rules.yaml exists",
-                        details={"path": str(_UBUNTU_RULES_PATH)},
-                    )
-                _rule_engine = RuleEngine(_UBUNTU_RULES_PATH)
-    return _rule_engine
+                _rule_engines[os_key] = RuleEngine(path)
+    return _rule_engines[os_key]
 
 
 def _get_artifact_gen():
@@ -115,7 +114,7 @@ async def get_execution_plan(body: RulePlanRequest):
     are reported with warnings.
     """
     try:
-        engine = _get_rule_engine()
+        engine = _get_rule_engine("ubuntu_24_04")
         plan = engine.get_execution_plan(body.rule_ids)
         return ExecutionPlanResponse(
             ordered_rules=plan.ordered_rules,
@@ -136,7 +135,7 @@ async def detect_conflicts(body: RulePlanRequest):
     A conflict exists when two rules write to the same config file or manage the same kernel module.
     """
     try:
-        engine = _get_rule_engine()
+        engine = _get_rule_engine("ubuntu_24_04")
         conflicts = engine.detect_conflicts(body.rule_ids)
         return [ConflictResponse(**vars(c)) for c in conflicts]
     except APIError:
@@ -145,21 +144,43 @@ async def detect_conflicts(body: RulePlanRequest):
         raise_internal_error("rules_conflicts", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
+@router.get("/rules/categories", response_model=List[str], tags=["domain"])
+async def list_rule_categories(
+    os: Optional[str] = Query(None, description="OS identifier"),
+) -> List[str]:
+    """Return all unique category names for the given OS."""
+    try:
+        os_key = os or "ubuntu_24_04"
+        engine = _get_rule_engine(os_key)
+        if engine is None:
+            return []
+        rules = engine.list_rules()
+        return sorted({r["category"] for r in rules if r.get("category")})
+    except APIError:
+        raise
+    except Exception as exc:
+        raise_internal_error("rules_categories", exc, error_code=ErrorCode.PIPELINE_ERROR)
+
+
 @router.get("/rules", response_model=RuleListResponse, tags=["domain"])
 async def list_rules(
     level: Optional[int] = Query(None, description="CIS level filter (1 or 2)"),
     category: Optional[str] = Query(None, description="Category name substring filter"),
     auto_remediate: Optional[bool] = Query(None, description="Filter by auto_remediate flag"),
-    limit: int = Query(50, ge=1, le=200),
+    os: Optional[str] = Query(None, description="OS: ubuntu_24_04 | ubuntu_22_04 | windows_11 | windows_server_2025"),
+    limit: int = Query(50, ge=1, le=2000),
     offset: int = Query(0, ge=0),
 ):
-    """List available CIS rules. Script content is stripped from list responses."""
+    """List CIS rules for the given OS. Script content is stripped from list responses."""
     try:
-        engine = _get_rule_engine()
+        os_key = os or "ubuntu_24_04"
+        engine = _get_rule_engine(os_key)
+        if engine is None:
+            return RuleListResponse(rules=[], total=0, offset=offset, limit=limit)
+
         rules = engine.list_rules(level=level, category=category, auto_remediate=auto_remediate)
         total = len(rules)
         page = rules[offset : offset + limit]
-        # Strip large script blobs — build new dicts to avoid mutating the engine's cache
         _STRIP = {"audit_script_content", "remediation_script_content"}
         stripped = [{k: v for k, v in r.items() if k not in _STRIP} for r in page]
         return RuleListResponse(rules=stripped, total=total, offset=offset, limit=limit)
@@ -178,7 +199,7 @@ async def generate_artifact(body: ArtifactRequest):
     from CIS rule IDs. Scripts are derived directly from the CIS YAML rule database.
     """
     try:
-        engine = _get_rule_engine()
+        engine = _get_rule_engine(body.os_target or "ubuntu_24_04")
         gen = _get_artifact_gen()
 
         rules: List[dict] = []

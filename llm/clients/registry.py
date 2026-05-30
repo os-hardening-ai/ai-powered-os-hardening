@@ -66,7 +66,7 @@ _REGISTRY: Dict[str, ProviderSpec] = {
     # CHEAP_PAID ($0.25/$1.50) → include_cheap ile zincire girer (kullanıcı isteği).
     "gemini": ProviderSpec(
         "gemini", "llm.clients.openai_compatible_client:get_small_gemini_llm,get_large_gemini_llm",
-        Cost.CHEAP_PAID, free_priority=750,
+        Cost.CHEAP_PAID, free_priority=15,   # Novita-net'ten (25) ÖNCE — hızlı (3s) + 1M ctx
         notes="Gemini 3.1 Flash Lite (OpenRouter) — hızlı + 1M context (uzun RAG); $0.25/$1.50",
     ),
     # DEPRECATED — kullanıcı kararıyla otomatik fallback zincirinden ÇIKARILDI
@@ -87,12 +87,12 @@ _REGISTRY: Dict[str, ProviderSpec] = {
         notes="DEPRECATED — chat-template hatası + artık aracı (Groq/Cerebras'a yönlendirir); "
               "varsayılan zincirden ÇIKARILDI (yalnızca açıkça LLM_PROVIDER=huggingface ile)",
     ),
-    # CHEAP_PAID — düşük ücretli, kotasız. Ücretsizler bittiğinde 429'a karşı
-    # güvenlik ağı olarak istenirse zincire alınır (kullanıcı: "düşük ücretler de ok").
+    # CHEAP_PAID — düşük ücretli, kotasız. Groq 429'u için öncelikli güvenlik ağı;
+    # free_priority=25 → Ollama'dan (30) ÖNCE denenir.
     "novita": ProviderSpec(
         "novita", "llm.clients.novita_llm_client:get_small_novita_llm,get_large_novita_llm",
-        Cost.CHEAP_PAID, free_priority=800,
-        notes="Düşük ücretli + kotasız — 429 güvenlik ağı (include_cheap ile)",
+        Cost.CHEAP_PAID, free_priority=25,
+        notes="Düşük ücretli + kotasız — Groq 429 sonrası ilk fallback, Ollama'dan önce",
     ),
     # PAID — pahalı; yalnızca açıkça primary seçilirse.
     "openai": ProviderSpec(

@@ -138,6 +138,23 @@ _llm_small = None
 _llm_large = None
 
 
+def _parse_rag_sources(metadata: dict) -> List["RAGSource"]:
+    """Metadata dict'inden RAGSource listesi üret. Hem /chat hem /chat/stream kullanır."""
+    sources: List[RAGSource] = []
+    for idx, sd in enumerate(metadata.get("rag_sources", []), start=1):
+        try:
+            sources.append(RAGSource(
+                id=f"source_{idx}",
+                score=sd.get("score", 0.0),
+                source=sd.get("source") or "Unknown",
+                section=sd.get("section") or "N/A",
+                text=sd.get("text"),
+            ))
+        except Exception:
+            pass
+    return sources
+
+
 def _get_llm_clients():
     """Get or initialize LLM clients"""
     global _llm_small, _llm_large
@@ -270,21 +287,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             )
 
         # RAG kaynaklarini parse et (eger varsa - metadata'dan)
-        rag_sources: List[RAGSource] = []
-        if result.metadata and "rag_sources" in result.metadata:
-            try:
-                for idx, source_data in enumerate(result.metadata["rag_sources"], start=1):
-                    rag_sources.append(
-                        RAGSource(
-                            id=f"source_{idx}",
-                            score=source_data.get("score", 0.0),
-                            source=source_data.get("source") or "Unknown",
-                            section=source_data.get("section") or "N/A",
-                            text=source_data.get("text"),
-                        )
-                    )
-            except Exception as e:
-                _conv_logger.warning(f"[ChatAPI] Failed to parse RAG sources: {e}")
+        rag_sources = _parse_rag_sources(result.metadata or {})
 
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
@@ -350,38 +353,51 @@ async def chat_stream(payload: ChatRequest):
     """
     Streaming version of /chat endpoint using Server-Sent Events (SSE).
 
-    Returns token-by-token streaming response for better user experience.
-
-    Response format (SSE):
-        event: metadata
-        data: {"intent": "info_request", "rag_used": true}
-
-        event: message
-        data: {"token": "SSH "}
-
-        event: message
-        data: {"token": "güvenliği "}
-
-        event: done
-        data: {"total_tokens": 150}
+    SSE event order:
+        event: metadata  — intent, safety, rag_used, layer_path, session info
+        event: sources   — rag_sources (same structure as /chat, only when RAG returned results)
+        event: message   — one per word/token
+        event: done      — total_tokens, total_time_s, estimated_cost, verification_confidence
     """
-    # Set timeout (default: 60s for streaming)
     timeout_seconds = payload.timeout or 60
 
     try:
-        # LLM clients
         llm_small, llm_large = _get_llm_clients()
 
-        # Request context
+        # Session history (P0-2)
+        session_id = payload.session_id or ""
+        history: List[Dict[str, str]] = []
+        if session_id:
+            turns = _session_store.get_history(session_id)
+            history = [{"role": t.role, "content": t.content} for t in turns]
+
+        # Context-aware query rewrite (P0-2)
+        effective_question = payload.question
+        if history:
+            try:
+                from rag.query.query_rewriter import QueryRewriter
+                _rewriter = QueryRewriter(llm_fn=llm_small)
+                rewritten = _rewriter.rewrite(payload.question, history)
+                if rewritten != payload.question:
+                    _conv_logger.info(
+                        "[QueryRewriter][stream] '%s' → '%s'",
+                        payload.question[:60], rewritten[:60],
+                    )
+                    effective_question = rewritten
+            except Exception as _re:
+                _conv_logger.warning("[QueryRewriter][stream] failed (non-fatal): %s", _re)
+
         ctx = RequestContext(
-            user_question=payload.question,
+            user_question=effective_question,
             os=payload.os,
             role=payload.role,
             security_level=payload.security_level,  # type: ignore
             zt_maturity=payload.zt_maturity,  # type: ignore
+            conversation_history=history,
         )
 
-        # Filter agent: os/role verilmemişse sorgudan çıkar
+        # FilterAgent (P0-2: uses effective_question via ctx)
+        _inferred_os: str | None = None
         if ctx.os is None or ctx.role is None:
             try:
                 from rag.query.filter_agent import FilterAgent
@@ -389,27 +405,28 @@ async def chat_stream(payload: ChatRequest):
                 _filters = _fa.infer(payload.question)
                 if _filters.os_type and ctx.os is None:
                     ctx.os = _filters.os_type
+                    _inferred_os = _filters.os_type
                 if _filters.role and ctx.role is None:
                     ctx.role = _filters.role
             except Exception as _fe:
-                _conv_logger.warning("[FilterAgent] stream failed (non-fatal): %s", _fe)
+                _conv_logger.warning("[FilterAgent][stream] failed (non-fatal): %s", _fe)
 
-        # RAG builder (stream)
         rag_builder = None
         if payload.use_rag:
             try:
-                _os_for_rag_stream = payload.os or None
+                _os_for_rag = payload.os or _inferred_os or None
                 rag_builder = RAGContextBuilder(
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
-                    os_version=_os_for_rag_stream,
+                    os_version=_os_for_rag,
                 )
             except Exception as e:
-                _conv_logger.warning(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
+                _conv_logger.warning("[ChatAPI][stream] RAG init failed, devam ediliyor: %s", e)
 
         # ── Güvenlik (fail-closed) — tam pipeline'ı koşmadan hızlı sınıflandırma ──
-        # GERÇEK streaming için cevabı ÖNCE üretip bölmek yerine üretimi token-token akıtırız;
-        # ama güvenlik korunmalı → önce safety, sonra RAG + grounded prompt + stream.
+        # GERÇEK streaming: cevabı ÖNCE üretip .split() ile bölmek yerine üretimi token-token
+        # akıtırız. Güvenlik korunur (safety), RAG bağlamı + grounded prompt enjekte edilir,
+        # akış bitince oturum geçmişine kaydedilir (WGR P0-2: session history + P0-1: sources).
         from llm.pipelines.layers.safety_classifier import SafetyClassifier
         from llm.prompts.simple_prompts import get_prompt_for_complexity
 
@@ -425,14 +442,21 @@ async def chat_stream(payload: ChatRequest):
                 metadata={"safety": safety.category, "rag_used": False, "blocked": True},
             )
 
-        # ── RAG bağlamı (varsa) → prompt'a enjekte (grounded üretim) ──
+        # ── RAG bağlamı + kaynaklar (P0-1) → prompt'a enjekte (grounded üretim) ──
+        rag_sources_data = None
         if rag_builder is not None:
             try:
                 _ctx_txt, _chunks = await asyncio.to_thread(
-                    rag_builder.retrieve_balanced, payload.question
+                    rag_builder.retrieve_balanced, effective_question
                 )
                 if _ctx_txt:
                     ctx.retrieved_context = _ctx_txt
+                _srcs = _parse_rag_sources({"rag_sources": [
+                    {"score": c.get("score", 0.0), "source": c.get("source"),
+                     "section": c.get("section", "N/A"), "text": (c.get("text") or "")[:500]}
+                    for c in (_chunks or [])
+                ]})
+                rag_sources_data = [s.model_dump() for s in _srcs] if _srcs else None
             except Exception as _re:
                 _conv_logger.warning("[ChatAPI.stream] RAG retrieve başarısız (non-fatal): %s", _re)
 
@@ -440,6 +464,8 @@ async def chat_stream(payload: ChatRequest):
 
         # ── GERÇEK token streaming: llm_large.stream() (senkron üretici) → asyncio kuyruğu ──
         # (sync ağ akışını event loop'u bloklamadan async SSE'ye köprüler)
+        _collected: List[str] = []
+
         async def token_generator():
             queue: asyncio.Queue = asyncio.Queue()
             loop = asyncio.get_running_loop()
@@ -463,15 +489,30 @@ async def chat_stream(payload: ChatRequest):
                 tok = await queue.get()
                 if tok is sentinel:
                     break
+                _collected.append(tok)
                 yield tok
+            # Akış bitti → oturum geçmişine kaydet (P0-2)
+            if session_id:
+                try:
+                    _session_store.add_turn(session_id, "user", effective_question)
+                    _session_store.add_turn(
+                        session_id, "assistant", sanitize_output("".join(_collected))[:500])
+                except Exception:
+                    pass
 
         metadata = {
             "safety": safety.category,
             "rag_used": ctx.retrieved_context is not None,
             "streaming": "real-token",
+            "session_id": session_id or None,
+            "history_turns": len(history) // 2,
         }
-        return await stream_chat_response(token_generator(), metadata=metadata)
+        return await stream_chat_response(
+            token_generator(), metadata=metadata, sources=rag_sources_data,
+        )
 
+    except APIError:
+        raise
     except Exception as e:
         raise_internal_error("streaming", e, error_code=ErrorCode.PIPELINE_ERROR)
 

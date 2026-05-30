@@ -254,12 +254,13 @@ def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCalla
     if not enable_fallback:
         return _PROVIDER_BUILDERS[provider]()
 
-    # Sıra registry'den. Varsayılan: ücretsiz-first (groq → huggingface → ollama).
-    # LLM_INCLUDE_CHEAP=1 → düşük ücretli kotasız Novita 429 güvenlik ağı olarak sona
-    # eklenir (kullanıcı "düşük ücretler de ok" dedi). LLM_INCLUDE_PAID=1 → pahalı dahil.
-    # Birincil sağlayıcı cheap/paid ise (açık tercih) yine başa alınır.
+    # Fallback sırası (free_priority'ye göre): groq(10) → huggingface(20) → novita(25) → ollama(30)
+    # Novita varsayılan olarak dahil (include_cheap=True): Groq 429'u için güvenilir ağ köprüsü.
+    # LLM_INCLUDE_CHEAP=0 ile devre dışı bırakılabilir. LLM_INCLUDE_PAID=1 → OpenAI de eklenir.
     _truthy = ("1", "true", "yes", "on")
-    include_cheap = os.environ.get("LLM_INCLUDE_CHEAP", "").lower() in _truthy
+    _falsy  = ("0", "false", "no", "off")
+    _cheap_env = os.environ.get("LLM_INCLUDE_CHEAP", "").lower()
+    include_cheap = (_cheap_env not in _falsy)   # varsayılan True; yalnızca "0/false" ile kapatılır
     include_paid = os.environ.get("LLM_INCLUDE_PAID", "").lower() in _truthy
     primary_cost = get_spec(provider).cost
     if primary_cost is Cost.CHEAP_PAID:
