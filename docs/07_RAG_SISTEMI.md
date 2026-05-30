@@ -566,4 +566,4 @@ API yanıtında `rag_sources` alanı olarak da döner:
 
 - [LLM Uygulamaları](06_LLM_UYGULAMALARI.md) - RAG + LLM entegrasyonu
 - [Kurulum ve Kullanım](03_KURULUM_VE_KULLANIM.md) - Index oluşturma adımları
-- [Gelecek İyileştirmeler](09_GELECEK_IYILESTIRMELER.md) - Hybrid search, Redis cache
+- [Eksikler ve Yapılacaklar](15_EKSIKLER.md) - Kalan iş listesi ve öncelikler

@@ -97,11 +97,21 @@ def _percentile(durations: List[float], q: float) -> float:
 
 
 def _build_client():
-    """In-process TestClient. Auth gerektirmemesi için API_KEY env'i temizlenir (dev modu)."""
-    os.environ.pop("API_KEY", None)  # auth dev-modda açık (require_api_key bypass)
+    """In-process TestClient. Auth bypass (dev modu) + OTel kapalı (gerçek latency)."""
+    os.environ.pop("API_KEY", None)            # auth dev-modda açık (require_api_key bypass)
+    os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # Jaeger yoksa span-export gecikmesini önle
     from fastapi.testclient import TestClient
     from main import create_app
     return TestClient(create_app(), raise_server_exceptions=False)
+
+
+def _warmup(client, specs: List[EndpointSpec]) -> None:
+    """Her uca 1 ısınma isteği — lazy singleton init yarışını ölçümden önce çöz."""
+    for spec in specs:
+        try:
+            client.request(spec.method, spec.path, json=spec.payload)
+        except Exception:
+            pass
 
 
 def run_endpoint(client, spec: EndpointSpec, n: int, concurrency: int) -> EndpointResult:
@@ -191,6 +201,7 @@ def main() -> None:
         specs = [s for s in ENDPOINTS if s.name in wanted]
 
     client = _build_client()
+    _warmup(client, specs)  # init yarışını ölçümden önce çöz
     rep = LoadReport(concurrency=concurrency)
     for spec in specs:
         logger.info("[Load] %s × %d (concurrency=%d)...", spec.name, n, concurrency)

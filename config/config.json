@@ -122,7 +122,7 @@
     "dim": 4096,
     "base_url": "https://api.novita.ai/openai",
     "batch_size": 100,
-    "cache_enabled": true,
+    "cache_enabled": false,
     "cache_ttl_seconds": 86400
   },
   "redis": {

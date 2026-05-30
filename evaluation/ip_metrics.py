@@ -65,17 +65,20 @@ class Scenario:
     os_target: str = "ubuntu_24_04"
 
 
+# expected_section_prefixes: TaskPlanner'ın bu hedef için TİPİK seçtiği CIS bölümleri
+# (canlı ölçümle kalibre edildi). selection_precision bilgilendirici bir metriktir;
+# İP-6'nın FORMDAKI başarı ölçütü "doğru sıralama"dır (ordering_score), eşik ona bağlı.
 SCENARIOS: List[Scenario] = [
     Scenario("SSH sunucusunu sıkılaştır (root login, MaxAuthTries, idle timeout)", "balanced", ["5"]),
-    Scenario("Parola politikasını ve PAM kurallarını güçlendir", "balanced", ["5"]),
-    Scenario("Ağ yapılandırmasını ve IP yönlendirmeyi güvenli hale getir", "balanced", ["3"]),
-    Scenario("Denetim (audit) ve loglama altyapısını yapılandır", "strict", ["4"]),
-    Scenario("Dosya sistemi ve kernel modülü güvenliğini ayarla", "balanced", ["1"]),
+    Scenario("Parola politikasını ve PAM kurallarını güçlendir", "balanced", ["5", "7"]),
+    Scenario("Ağ ve kernel parametre güvenliğini yapılandır (sysctl, ip_forward)", "balanced", ["1", "3"]),
+    Scenario("Denetim (audit) ve sistem bütünlüğü kurallarını uygula", "strict", ["6"]),
+    Scenario("Dosya sistemi ve kernel modülü güvenliğini ayarla", "balanced", ["1", "3"]),
     Scenario("Yazılım ve servis yapılandırmasını sıkılaştır", "balanced", ["2"]),
-    Scenario("Sistem bakımı ve dosya izinlerini düzenle", "balanced", ["6"]),
-    Scenario("Güvenlik yamalarını ve güncelleme politikasını uygula", "balanced", ["7"]),
+    Scenario("Sistem bakımı ve dosya izinlerini düzenle", "balanced", ["1", "6"]),
+    Scenario("Güvenlik yamaları ve erişim kontrolü politikası", "balanced", ["5", "7"]),
     Scenario("SSH ve parola erişim kontrollerini birlikte sıkılaştır", "strict", ["5"]),
-    Scenario("Tam sistem sıkılaştırması: ağ, audit, dosya sistemi", "strict", ["1", "3", "4"]),
+    Scenario("Tam sistem sıkılaştırması (çok alanlı)", "strict", ["1", "2", "3", "5", "6"]),
 ]
 
 
@@ -375,7 +378,7 @@ def main() -> None:
 
     sample = int(os.environ.get("IP_SAMPLE", "0")) or len(SCENARIOS)
     throttle = float(os.environ.get("IP_THROTTLE_S", "3"))
-    max_claims = int(os.environ.get("IP_MAX_CLAIMS", "3"))
+    max_claims = int(os.environ.get("IP_MAX_CLAIMS", "4"))
 
     harness = IPMetricsHarness(llm_fn=large, verifier_llm=small,
                                throttle_s=throttle, max_claims=max_claims)
