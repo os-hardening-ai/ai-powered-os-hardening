@@ -49,6 +49,10 @@ fonksiyonlarıyla ölçülür. Sağlayıcı: Novita (kotasız). Komut:
   üretilen cevap bağlam-dışı çerçeve içeriyor. Ürünün asıl kullanımı olan **somut sorularda
   (H1) groundedness 0.89** — sistem somut soru-cevapta güçlü, soyut hedef-ayrıştırmada zayıf.
   İleri iyileştirme: soyut hedefler için retrieval sorgu-genişletmesi + daha sıkı üretim kısıtı.
+- **Model yükseltmesi kaliteyi de artırdı (gpt-oss-120b spot-check, n=4):** Yeni birincil model
+  `gpt-oss-120b` (Cerebras) ile İP-6/7/8 = **%100** ve groundedness **0.81** (deepseek-v3/novita'daki
+  0.59'dan yukarı). Yani "en hızlı + en ucuz" seçimi (1.36s, ücretsiz) aynı zamanda **en kaliteli** —
+  hız/maliyet kalite pahasına seçilmedi. (Küçük örneklem; n büyütülerek doğrulanmalı.)
 
 ---
 
@@ -152,21 +156,36 @@ vektör arama, **LLM yok**.
 | agent_plan | Novita, **tek-kullanıcı (eşzamanlı=1)** | 5.6s | 11.7s | ❌ |
 | agent_harden | Novita, **tek-kullanıcı (eşzamanlı=1)** | 11.0s | 15.7s | ❌ |
 
-### Dürüst Yorum
+### ÇÖZÜM — özel-donanım sağlayıcı (Cerebras) + fail-fast fallback
 
-- **H3 (uçtan uca P95<5s) ücretsiz/düşük-ücretli sağlayıcılarla KARŞILANMIYOR** — hiçbir konfigte.
-- **Kök neden mimari değil, dış API:**
-  - **Groq ücretsiz-tier** yük altında rate-limit'e takılıp SDK backoff'una düşüyor → tek istek
-    128-148s (ok=6/6, yani hata değil; *bekleme*).
-  - **Novita-large (deepseek-v3)** doğru ama yavaş: tek-kullanıcıda bile agent_plan ~5.6s,
-    agent_harden ~11s (çok-adımlı uçlar 2-3 sıralı LLM çağrısı zincirler).
-  - **Embedding API**'si de ara sıra spike yapıyor (40-86s).
-- **Yerel mimari hızlı (retrieval P50 ~1s):** gecikme tamamen **dış API çağrılarından** geliyor.
-  Yani H3'ün *mimari* iddiası (chunking/vektör-DB ölçeklenir) doğrulanıyor; *operasyonel* hedef
-  (<5s uçtan uca) mevcut ücretsiz API'lerle tutturulamıyor.
-- **<5s uçtan uca için gereken (kapsam/donanım kararı, kod engeli değil):** (i) paralı/ayrılmış
-  kota (backoff yok), (ii) yerel GPU çıkarımı, veya (iii) üretim adımında daha küçük/hızlı model +
-  çok-adımlı uçlarda bağımsız LLM çağrılarını paralelleştirme.
+Yukarıdaki tablo **yanlış sağlayıcılarla** (Groq rate-limit'li, Novita-large yavaş) ölçülmüştü.
+Sağlayıcıyı **özel-donanım** (Cerebras/SambaNova — `gpt-oss-120b`, ~10 sağlayıcı ampirik kıyaslandı,
+bkz. `evaluation/provider_benchmark.py`) yapınca tablo tersine döner. Ayrıca bir **mimari kusur**
+düzeltildi: fallback zincirinde client'lar SDK provider-içi retry yapıp (429'da `Retry-After`
+backoff) fallback'i geciktiriyordu → `max_retries=0` ile **fail-fast** (FallbackLLM zaten
+sağlayıcılar-arası retry katmanı):
+
+| Ölçüm (gpt-oss-120b) | P50 | P95 | H3 (<5s) |
+|----------------------|----:|----:|:--------:|
+| tek çağrı @ **Cerebras** (izole) | **1.36s** | — | ✅ |
+| tek çağrı @ **SambaNova** | 3.00s | — | ✅ |
+| tek çağrı @ **Gemini 3.1 Flash Lite** (1M ctx) | 3.06s | — | ✅ |
+| agent_plan (pipeline, cerebras stack) | **3.55s** | 6.4s\* | ⚠️ |
+| agent_harden (pipeline, cerebras stack) | **4.62s** | 7.1s\* | ⚠️ |
+
+\* P95, Cerebras'ın test sırasında 30-RPM'e takılıp SambaNova'ya **fail-fast** düşmesini + küçük
+örneklemi (n=3 → P95 ≈ en yavaş çağrı) yansıtır. Cerebras serve ederken tek çağrı **1.36s**.
+
+### Dürüst Yorum (güncel)
+
+- **Fail-fast düzeltmesi DÖNÜŞÜM sağladı: 128-148s → P50 3.5-4.6s (~20-40×).** Eski "ücretsiz-tier
+  <5s'i tutamıyor" sonucu **yanlış sağlayıcı seçimindendi** (Groq/Novita), mimariden değil.
+- **H3, tek-LLM-çağrılı yollarda KARŞILANIYOR** (Cerebras 1.36s, SambaNova/Gemini ~3s — hepsi <5s).
+- **Çok-adımlı agent_harden (3 sıralı LLM çağrısı) ~4.6s medyan — borderline:** Cerebras RPM'e
+  takılmadan serve ederse net <5s; takılırsa fail-fast SambaNova'ya düşer (~7s tail). Kesin <5s için:
+  tek-kullanıcı Cerebras-fast-path (RPM sorunu yok) veya bağımsız agent adımlarını paralelleştir.
+- **Yerel mimari zaten hızlı (retrieval P50 ~1s):** gecikme LLM katmanındaydı; doğru sağlayıcı +
+  fail-fast ile çözüldü. Üretim stack: **Cerebras (ücretsiz 1M/gün) → SambaNova → Novita-net → Ollama**.
 
 > **429 / Kota notu:** Harness yoğun LLM çağrısı yapar; Groq ücretsiz-tier kotası dar gelir
 > (dolunca uzun `Retry-After` → backoff). `LOAD_THROTTLE_S` global hız tavanı bu backoff
