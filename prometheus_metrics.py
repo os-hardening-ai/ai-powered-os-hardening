@@ -117,6 +117,14 @@ def setup_tracing(app, service_name: str | None = None) -> None:
         - FastAPI  → HTTP server spans (method, path, status_code)
         - HTTPX    → outgoing spans (Novita, Groq, Qdrant calls)
     """
+    # Standart OTEL_SDK_DISABLED env'i ile tracing tamamen kapatılabilir.
+    # Jaeger/OTLP collector erişilemezse (örn. yük testi, CI, local dev) her span
+    # export denemesi ~1sn timeout/retry yiyip istekleri yavaşlatır — bu kapı onu önler.
+    if os.getenv("OTEL_SDK_DISABLED", "").lower() in ("1", "true", "yes"):
+        import logging as _lg
+        _lg.getLogger(__name__).info("[OTel] OTEL_SDK_DISABLED set — tracing devre dışı")
+        return
+
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
