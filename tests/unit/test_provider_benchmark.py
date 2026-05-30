@@ -67,6 +67,43 @@ class TestBenchProvider:
         assert r.reachable is False and "kurulum" in r.error.lower()
 
 
+class TestMatrix:
+    def test_parse_matrix(self):
+        pairs = pb._parse_matrix("cerebras:gpt-oss-120b; groq:llama-3.3-70b ;bad-no-colon")
+        assert pairs == [("cerebras", "gpt-oss-120b"), ("groq", "llama-3.3-70b")]
+
+    def test_default_matrix_well_formed(self):
+        assert len(pb.DEFAULT_MATRIX) >= 4
+        for prov, model in pb.DEFAULT_MATRIX:
+            assert prov in pb.PROVIDER_PRESETS and isinstance(model, str) and model
+
+    def test_bench_pair_passes_explicit_model(self, monkeypatch):
+        captured = {}
+
+        def _bfp(provider, **kw):
+            captured["model"] = kw.get("model")
+            return _FakeClient("answer", model_name=kw.get("model") or "default")
+
+        monkeypatch.setattr(pb, "preset_api_key", lambda p: "k")
+        monkeypatch.setattr(pb, "build_from_preset", _bfp)
+        r = bench_provider  # ensure wrapper still importable
+        res = pb.bench_pair("cerebras", "gpt-oss-120b", 2, "prompt")
+        assert captured["model"] == "gpt-oss-120b"
+        assert res.model == "gpt-oss-120b" and res.reachable
+
+    def test_bench_provider_wrapper_uses_preset(self, monkeypatch):
+        captured = {}
+
+        def _bfp(provider, **kw):
+            captured["model"] = kw.get("model")
+            return _FakeClient("answer", model_name="preset-model")
+
+        monkeypatch.setattr(pb, "preset_api_key", lambda p: "k")
+        monkeypatch.setattr(pb, "build_from_preset", _bfp)
+        bench_provider("cerebras", 2, "prompt")
+        assert captured["model"] is None      # wrapper → preset/env default
+
+
 class TestSortAndMarkdown:
     def _results(self):
         return [

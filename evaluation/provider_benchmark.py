@@ -43,6 +43,34 @@ DEFAULT_PROMPT = (
     "Kısa, maddeli ve komutlu cevap ver."
 )
 
+# Kontrollü matris: AYNI modeli FARKLI sağlayıcılarda → saf SAĞLAYICI hızı kıyası
+# (hız = sağlayıcı × model olduğundan model'i sabitlemek şart). gpt-oss-120b: yetenekli
+# MoE (hızlı); llama-3.3-70b: standart 70B. Model ID'leri sağlayıcıdan sağlayıcıya
+# DEĞİŞİR; yanlışsa harness 'model bulunamadı' raporlar → ilgili satırı düzelt.
+DEFAULT_MATRIX = [
+    ("cerebras",   "gpt-oss-120b"),
+    ("groq",       "openai/gpt-oss-120b"),
+    ("sambanova",  "gpt-oss-120b"),
+    ("novita",     "openai/gpt-oss-120b"),
+    ("fireworks",  "accounts/fireworks/models/gpt-oss-120b"),
+    ("openrouter", "openai/gpt-oss-120b"),
+    ("groq",       "llama-3.3-70b-versatile"),
+    ("sambanova",  "Meta-Llama-3.3-70B-Instruct"),
+    ("novita",     "meta-llama/llama-3.3-70b-instruct"),
+    ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+]
+
+
+def _parse_matrix(spec: str):
+    """"prov:model;prov:model" → [(prov, model)]."""
+    pairs = []
+    for item in spec.split(";"):
+        item = item.strip()
+        if item and ":" in item:
+            p, m = item.split(":", 1)
+            pairs.append((p.strip(), m.strip()))
+    return pairs
+
 
 @dataclass
 class ProviderResult:
@@ -64,15 +92,20 @@ def _percentile(durs: List[float], q: float) -> float:
     return round(MetricsCollector._percentile(sorted(durs), q), 3) if durs else 0.0
 
 
-def bench_provider(provider: str, n: int, prompt: str) -> ProviderResult:
-    preset_model = PROVIDER_PRESETS[provider]["model"]
+def bench_pair(provider: str, model: Optional[str], n: int, prompt: str) -> ProviderResult:
+    """Belirli bir (sağlayıcı, model) çiftini ölç. model=None → preset/env varsayılanı.
+
+    AYNI modeli farklı sağlayıcılarda koşturmak için bu kullanılır (adil sağlayıcı-hızı
+    kıyası). Hız = sağlayıcı × model olduğundan model'i SABİTLEMEK şarttır.
+    """
+    shown_model = model or PROVIDER_PRESETS[provider]["model"]
     if not preset_api_key(provider):
-        return ProviderResult(provider, preset_model, has_key=False, reachable=False,
+        return ProviderResult(provider, shown_model, has_key=False, reachable=False,
                               error="API key yok (atlandı)")
     try:
-        client = build_from_preset(provider)
+        client = build_from_preset(provider, model=model)
     except Exception as exc:
-        return ProviderResult(provider, preset_model, has_key=True, reachable=False,
+        return ProviderResult(provider, shown_model, has_key=True, reachable=False,
                               error=f"kurulum hatası: {str(exc)[:160]}")
 
     model = client.model_name
@@ -103,6 +136,11 @@ def bench_provider(provider: str, n: int, prompt: str) -> ProviderResult:
         error="" if ok == n else f"{n - ok}/{n} çağrı başarısız",
         sample=" ".join(first.split())[:160],
     )
+
+
+def bench_provider(provider: str, n: int, prompt: str) -> ProviderResult:
+    """Preset/env model ile tek sağlayıcı (geriye dönük uyum — preset modu)."""
+    return bench_pair(provider, None, n, prompt)
 
 
 def _sort_key(r: ProviderResult):
@@ -157,17 +195,27 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     n = int(os.environ.get("BENCH_N", "5"))
     prompt = os.environ.get("BENCH_PROMPT", DEFAULT_PROMPT)
-    only = os.environ.get("BENCH_ONLY")
-    providers = list(PROVIDER_PRESETS)
-    if only:
-        wanted = {x.strip().lower() for x in only.split(",")}
-        providers = [p for p in providers if p in wanted]
+    matrix_env = os.environ.get("BENCH_MATRIX")
+    use_matrix = bool(matrix_env) or os.environ.get("BENCH_MODE", "").lower() == "matrix"
 
     results: List[ProviderResult] = []
-    for p in providers:
-        has = "✓key" if preset_api_key(p) else "key-yok→atla"
-        logger.info("[Bench] %s (%s) ...", p, has)
-        results.append(bench_provider(p, n, prompt))
+    if use_matrix:
+        # AYNI modeli farklı sağlayıcılarda → adil sağlayıcı-hızı kıyası
+        pairs = _parse_matrix(matrix_env) if matrix_env else DEFAULT_MATRIX
+        logger.info("[Bench] MATRİS modu: %d (sağlayıcı, model) çifti", len(pairs))
+        for prov, model in pairs:
+            logger.info("[Bench] %s :: %s ...", prov, model)
+            results.append(bench_pair(prov, model, n, prompt))
+    else:
+        only = os.environ.get("BENCH_ONLY")
+        providers = list(PROVIDER_PRESETS)
+        if only:
+            wanted = {x.strip().lower() for x in only.split(",")}
+            providers = [p for p in providers if p in wanted]
+        for p in providers:
+            has = "✓key" if preset_api_key(p) else "key-yok→atla"
+            logger.info("[Bench] %s (%s) ...", p, has)
+            results.append(bench_pair(p, None, n, prompt))
 
     out = save_results(results)
     print("\n" + to_markdown(results))
