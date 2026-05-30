@@ -1,0 +1,17 @@
+{
+  "summary": {
+    "n": 0,
+    "pure_fact_recall": 0.0,
+    "rag_fact_recall": 0.0,
+    "pure_groundedness": 0.0,
+    "rag_groundedness": 0.0,
+    "pure_citation_rate": 0.0,
+    "rag_citation_rate": 0.0,
+    "pure_latency_s": 0.0,
+    "rag_latency_s": 0.0,
+    "rag_wins": 0,
+    "ties": 0,
+    "rag_losses": 0
+  },
+  "pairs": []
+}
