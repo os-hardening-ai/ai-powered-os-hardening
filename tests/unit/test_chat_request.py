@@ -18,7 +18,7 @@ class TestChatRequestValidation:
         assert req.security_level == "balanced"  # Default
         assert req.zt_maturity == "medium"  # Default
         assert req.use_rag is True  # Default
-        assert req.rag_top_k == 5  # Default
+        assert req.rag_top_k == 3  # Default
 
     def test_empty_question_rejected(self):
         """Test empty question is rejected"""

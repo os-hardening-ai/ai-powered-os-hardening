@@ -44,7 +44,7 @@ def late_chunking_default() -> LateChunkingOptions:
 
 
 class RagSearchRequest(BaseModel):
-    query: str = Field(..., description="Kullanıcının sorusu / arama cümlesi")
+    query: str = Field(..., min_length=1, description="Kullanıcının sorusu / arama cümlesi")
     top_k: int = Field(5, ge=1, le=20, description="Her kaynak (yaml_rule + cis_benchmark) için döndürülecek chunk sayısı — toplam max top_k*2")
     source_id: str | None = Field(None, description="Opsiyonel source id filtresi")
     min_score: float = Field(0.3, ge=0.0, le=1.0, description="Minimum relevance score threshold (default: 0.3)")
