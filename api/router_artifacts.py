@@ -1,41 +1,48 @@
 from __future__ import annotations
+import asyncio
+import threading
 from pathlib import Path
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from api.errors import APIError, ErrorCode
+from api.errors import APIError, ErrorCode, raise_internal_error
 
 router = APIRouter()
 
 _UBUNTU_RULES_PATH = Path("data/rules/ubuntu_24_04_rules.yaml")
 
-# Lazy singletons
+# Lazy singletons — eşzamanlı ilk isteklerde çift-init yarışını önlemek için kilit.
 _rule_engine = None
 _artifact_gen = None
+_init_lock = threading.Lock()
 
 
 def _get_rule_engine():
     global _rule_engine
     if _rule_engine is None:
-        from domain.rule_engine.rule_engine import RuleEngine
-        if not _UBUNTU_RULES_PATH.exists():
-            raise APIError(
-                status_code=503,
-                error_code=ErrorCode.SERVICE_UNAVAILABLE,
-                message="Rules YAML not found — ensure data/rules/ubuntu_24_04_rules.yaml exists",
-                details={"path": str(_UBUNTU_RULES_PATH)},
-            )
-        _rule_engine = RuleEngine(_UBUNTU_RULES_PATH)
+        with _init_lock:
+            if _rule_engine is None:  # double-checked locking
+                from domain.rule_engine.rule_engine import RuleEngine
+                if not _UBUNTU_RULES_PATH.exists():
+                    raise APIError(
+                        status_code=503,
+                        error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                        message="Rules YAML not found — ensure data/rules/ubuntu_24_04_rules.yaml exists",
+                        details={"path": str(_UBUNTU_RULES_PATH)},
+                    )
+                _rule_engine = RuleEngine(_UBUNTU_RULES_PATH)
     return _rule_engine
 
 
 def _get_artifact_gen():
     global _artifact_gen
     if _artifact_gen is None:
-        from domain.artifact_generator.generator import ArtifactGenerator
-        _artifact_gen = ArtifactGenerator()
+        with _init_lock:
+            if _artifact_gen is None:  # double-checked locking
+                from domain.artifact_generator.generator import ArtifactGenerator
+                _artifact_gen = ArtifactGenerator()
     return _artifact_gen
 
 
@@ -119,10 +126,7 @@ async def get_execution_plan(body: RulePlanRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Rule engine failed: {exc}", details={},
-        )
+        raise_internal_error("rules_plan", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.post("/rules/conflicts", response_model=List[ConflictResponse], tags=["domain"])
@@ -138,10 +142,7 @@ async def detect_conflicts(body: RulePlanRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Conflict detection failed: {exc}", details={},
-        )
+        raise_internal_error("rules_conflicts", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.get("/rules", response_model=RuleListResponse, tags=["domain"])
@@ -165,10 +166,7 @@ async def list_rules(
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Rule listing failed: {exc}", details={},
-        )
+        raise_internal_error("rules_list", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 # ── Artifact Endpoints ────────────────────────────────────────────────────────
@@ -199,7 +197,10 @@ async def generate_artifact(body: ArtifactRequest):
                 details={"missing": missing},
             )
 
-        artifact = gen.generate(rules, body.format, body.os_target, body.security_level)
+        # Şablonlama + YAML işi — event loop'u bloklamamak için thread'e al.
+        artifact = await asyncio.to_thread(
+            gen.generate, rules, body.format, body.os_target, body.security_level
+        )
         if missing:
             artifact.warnings.insert(0, f"Unknown rule IDs skipped: {missing}")
 
@@ -213,7 +214,4 @@ async def generate_artifact(body: ArtifactRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Artifact generation failed: {exc}", details={},
-        )
+        raise_internal_error("artifact_generate", exc, error_code=ErrorCode.PIPELINE_ERROR)

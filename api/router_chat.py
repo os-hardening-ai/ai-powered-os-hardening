@@ -17,7 +17,7 @@ from llm.rag.integration import RAGContextBuilder
 from api.security import validate_chat_input, sanitize_output
 
 # Import error handling
-from api.errors import APIError, ErrorCode
+from api.errors import APIError, ErrorCode, raise_internal_error
 
 # Import streaming support
 from api.streaming import stream_chat_response
@@ -340,12 +340,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     except APIError:
         raise
     except Exception as e:
-        raise APIError(
-            status_code=500,
-            error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Pipeline execution failed: {str(e)}",
-            details={"stage": "pipeline_execution"}
-        )
+        raise_internal_error("pipeline_execution", e, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.post("/chat/stream")
@@ -451,11 +446,6 @@ async def chat_stream(payload: ChatRequest):
         return await stream_chat_response(token_generator(), metadata=metadata)
 
     except Exception as e:
-        raise APIError(
-            status_code=500,
-            error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Streaming pipeline failed: {str(e)}",
-            details={"stage": "streaming"}
-        )
+        raise_internal_error("streaming", e, error_code=ErrorCode.PIPELINE_ERROR)
 
 

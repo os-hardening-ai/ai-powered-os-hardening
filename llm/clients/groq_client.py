@@ -8,6 +8,8 @@ from llm.core.config import (
     SMALL_MODEL_TEMPERATURE,
     LARGE_MODEL_TEMPERATURE,
     MAX_TOKENS,
+    REQUEST_TIMEOUT,
+    MAX_RETRIES,
 )
 from llm.clients import token_tracker
 
@@ -27,19 +29,30 @@ class GroqClient:
         api_key: str,
         temperature: float = 0.3,
         max_tokens: int = 512,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> None:
         if not api_key:
             raise RuntimeError(
                 "GROQ_API_KEY tanımlı değil. .env dosyanı kontrol et.\n"
                 "Ücretsiz API key al: https://console.groq.com/keys"
             )
-        
+
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.client = Groq(api_key=api_key)
+        # 429/5xx best-practice: SDK'nın yerleşik retry'ı exponential backoff
+        # uygular VE 429 yanıtındaki `Retry-After` başlığına uyar. timeout ile
+        # asılı kalan socket'i de sınırlıyoruz (yoksa istek süresiz bekleyebilir).
+        self.timeout = float(timeout if timeout is not None else REQUEST_TIMEOUT)
+        self.max_retries = int(max_retries if max_retries is not None else MAX_RETRIES)
+        self.client = Groq(
+            api_key=api_key,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
 
-        print(f"[OK] Groq API - Model: {model_name}")
+        print(f"[OK] Groq API - Model: {model_name} (timeout={self.timeout}s, retries={self.max_retries})")
     
     def __call__(self, prompt: str) -> str:
         """Modele prompt gönder ve cevap al"""

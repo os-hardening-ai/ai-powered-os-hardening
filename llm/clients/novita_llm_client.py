@@ -1,114 +1,93 @@
+# llm/clients/novita_llm_client.py
 from __future__ import annotations
-
 from openai import OpenAI
-
 from llm.core.config import (
-    CONFIG,
+    NOVITA_API_KEY,
+    NOVITA_BASE_URL,
+    NOVITA_SMALL_MODEL_NAME,
+    NOVITA_LARGE_MODEL_NAME,
     SMALL_MODEL_TEMPERATURE,
     LARGE_MODEL_TEMPERATURE,
     MAX_TOKENS,
+    REQUEST_TIMEOUT,
+    MAX_RETRIES,
 )
 from llm.clients import token_tracker
 
 
 class NovitaLLMClient:
     """
-    Novita.ai üzerinde OpenAI-uyumlu LLM client.
+    Novita AI LLM client (OpenAI-compatible API).
 
-    Modeller: Qwen3.5-35B-A3B (small), Qwen3.5-122B-A10B (large)
-    Base URL: https://api.novita.ai/openai
+    Novita: GPU cloud + LLM inference. Pay-per-use, OpenAI uyumlu.
     """
-
-    # Karakter başına yaklaşık token sayısı (Türkçe/İngilizce karışık için)
-    _CHARS_PER_TOKEN = 4
-    # Model context limitinden güvenli tampon
-    _SAFETY_BUFFER = 256
 
     def __init__(
         self,
         model_name: str,
         api_key: str,
+        base_url: str | None = None,
         temperature: float = 0.3,
-        max_tokens: int = 8192,
-        base_url: str = "https://api.novita.ai/openai",
-        context_limit: int = 16384,
+        max_tokens: int = 512,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> None:
         if not api_key:
-            raise RuntimeError(
-                "NOVITA_API_KEY tanımlı değil. .env dosyanı kontrol et."
-            )
+            raise RuntimeError("NOVITA_API_KEY tanımlı değil")
 
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.context_limit = context_limit
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
-
-        print(f"[OK] Novita LLM - Model: {model_name}")
-
-    def _safe_max_tokens(self, prompt: str) -> int:
-        """Input boyutuna göre context sınırını aşmayan max_tokens hesaplar."""
-        estimated_input = len(prompt) // self._CHARS_PER_TOKEN
-        available = self.context_limit - estimated_input - self._SAFETY_BUFFER
-        return max(256, min(self.max_tokens, available))
+        # 429/5xx: SDK retry (exp backoff + Retry-After) + timeout (asılı socket sınırı)
+        self.timeout = float(timeout if timeout is not None else REQUEST_TIMEOUT)
+        self.max_retries = int(max_retries if max_retries is not None else MAX_RETRIES)
+        self._client = OpenAI(
+            api_key=api_key,
+            base_url=base_url or NOVITA_BASE_URL,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
+        print(f"[OK] Novita LLM - Model: {model_name} (timeout={self.timeout}s, retries={self.max_retries})")
 
     def __call__(self, prompt: str) -> str:
-        """Modele prompt gönder ve cevap al."""
         try:
-            actual_max_tokens = self._safe_max_tokens(prompt)
             response = self._client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.temperature,
-                max_tokens=actual_max_tokens,
+                max_tokens=self.max_tokens,
             )
-
             content = response.choices[0].message.content
             if content is None:
-                raise RuntimeError("Novita LLM API boş content döndürdü")
+                raise RuntimeError("Novita API boş content döndürdü")
 
+            # Token kullanımını kaydet (WGR'den gelen token_tracker entegrasyonu)
             if response.usage:
                 token_tracker.add(response.usage.total_tokens)
 
             return content.strip()
-
         except Exception as e:
             error_msg = str(e)
-
             if "rate_limit" in error_msg.lower() or "429" in error_msg:
-                raise RuntimeError(
-                    "Novita rate limit aşıldı. Bir süre bekleyip tekrar dene."
-                ) from e
-
-            if "401" in error_msg or "unauthorized" in error_msg.lower():
-                raise RuntimeError(
-                    "Novita API key geçersiz. NOVITA_API_KEY değerini kontrol et."
-                ) from e
-
-            raise RuntimeError(f"Novita LLM hatası: {error_msg}") from e
+                raise RuntimeError("⚠️  Novita rate limit aşıldı") from e
+            raise RuntimeError(f"Novita API hatası: {error_msg}") from e
 
 
 def get_small_novita_llm() -> NovitaLLMClient:
-    """Küçük/hızlı Novita model instance'ı."""
-    import os
-    api_key = os.getenv("NOVITA_API_KEY", "")
     return NovitaLLMClient(
-        model_name=CONFIG.novita_small_model,
-        api_key=api_key,
+        model_name=NOVITA_SMALL_MODEL_NAME,
+        api_key=NOVITA_API_KEY,
+        base_url=NOVITA_BASE_URL,
         temperature=SMALL_MODEL_TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        context_limit=16384,
     )
 
 
 def get_large_novita_llm() -> NovitaLLMClient:
-    """Büyük/güçlü Novita model instance'ı."""
-    import os
-    api_key = os.getenv("NOVITA_API_KEY", "")
     return NovitaLLMClient(
-        model_name=CONFIG.novita_large_model,
-        api_key=api_key,
+        model_name=NOVITA_LARGE_MODEL_NAME,
+        api_key=NOVITA_API_KEY,
+        base_url=NOVITA_BASE_URL,
         temperature=LARGE_MODEL_TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        context_limit=16384,
     )

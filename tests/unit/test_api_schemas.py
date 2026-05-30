@@ -14,7 +14,7 @@ class TestLateChunkingOptions:
     def test_default_values(self):
         """Test default values are set correctly"""
         lc = LateChunkingOptions()
-        assert lc.enabled is True
+        assert lc.enabled is False  # late chunking is opt-in (disabled by default)
         assert lc.coarse_k_factor == 3
         assert lc.window_size == 3
         assert lc.stride == 1
@@ -162,11 +162,15 @@ class TestRagSearchResponse:
         ]
         response = RagSearchResponse(
             query="test query",
-            top_k=5,
-            results=results
+            top_k_per_source=5,
+            total_returned=2,
+            yaml_count=1,
+            pdf_count=1,
+            results=results,
         )
         assert response.query == "test query"
-        assert response.top_k == 5
+        assert response.top_k_per_source == 5
+        assert response.total_returned == 2
         assert len(response.results) == 2
         assert response.results[0].score == 0.9
 
@@ -174,7 +178,10 @@ class TestRagSearchResponse:
         """Test response with empty results"""
         response = RagSearchResponse(
             query="no matches",
-            top_k=5,
-            results=[]
+            top_k_per_source=5,
+            total_returned=0,
+            yaml_count=0,
+            pdf_count=0,
+            results=[],
         )
         assert len(response.results) == 0

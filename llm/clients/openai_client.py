@@ -17,6 +17,8 @@ from llm.core.config import (
     SMALL_MODEL_TEMPERATURE,
     LARGE_MODEL_TEMPERATURE,
     MAX_TOKENS,
+    REQUEST_TIMEOUT,
+    MAX_RETRIES,
 )
 from llm.clients import token_tracker
 
@@ -37,6 +39,8 @@ class OpenAIClient:
         model_name: str,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> None:
         if not OPENAI_API_KEY:
             raise RuntimeError(
@@ -51,7 +55,14 @@ class OpenAIClient:
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        # 429/5xx: SDK retry (exp backoff + Retry-After) + timeout (asılı socket sınırı)
+        self.timeout = float(timeout if timeout is not None else REQUEST_TIMEOUT)
+        self.max_retries = int(max_retries if max_retries is not None else MAX_RETRIES)
+        self.client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
 
     def __call__(self, prompt: str) -> str:
         """
