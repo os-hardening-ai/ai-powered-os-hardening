@@ -59,17 +59,23 @@ def _get_ollama_clients() -> Tuple[LLMCallable, LLMCallable]:
     return small, large
 
 
-# Sağlayıcı adı → (small, large) çifti kuran fonksiyon
+def _get_huggingface_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """HuggingFace client'larını local import ile al (ücretsiz tier)."""
+    from .huggingface_client import get_small_hf_llm, get_large_hf_llm
+
+    return get_small_hf_llm(), get_large_hf_llm()
+
+
+# Sağlayıcı adı → (small, large) çifti kuran fonksiyon.
+# Not: builder'lar burada tutulur (ollama özel kwargs gerektirir); registry yalnızca
+# SIRA + maliyet metaverisi için kullanılır (ücretsiz-first politikası tek yerde).
 _PROVIDER_BUILDERS: Dict[str, Callable[[], Tuple[LLMCallable, LLMCallable]]] = {
     "groq": _get_groq_clients,
-    "openai": _get_openai_clients,
+    "huggingface": _get_huggingface_clients,
     "ollama": _get_ollama_clients,
     "novita": _get_novita_clients,
+    "openai": _get_openai_clients,
 }
-
-# Birincil sağlayıcı başarısız olursa denenecek varsayılan sıra. Anahtarı/erişimi
-# olmayan sağlayıcılar otomatik atlanır (lazy build hatası → skip).
-_DEFAULT_FALLBACK_ORDER: List[str] = ["groq", "novita", "openai", "ollama"]
 
 
 class FallbackLLM:
@@ -90,10 +96,16 @@ class FallbackLLM:
         role: str,                      # "small" | "large"
         providers: List[str],
         cache: Dict[str, Optional[Tuple[LLMCallable, LLMCallable]]],
+        stats: Optional[dict] = None,
     ) -> None:
         self.role = role
         self.providers = providers
         self._cache = cache
+        # Gözlemlenebilirlik: hangi sağlayıcı kaç kez servis etti, kaç fallback oldu.
+        # small/large paylaşımlı stats dict alabilir (get_llm_clients öyle verir).
+        self.stats = stats if stats is not None else {
+            "total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {},
+        }
 
     def _client(self, provider: str) -> Optional[LLMCallable]:
         if provider not in self._cache:
@@ -109,22 +121,39 @@ class FallbackLLM:
         return built[0] if self.role == "small" else built[1]
 
     def __call__(self, prompt: str) -> str:
+        from llm.clients.base import classify_error
+
+        self.stats["total_calls"] += 1
         last_exc: Optional[Exception] = None
         attempted: List[str] = []
-        for provider in self.providers:
+        for idx, provider in enumerate(self.providers):
             client = self._client(provider)
             if client is None:
                 continue
             attempted.append(provider)
             try:
-                return client(prompt)
+                result = client(prompt)
+                self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
+                if idx > 0:  # birincil değil → fallback gerçekleşti
+                    self.stats["fallback_count"] += 1
+                    logger.info("[FallbackLLM] '%s' ile kurtarıldı (fallback)", provider)
+                return result
             except Exception as exc:
-                last_exc = exc
-                logger.warning("[FallbackLLM] '%s' çağrısı başarısız, sıradakine geçiliyor: %s", provider, exc)
+                last_exc = classify_error(exc, provider)
+                logger.warning(
+                    "[FallbackLLM] '%s' başarısız (%s), sıradakine geçiliyor: %s",
+                    provider, type(last_exc).__name__, last_exc,
+                )
+        self.stats["failures"] += 1
         raise RuntimeError(
             f"Tüm LLM sağlayıcıları başarısız oldu (denenen: {attempted or self.providers}). "
             f"Son hata: {last_exc}"
         )
+
+    def get_stats(self) -> dict:
+        total = self.stats["total_calls"]
+        rate = (self.stats["fallback_count"] / total) if total else 0.0
+        return {**self.stats, "fallback_rate": round(rate, 4)}
 
 
 def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCallable]:
@@ -138,6 +167,8 @@ def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCalla
     Dönüş:
         (llm_small, llm_large)  # her ikisi de Callable[[str], str]
     """
+    from llm.clients.registry import build_order, get_spec, Cost
+
     provider = (LLM_PROVIDER or "groq").lower()
     if provider not in _PROVIDER_BUILDERS:
         raise ValueError(
@@ -148,11 +179,14 @@ def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCalla
     if not enable_fallback:
         return _PROVIDER_BUILDERS[provider]()
 
-    # Birincil önce, sonra varsayılan sıradaki diğerleri (tekrarsız)
-    order = [provider] + [p for p in _DEFAULT_FALLBACK_ORDER if p != provider]
+    # Sıra registry'den: ücretsiz-first (groq → huggingface → ollama); PAID dışarıda.
+    # Birincil sağlayıcı PAID ise (kullanıcı açıkça seçtiyse) yine başa alınır.
+    primary_is_paid = get_spec(provider).cost is Cost.PAID
+    order = build_order(primary=provider, include_paid=primary_is_paid)
     shared_cache: Dict[str, Optional[Tuple[LLMCallable, LLMCallable]]] = {}
-    small = FallbackLLM("small", order, shared_cache)
-    large = FallbackLLM("large", order, shared_cache)
+    shared_stats = {"total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {}}
+    small = FallbackLLM("small", order, shared_cache, shared_stats)
+    large = FallbackLLM("large", order, shared_cache, shared_stats)
     return small, large
 
 
