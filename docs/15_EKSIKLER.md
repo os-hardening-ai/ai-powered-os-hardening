@@ -1,4 +1,4 @@
-# 14 — Eksikler ve Yapılacaklar (Kalan İş Listesi)
+# 15 — Eksikler ve Yapılacaklar (Kalan İş Listesi)
 
 **Güncelleme:** 2026-05-30
 **Kaynak:** Bitirme Proje Öneri Formu (İP 1-13 + H1-H4), ara raporlar (Kasım'25 / Ocak'26 / Mart'26), kod incelemesi.
@@ -15,11 +15,11 @@ Bunlar öneri formunda yazılı; tamamlanmadan proje "tam" sayılmaz.
 | # | İş | Form ref | Durum | Not |
 |---|----|----------|-------|-----|
 | A1 | **Web Arayüzü (React+TS)** | İP-10 | ❌ | Chat UI, OS/rol seçimi, öneri görüntüleme, geri bildirim. *Frontend ayrı repoda ise bu madde oradan kapanır.* |
-| A2 | **Değerlendirme / ölçüm harness'i** | İP-5/6/7/8 | ✅⚠️ | **Ölçüldü** (`evaluation/ip_metrics.py`, bkz. [14_DEGERLENDIRME.md](14_DEGERLENDIRME.md)): İP-6 %100, İP-7 %100, İP-8 %100 (hepsi eşik üstü ✅). İP-5 groundedness 0.41 ⚠️ (somut sorularda yüksek, soyut hedeflerde düşük — prompt kısıtı ile iyileştirilebilir). |
+| A2 | **Değerlendirme / ölçüm harness'i** | İP-5/6/7/8 | ✅⚠️ | **Ölçüldü** (`evaluation/ip_metrics.py`, bkz. [14_DEGERLENDIRME.md](14_DEGERLENDIRME.md)): İP-6 %100, İP-7 %100, İP-8 %100 (eşik üstü ✅). İP-5 groundedness **0.59** ⚠️ (önce 0.41 — ölçüm hatası düzeltildi: claim extraction + bağlam kesme + OS filtresi). Somut sorularda H1'de 0.89; soyut hedeflerde hâlâ düşük. |
 | A3 | **H1 — RAG vs saf-LLM** | H1 | ✅ | Kanıt toplandı (bkz. [14_DEGERLENDIRME.md](14_DEGERLENDIRME.md) / `evaluation/h1_rag_vs_llm.py`): groundedness 0.72→0.89, CIS atıf 0.33→0.83. n=6, büyütülebilir. |
-| A4 | **H3 — P95 < 5sn** | H3 | ✅⚠️ | **Ölçüldü** (`evaluation/load_test.py`): Groq ile TaskPlanner 0.71s + HardeningAgent 2.76s <5s ✅. Novita-large (deepseek-v3) yavaş (16-23s) ❌ — latency model-seçimi kaynaklı, kod değil. |
-| A5 | **H2 / H4 — karar süresi & kabul oranı** | H2, H4 | ❌ | Kullanıcı çalışması gerektirir (küçük ölçekli anket yeterli). |
-| A6 | **İP-12 — performans testi + kullanıcı anketi** | İP-12 | ⚠️ | Raporlardaki sayılar placeholder; gerçek yük testi + memnuniyet >%70 anketi yok. |
+| A4 | **H3 — P95 < 5sn** | H3 | ⚠️ | **Ölçüldü** (`evaluation/load_test.py`): uçtan-uca P95<5s **ücretsiz/düşük-ücretli sağlayıcılarla KARŞILANMIYOR** (Groq yük altında rate-limit backoff 128-148s; Novita-large tek-kullanıcıda bile 5.6-15.7s). **Ama** RAG retrieval altyapısı (chunking+vektör arama) P50 ~1s → H3'ün *mimari* iddiası karşılanıyor; darboğaz dış LLM/embedding API'si. Detay [14_DEGERLENDIRME.md](14_DEGERLENDIRME.md). |
+| A5 | **H2 / H4 — karar süresi & kabul oranı** | H2, H4 | ⚠️ | Kullanıcı çalışması gerektirir. **Enstrüman hazır** (`evaluation/survey_eval.py` + [16_KULLANICI_CALISMASI.md](16_KULLANICI_CALISMASI.md)); ekip pilotu (n~5-10) koşunca kapanır. |
+| A6 | **İP-12 — performans testi + kullanıcı anketi** | İP-12 | ⚠️ | Perf testi ✅ (`evaluation/load_test.py`). Memnuniyet >%70 anketi: **enstrüman hazır** (A5 ile aynı çalışma), pilot bekliyor. |
 
 > **Öneri Formunda VAR ve TAMAM olanlar:** İP-1 doküman, İP-2 chunking, İP-3 embedding+Qdrant,
 > İP-4 RAG pipeline, İP-5 LLM entegrasyon (4 sağlayıcı + fallback), İP-6 Görev Planlayıcı,

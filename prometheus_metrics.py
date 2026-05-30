@@ -20,7 +20,10 @@ import os
 from contextlib import contextmanager
 
 from prometheus_client import Counter, Histogram
-from prometheus_fastapi_instrumentator import Instrumentator
+# NOT: `prometheus_fastapi_instrumentator` OPSİYONELDİR ve yalnızca setup_metrics()
+# içinde kullanılır → import'u modül tepesinde DEĞİL, fonksiyon içinde (lazy) yapılır.
+# Aksi halde paket kurulu değilse (CI, yük testi, minimal dev) tüm uygulama import'u
+# çöker. Custom metrikler (aşağıdaki Counter/Histogram) prometheus_client ile çalışır.
 
 
 # ── Query counters ─────────────────────────────────────────────────────────────
@@ -94,7 +97,22 @@ def setup_metrics(app) -> None:
     Attach Prometheus metrics to a FastAPI app.
     Call once inside create_app(), before registering routers.
     Exposes /metrics/prometheus — scraped by Prometheus.
+
+    `prometheus_fastapi_instrumentator` opsiyoneldir: kuruluysa otomatik HTTP
+    instrumentation + /metrics/prometheus ucu eklenir. Kurulu değilse (CI, yük testi,
+    minimal dev) custom metrikler (Counter/Histogram) yine ÇALIŞIR; sadece otomatik
+    uç atlanır — uygulama import'u/başlangıcı bu yüzden ASLA çökmez.
     """
+    try:
+        from prometheus_fastapi_instrumentator import Instrumentator
+    except ImportError:   # ModuleNotFoundError dahil — kısmi/eksik kurulumu da yakalar
+        import logging as _lg
+        _lg.getLogger(__name__).warning(
+            "[Metrics] prometheus_fastapi_instrumentator kurulu degil — otomatik HTTP "
+            "instrumentation atlandi (custom metrikler aktif). "
+            "Kurulum: pip install prometheus-fastapi-instrumentator")
+        return
+
     Instrumentator(
         should_group_status_codes=False,
         should_ignore_untemplated=True,
