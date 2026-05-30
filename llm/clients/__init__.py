@@ -177,6 +177,53 @@ class FallbackLLM:
             f"Son hata: {last_exc}"
         )
 
+    def stream(self, prompt: str):
+        """GERÇEK token streaming + fallback. İlk token'ı veren sağlayıcıdan akıtır;
+        bir sağlayıcı ilk token'dan ÖNCE hata verirse sonrakine geçer (commit-on-first-token).
+        `stream()` desteklemeyen sağlayıcı (örn. Novita-net) → tam cevabı tek parça yield eder.
+        """
+        from llm.clients.base import classify_error, ModelUnavailableError
+
+        self.stats["total_calls"] += 1
+        last_exc: Optional[Exception] = None
+        attempted: List[str] = []
+        for idx, provider in enumerate(self.providers):
+            client = self._client(provider)
+            if client is None:
+                continue
+            attempted.append(provider)
+            try:
+                if hasattr(client, "stream"):
+                    gen = client.stream(prompt)
+                    first = next(gen)                 # ilk token → hata burada sağlayıcıyı atlatır
+                    self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
+                    if idx > 0:
+                        self.stats["fallback_count"] += 1
+                        logger.info("[FallbackLLM.stream] '%s' ile kurtarıldı", provider)
+                    yield first
+                    yield from gen
+                    return
+                else:  # stream'siz sağlayıcı → tam cevabı tek parça akıt (graceful degrade)
+                    result = client(prompt)
+                    self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
+                    if idx > 0:
+                        self.stats["fallback_count"] += 1
+                    yield result
+                    return
+            except StopIteration:
+                last_exc = ModelUnavailableError(f"{provider}: boş stream", provider)
+                continue
+            except Exception as exc:
+                last_exc = classify_error(exc, provider)
+                logger.warning("[FallbackLLM.stream] '%s' başarısız (%s), sıradakine: %s",
+                               provider, type(last_exc).__name__, last_exc)
+                continue
+        self.stats["failures"] += 1
+        raise RuntimeError(
+            f"Tüm LLM sağlayıcıları (stream) başarısız (denenen: {attempted or self.providers}). "
+            f"Son hata: {last_exc}"
+        )
+
     def get_stats(self) -> dict:
         total = self.stats["total_calls"]
         rate = (self.stats["fallback_count"] / total) if total else 0.0

@@ -84,6 +84,35 @@ class OpenAICompatibleClient:
         except Exception as exc:  # ham SDK hatasını ortak taksonomiye çevir
             raise classify_error(exc, self.provider)
 
+    def stream(self, prompt: str):
+        """GERÇEK token streaming — SDK stream=True ile token delta'larını yield eder.
+
+        İlk token'dan ÖNCE hata olursa (429/auth) sınıflandırıp yükseltir → çağıran
+        (FallbackLLM.stream) bir sonraki sağlayıcıya geçebilir. Hiç içerik gelmezse hata.
+        """
+        try:
+            stream = self._client.chat.completions.create(
+                model=self.model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                stream=True,
+            )
+            got = False
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                content = getattr(delta, "content", None) if delta is not None else None
+                if content:
+                    got = True
+                    yield content
+            if not got:
+                raise ModelUnavailableError(f"{self.provider}: stream boş döndü", self.provider)
+        except Exception as exc:
+            raise classify_error(exc, self.provider)
+
 
 # ── Sağlayıcı ön-ayarları ────────────────────────────────────────────────────────
 # base_url + makul varsayılan model + env anahtar adı. Model adları DEĞİŞEBİLİR

@@ -131,3 +131,67 @@ class TestGetLLMClients:
         monkeypatch.setattr(clients, "LLM_PROVIDER", "not_a_provider")
         with pytest.raises(ValueError, match="Desteklenmeyen LLM_PROVIDER"):
             get_llm_clients()
+
+
+class _Streamable:
+    """stream()+__call__ olan sahte istemci (gerçek OpenAICompatibleClient gibi)."""
+
+    def __init__(self, label, tokens=None, stream_error=None):
+        self.label = label
+        self._tokens = tokens
+        self._err = stream_error
+
+    def __call__(self, _p):
+        return f"{self.label}-full"
+
+    def stream(self, _p):
+        if self._err:
+            raise self._err
+        for t in (self._tokens if self._tokens is not None else [self.label]):
+            yield t
+
+
+def _streamable_builder(name, tokens=None, stream_error=None):
+    def builder():
+        return (_Streamable(f"{name}-s", tokens, stream_error),
+                _Streamable(f"{name}-l", tokens, stream_error))
+    return builder
+
+
+class TestFallbackStream:
+    def test_streams_real_tokens_from_primary(self):
+        cache = {}
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(clients, "_PROVIDER_BUILDERS",
+                       {"cerebras": _streamable_builder("cb", tokens=["He", "llo"])})
+            fb = FallbackLLM("large", ["cerebras"], cache)
+            assert list(fb.stream("p")) == ["He", "llo"]
+
+    def test_falls_through_when_primary_stream_errors_upfront(self):
+        cache = {}
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(clients, "_PROVIDER_BUILDERS", {
+                "cerebras": _streamable_builder("cb", stream_error=RuntimeError("429 rate limit")),
+                "sambanova": _streamable_builder("sn", tokens=["ok", "!"]),
+            })
+            fb = FallbackLLM("large", ["cerebras", "sambanova"], cache)
+            assert list(fb.stream("p")) == ["ok", "!"]   # cerebras 429 -> sambanova
+
+    def test_degrades_for_non_streaming_provider(self):
+        # Plain callable (no .stream) → tam cevabı tek parça akıt
+        cache = {}
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(clients, "_PROVIDER_BUILDERS", {"novita": _provider("novita")})
+            fb = FallbackLLM("small", ["novita"], cache)
+            assert list(fb.stream("p")) == ["novita-small"]
+
+    def test_raises_when_all_stream_providers_fail(self):
+        cache = {}
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(clients, "_PROVIDER_BUILDERS", {
+                "cerebras": _streamable_builder("cb", stream_error=RuntimeError("429")),
+                "sambanova": _streamable_builder("sn", stream_error=RuntimeError("500")),
+            })
+            fb = FallbackLLM("large", ["cerebras", "sambanova"], cache)
+            with pytest.raises(RuntimeError, match="stream"):
+                list(fb.stream("p"))

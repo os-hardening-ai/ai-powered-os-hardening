@@ -82,6 +82,43 @@ class TestCall:
             _client(exc=Exception("model not found"))("p")
 
 
+class _FakeStreamOpenAI:
+    def __init__(self, contents=None, exc=None):
+        self._contents = contents or []
+        self._exc = exc
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **kw):
+        if self._exc:
+            raise self._exc
+        return iter([
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=c))])
+            for c in self._contents
+        ])
+
+
+def _stream_client(contents=None, exc=None):
+    c = OpenAICompatibleClient(provider="test", model_name="m", api_key="k", base_url="https://x/v1")
+    c._client = _FakeStreamOpenAI(contents, exc)
+    return c
+
+
+class TestStream:
+    def test_yields_token_deltas(self):
+        assert list(_stream_client(["Hel", "lo", " dünya"]).stream("p")) == ["Hel", "lo", " dünya"]
+
+    def test_skips_empty_deltas(self):
+        assert list(_stream_client(["a", None, "", "b"]).stream("p")) == ["a", "b"]
+
+    def test_empty_stream_raises(self):
+        with pytest.raises(ModelUnavailableError):
+            list(_stream_client([]).stream("p"))
+
+    def test_stream_error_classified(self):
+        with pytest.raises(RateLimitError):
+            list(_stream_client(exc=Exception("rate limit exceeded 429")).stream("p"))
+
+
 class TestPresets:
     def test_all_presets_well_formed(self):
         assert "cerebras" in PROVIDER_PRESETS and "sambanova" in PROVIDER_PRESETS

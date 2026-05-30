@@ -126,6 +126,7 @@ class ChatResponse(BaseModel):
     request_id: Optional[str] = Field(None, description="Request ID")
     estimated_cost: Optional[float] = Field(None, description="Tahmini maliyet ($)")
     verification_confidence: Optional[float] = Field(None, description="Claim verification güven skoru (0-1). Enhanced RAG etkinse dolar.")
+    unsupported_claims: List[str] = Field(default_factory=list, description="Bağlamca DESTEKLENMEYEN iddialar (ClaimVerifier) — boşsa hepsi grounded veya doğrulama yapılmadı.")
 
 
 # ──────────────────────────────────────────────
@@ -335,6 +336,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             request_id=ctx.request_id,
             estimated_cost=result.estimated_cost,
             verification_confidence=_meta.get("verification_confidence"),
+            unsupported_claims=_meta.get("unsupported_claims", []) or [],
         )
 
     except APIError:
@@ -405,44 +407,69 @@ async def chat_stream(payload: ChatRequest):
             except Exception as e:
                 _conv_logger.warning(f"[ChatAPI] RAG init failed, devam ediliyor: {e}")
 
-        # Pipeline
-        pipeline = SecurePipelineV2(
-            llm_ultra_fast=llm_small,
-            llm_small=llm_small,
-            llm_large=llm_large,
-            rag_builder=rag_builder,
-            debug=False,
+        # ── Güvenlik (fail-closed) — tam pipeline'ı koşmadan hızlı sınıflandırma ──
+        # GERÇEK streaming için cevabı ÖNCE üretip bölmek yerine üretimi token-token akıtırız;
+        # ama güvenlik korunmalı → önce safety, sonra RAG + grounded prompt + stream.
+        from llm.pipelines.layers.safety_classifier import SafetyClassifier
+        from llm.prompts.simple_prompts import get_prompt_for_complexity
+
+        safety = await asyncio.to_thread(
+            SafetyClassifier(llm_ultra_fast=llm_small).classify, payload.question
         )
-
-        # Run with timeout
-        try:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(pipeline.run, ctx),
-                timeout=timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            raise APIError(
-                status_code=504,
-                error_code=ErrorCode.TIMEOUT,
-                message=f"Streaming request timeout after {timeout_seconds} seconds",
-                details={"timeout": timeout_seconds}
+        if not safety.is_safe:
+            async def _refusal():
+                yield ("Bu istek savunma-amaçlı güvenlik kapsamı dışında görünüyor; "
+                       "bu konuda yardımcı olamıyorum.")
+            return await stream_chat_response(
+                _refusal(),
+                metadata={"safety": safety.category, "rag_used": False, "blocked": True},
             )
 
-        # Stream the answer token by token
+        # ── RAG bağlamı (varsa) → prompt'a enjekte (grounded üretim) ──
+        if rag_builder is not None:
+            try:
+                _ctx_txt, _chunks = await asyncio.to_thread(
+                    rag_builder.retrieve_balanced, payload.question
+                )
+                if _ctx_txt:
+                    ctx.retrieved_context = _ctx_txt
+            except Exception as _re:
+                _conv_logger.warning("[ChatAPI.stream] RAG retrieve başarısız (non-fatal): %s", _re)
+
+        prompt = get_prompt_for_complexity(ctx, "medium")
+
+        # ── GERÇEK token streaming: llm_large.stream() (senkron üretici) → asyncio kuyruğu ──
+        # (sync ağ akışını event loop'u bloklamadan async SSE'ye köprüler)
         async def token_generator():
-            # Split answer into words and stream
-            words = (result.answer or "No response").split()
-            for word in words:
-                yield word + " "
+            queue: asyncio.Queue = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+            sentinel = object()
 
-        # Prepare metadata
+            def _produce():
+                try:
+                    streamer = getattr(llm_large, "stream", None)
+                    if streamer is not None:
+                        for tok in streamer(prompt):              # GERÇEK token delta'ları
+                            loop.call_soon_threadsafe(queue.put_nowait, tok)
+                    else:                                          # stream yoksa tek parça
+                        loop.call_soon_threadsafe(queue.put_nowait, llm_large(prompt))
+                except Exception as exc:  # noqa: BLE001 - hatayı SSE'ye ilet
+                    loop.call_soon_threadsafe(queue.put_nowait, f"\n[stream hatası: {exc}]")
+                finally:
+                    loop.call_soon_threadsafe(queue.put_nowait, sentinel)
+
+            loop.run_in_executor(None, _produce)
+            while True:
+                tok = await queue.get()
+                if tok is sentinel:
+                    break
+                yield tok
+
         metadata = {
-            "intent": result.intent.type if result.intent else None,
-            "safety": result.safety.category if result.safety else None,
-            "rag_used": payload.use_rag,
-            "layer_path": result.layer_path,
+            "safety": safety.category,
+            "rag_used": ctx.retrieved_context is not None,
+            "streaming": "real-token",
         }
-
         return await stream_chat_response(token_generator(), metadata=metadata)
 
     except Exception as e:
