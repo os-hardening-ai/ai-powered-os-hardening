@@ -60,16 +60,32 @@ def _get_ollama_clients() -> Tuple[LLMCallable, LLMCallable]:
 
 
 def _get_huggingface_clients() -> Tuple[LLMCallable, LLMCallable]:
-    """HuggingFace client'larını local import ile al (ücretsiz tier)."""
+    """HuggingFace client'larını local import ile al (ücretsiz tier — DEPRECATED, bkz. registry)."""
     from .huggingface_client import get_small_hf_llm, get_large_hf_llm
 
     return get_small_hf_llm(), get_large_hf_llm()
+
+
+def _get_cerebras_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """Cerebras (gpt-oss-120b) — generic OpenAI-uyumlu client (en hızlı + ücretsiz 1M/gün)."""
+    from .openai_compatible_client import get_small_cerebras_llm, get_large_cerebras_llm
+
+    return get_small_cerebras_llm(), get_large_cerebras_llm()
+
+
+def _get_sambanova_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """SambaNova (gpt-oss-120b) — generic OpenAI-uyumlu client (hızlı fallback)."""
+    from .openai_compatible_client import get_small_sambanova_llm, get_large_sambanova_llm
+
+    return get_small_sambanova_llm(), get_large_sambanova_llm()
 
 
 # Sağlayıcı adı → (small, large) çifti kuran fonksiyon.
 # Not: builder'lar burada tutulur (ollama özel kwargs gerektirir); registry yalnızca
 # SIRA + maliyet metaverisi için kullanılır (ücretsiz-first politikası tek yerde).
 _PROVIDER_BUILDERS: Dict[str, Callable[[], Tuple[LLMCallable, LLMCallable]]] = {
+    "cerebras": _get_cerebras_clients,
+    "sambanova": _get_sambanova_clients,
     "groq": _get_groq_clients,
     "huggingface": _get_huggingface_clients,
     "ollama": _get_ollama_clients,

@@ -92,7 +92,7 @@ PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
     "cerebras":  {"base_url": "https://api.cerebras.ai/v1",
                   "model": "gpt-oss-120b",                              "key_env": "CEREBRAS_API_KEY"},
     "sambanova": {"base_url": "https://api.sambanova.ai/v1",
-                  "model": "Meta-Llama-3.3-70B-Instruct",               "key_env": "SAMBANOVA_API_KEY"},
+                  "model": "gpt-oss-120b",                              "key_env": "SAMBANOVA_API_KEY"},
     "deepinfra": {"base_url": "https://api.deepinfra.com/v1/openai",
                   "model": "meta-llama/Llama-3.3-70B-Instruct",         "key_env": "DEEPINFRA_API_KEY"},
     "openrouter": {"base_url": "https://openrouter.ai/api/v1",
@@ -145,3 +145,28 @@ def build_from_preset(
         timeout=timeout,
         max_retries=max_retries,
     )
+
+
+# ── (small, large) factory'leri — registry/builders bunları kullanır ─────────────
+# small = sınıflandırma/doğrulama (düşük temp değil; SMALL_MODEL_TEMPERATURE),
+# large = üretim (LARGE_MODEL_TEMPERATURE, daha deterministik). Cerebras'ta tek hızlı
+# model (gpt-oss-120b) olduğundan small=large modeli, yalnızca temperature ayrışır.
+
+def get_small_cerebras_llm() -> OpenAICompatibleClient:
+    from llm.core.config import SMALL_MODEL_TEMPERATURE
+    return build_from_preset("cerebras", temperature=SMALL_MODEL_TEMPERATURE)
+
+
+def get_large_cerebras_llm() -> OpenAICompatibleClient:
+    from llm.core.config import LARGE_MODEL_TEMPERATURE
+    return build_from_preset("cerebras", temperature=LARGE_MODEL_TEMPERATURE)
+
+
+def get_small_sambanova_llm() -> OpenAICompatibleClient:
+    from llm.core.config import SMALL_MODEL_TEMPERATURE
+    return build_from_preset("sambanova", temperature=SMALL_MODEL_TEMPERATURE)
+
+
+def get_large_sambanova_llm() -> OpenAICompatibleClient:
+    from llm.core.config import LARGE_MODEL_TEMPERATURE
+    return build_from_preset("sambanova", temperature=LARGE_MODEL_TEMPERATURE)

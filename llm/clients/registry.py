@@ -34,6 +34,9 @@ class ProviderSpec:
     # Ücretsiz-first sırada düşük = önce. Sadece FREE/FREE_TIER için anlamlı.
     free_priority: int = 100
     notes: str = ""
+    # True → varsayılan fallback zincirinden HARİÇ tutulur (yalnızca açıkça primary
+    # seçilirse kullanılır). HF gibi bozuk/eskimiş sağlayıcıları otomatik zincirden çıkarır.
+    deprecated: bool = False
 
     def build(self) -> Tuple[LLMCallable, LLMCallable]:
         mod_path, getters = self.builder_path.split(":")
@@ -47,17 +50,31 @@ class ProviderSpec:
 # sonra Ollama (yerel/limitsiz ama kurulum + yavaş olabilir → ağ sağlayıcıları düşünce son).
 
 _REGISTRY: Dict[str, ProviderSpec] = {
+    # Özel-donanım, OpenAI-uyumlu (generic client). Benchmark: gpt-oss-120b @ Cerebras
+    # 1.44s, @ SambaNova 3.17s (ikisi <5s). Ücretsiz/ucuz → ücretsiz-first başında.
+    "cerebras": ProviderSpec(
+        "cerebras", "llm.clients.openai_compatible_client:get_small_cerebras_llm,get_large_cerebras_llm",
+        Cost.FREE_TIER, free_priority=5,
+        notes="EN HIZLI + ücretsiz 1M token/gün (gpt-oss-120b ~1.4s); 30 RPM cap",
+    ),
+    "sambanova": ProviderSpec(
+        "sambanova", "llm.clients.openai_compatible_client:get_small_sambanova_llm,get_large_sambanova_llm",
+        Cost.FREE_TIER, free_priority=8,
+        notes="Hızlı + güvenilir fallback (gpt-oss-120b ~3.2s); dar ücretsiz kota",
+    ),
     "groq": ProviderSpec(
         "groq", "llm.clients.groq_client:get_small_groq_llm,get_large_groq_llm",
-        Cost.FREE_TIER, free_priority=10, notes="Hızlı, ücretsiz tier (rate-limit'li)",
-    ),
-    "huggingface": ProviderSpec(
-        "huggingface", "llm.clients.huggingface_client:get_small_hf_llm,get_large_hf_llm",
-        Cost.FREE_TIER, free_priority=20, notes="Ücretsiz Inference API (HF_API_KEY gerekir)",
+        Cost.FREE_TIER, free_priority=10, notes="Hızlı ama dar rate-limit (free tier 429)",
     ),
     "ollama": ProviderSpec(
         "ollama", "llm.clients.ollama_client:get_small_ollama_llm,get_large_ollama_llm",
-        Cost.FREE, free_priority=30, notes="Yerel, limitsiz, offline (kurulum gerekir)",
+        Cost.FREE, free_priority=850, notes="Yerel/offline son-çare (GPU yoksa yavaş)",
+    ),
+    "huggingface": ProviderSpec(
+        "huggingface", "llm.clients.huggingface_client:get_small_hf_llm,get_large_hf_llm",
+        Cost.FREE_TIER, free_priority=900, deprecated=True,
+        notes="DEPRECATED — chat-template hatası + artık aracı (Groq/Cerebras'a yönlendirir); "
+              "varsayılan zincirden ÇIKARILDI (yalnızca açıkça LLM_PROVIDER=huggingface ile)",
     ),
     # CHEAP_PAID — düşük ücretli, kotasız. Ücretsizler bittiğinde 429'a karşı
     # güvenlik ağı olarak istenirse zincire alınır (kullanıcı: "düşük ücretler de ok").
@@ -93,6 +110,8 @@ def free_first_order(include_cheap: bool = False, include_paid: bool = False) ->
     include_paid=True : pahalı PAID (OpenAI) de eklenir.
     """
     def _ok(s: ProviderSpec) -> bool:
+        if s.deprecated:
+            return False              # bozuk/eskimiş → otomatik zincire alınmaz
         if s.cost in (Cost.FREE, Cost.FREE_TIER):
             return True
         if s.cost is Cost.CHEAP_PAID:

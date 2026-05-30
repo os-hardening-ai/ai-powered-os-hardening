@@ -17,7 +17,15 @@ from llm.clients.registry import (
 class TestSpecs:
     def test_known_providers_registered(self):
         names = set(all_specs())
-        assert {"groq", "huggingface", "ollama", "novita", "openai"} <= names
+        assert {"cerebras", "sambanova", "groq", "ollama", "novita", "openai"} <= names
+
+    def test_cerebras_sambanova_free_tier(self):
+        assert get_spec("cerebras").cost is Cost.FREE_TIER
+        assert get_spec("sambanova").cost is Cost.FREE_TIER
+
+    def test_hf_is_deprecated(self):
+        # HF bozuk → registered ama deprecated (otomatik zincire alınmaz)
+        assert get_spec("huggingface").deprecated is True
 
     def test_groq_is_free_tier(self):
         assert get_spec("groq").cost is Cost.FREE_TIER
@@ -40,14 +48,21 @@ class TestSpecs:
 
 
 class TestFreeFirstOrder:
-    def test_excludes_paid_by_default(self):
+    def test_excludes_paid_and_deprecated_by_default(self):
         order = free_first_order()
         assert "novita" not in order and "openai" not in order
-        assert "groq" in order and "ollama" in order and "huggingface" in order
+        assert "huggingface" not in order            # DEPRECATED → varsayılan zincirden çıkarıldı
+        assert "cerebras" in order and "sambanova" in order
+        assert "groq" in order and "ollama" in order
+
+    def test_cerebras_first_then_sambanova_then_groq(self):
+        order = free_first_order()
+        assert order[0] == "cerebras"                # en hızlı + ücretsiz 1M/gün
+        assert order.index("cerebras") < order.index("sambanova") < order.index("groq")
 
     def test_groq_before_ollama(self):
         order = free_first_order()
-        assert order.index("groq") < order.index("ollama")  # hız önceliği
+        assert order.index("groq") < order.index("ollama")  # hız önceliği (ollama offline son-çare)
 
     def test_include_cheap_adds_novita_not_openai(self):
         order = free_first_order(include_cheap=True)
@@ -81,6 +96,12 @@ class TestBuildOrder:
 
     def test_include_cheap_appends_novita_as_safety_net(self):
         order = build_order(include_cheap=True)
-        assert order[0] == "groq"       # ücretsiz primary
+        assert order[0] == "cerebras"   # ücretsiz-first primary (en hızlı)
         assert "novita" in order        # 429 güvenlik ağı sonda
-        assert order.index("groq") < order.index("novita")
+        assert order.index("cerebras") < order.index("novita")
+        assert "huggingface" not in order   # deprecated hariç
+
+    def test_deprecated_hf_still_explicitly_selectable(self):
+        # HF varsayılan zincirde yok ama açıkça primary seçilirse yine başa gelir
+        order = build_order(primary="huggingface")
+        assert order[0] == "huggingface"
