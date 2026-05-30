@@ -10,12 +10,14 @@ Bu projede **modern AI/ML teknolojileri** kullanarak production-ready bir güven
 ├─────────────────────────────────────────────────────────────┤
 │  Backend Framework: FastAPI + Uvicorn                       │
 │  Machine Learning: scikit-learn + TF-IDF                    │
-│  LLM: Groq (Llama 3.3 70B, Llama 3.1 8B)  ← aktif         │
+│  LLM: Cerebras gpt-oss-120b ← aktif (primary, ücretsiz)    │
+│       fallback: SambaNova → Gemini 3.1 Flash → Novita       │
 │  Embedding: Novita qwen3-embedding-8b (4096 dim)            │
 │  Vector Store: Qdrant Cloud                                 │
-│  Cache: Redis (embedding + session)                         │
-│  Testing: pytest + custom evaluators                        │
-│  Security: Rate limiting, input validation, HSTS            │
+│  Cache/Session: Redis (session + JWT blacklist + rate limit)│
+│  Auth: JWT (PyJWT) + bcrypt + RBAC + SQLite (users/audit)   │
+│  Testing: pytest (516 unit) + custom evaluators             │
+│  Security: JWT auth, RBAC, audit log, rate limit, HSTS/CSP  │
 │  Container: Docker + Docker Compose                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -111,7 +113,7 @@ TfidfVectorizer(
 )
 ```
 
-**Çıktı**: 544 özellik (1,230 örnek dataset'ten)
+**Çıktı**: TF-IDF özellik matrisi (1.677 örnekli `intent_training_dataset.csv`'den)
 
 #### LogisticRegression
 **Amaç**: Intent classification (ana model)
@@ -127,10 +129,9 @@ LogisticRegression(
 )
 ```
 
-**Performans**:
-- Training accuracy: 91.16%
-- Test accuracy: 82.52%
-- CV accuracy: 85.37% ± 2.72%
+**Performans** (güncel model, 1.677 örnek):
+- Test accuracy: 90.48%
+- CV accuracy: 82.10% ± 3.46% (5-fold)
 
 #### LinearSVC (Secondary Model)
 **Amaç**: Alternative classifier (currently not used in hybrid, but available)
@@ -246,26 +247,23 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 ## 4. RAG (Retrieval-Augmented Generation)
 
-### Cohere Embeddings
-**Model**: embed-multilingual-v3.0
+### Novita Embeddings (aktif)
+**Model**: `qwen/qwen3-embedding-8b` — **4096 boyut**
 **Neden Seçtik?**
-- Çok dilli destek (Türkçe + İngilizce)
-- 1024 dimensions
-- Free tier: 100 requests/month
+- Yüksek kaliteli çok dilli (TR + EN) embedding, güçlü retrieval başarımı
+- 4096 dim → CIS/NIST gibi teknik metinlerde ince anlam ayrımı
+- Düşük maliyetli, kotasız (Novita)
 
-**Kullanım:**
+**Kullanım** (`rag/embeddings/novita_embeddings.py`):
 ```python
-import cohere
-
-co = cohere.Client(api_key=os.getenv("COHERE_API_KEY"))
-
-embeddings = co.embed(
-    texts=["SSH hardening best practices"],
-    model="embed-multilingual-v3.0",
-    input_type="search_query"
-).embeddings
-# embeddings: [1024-dim vector]
+# OpenAI-uyumlu Novita endpoint'i üzerinden
+client.embeddings.create(
+    model="qwen/qwen3-embedding-8b",
+    input=["SSH hardening best practices"],
+)
+# → 4096 boyutlu vektör (Qdrant koleksiyonu da 4096 dim)
 ```
+> Not: Redis embedding cache opsiyoneldir ve şu an **kapalı** (`cache_enabled=false`).
 
 ### Qdrant
 **Versiyon**: 1.7+

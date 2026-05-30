@@ -6,6 +6,34 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
 
 **Önemli Not**: Sistem kullanıcıdan gelen `use_rag` parametresini kabul eder ancak **akıllı RAG tetikleme** mantığı ile son kararı otomatik verir. Generic sorular için RAG otomatik olarak skip edilir (%55 performans artışı).
 
+> **LLM sağlayıcı notu:** Aşağıdaki şema/örneklerde geçen `Groq`/`groq.chat(...)` ifadeleri eski
+> sürümden kalma **gösterim amaçlıdır**. Güncel aktif sağlayıcı **Cerebras `gpt-oss-120b`**
+> (ücretsiz), fail-fast fallback zinciri: **Cerebras → SambaNova → Gemini 3.1 Flash Lite → Novita**.
+
+### Akış Diyagramı (Mermaid)
+
+```mermaid
+flowchart TD
+    Q([Kullanıcı sorusu]) --> L1[Katman 1: Safety<br/>LLM tehdit tespiti]
+    L1 -->|unsafe| REJ([Kibar ret])
+    L1 -->|safe| L2[Katman 2: Intent<br/>pattern <1ms + ML %90.48]
+    L2 --> L3{Katman 3: Routing}
+    L3 -->|smalltalk| P3A[3A Pattern Responder<br/>&lt;20ms, LLM yok]
+    L3 -->|info_request| P3B[3B Info Pipeline]
+    L3 -->|action_request| P3C[3C Action Pipeline]
+    L3 -->|out_of_scope| REJ
+
+    P3B --> RAGD{use_rag &amp;&amp;<br/>akıllı tetikleme?}
+    RAGD -->|hayır| GEN
+    RAGD -->|evet| RAG[QueryPlanner → Hybrid+MMR<br/>→ retrieval-skoru refinement]
+    RAG --> GEN[Katman 4: Generation<br/>complexity-bazlı model]
+    P3C --> GEN
+    GEN --> CV{ClaimVerifier<br/>groundedness}
+    CV -->|düşük conf| RF[Cevap-refinement:<br/>genişlet+yeniden üret 1x]
+    RF --> OUT
+    CV -->|yeterli| OUT([Yanıt + kaynaklar + confidence])
+```
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    KULLANICI SORUSU                           │
@@ -17,9 +45,9 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
         ║  KATMAN 1: SAFETY CLASSIFICATION           ║
         ║  ────────────────────────────────          ║
         ║  Amaç: Tehlikeli/zararlı sorguları tespit ║
-        ║  Teknoloji: LLM (Groq Llama 8B)            ║
-        ║  Süre: ~500-800ms                          ║
-        ║  Maliyet: $0 (Groq ücretsiz)               ║
+        ║  Teknoloji: LLM (Cerebras gpt-oss-120b)    ║
+        ║  Süre: ~300-600ms                          ║
+        ║  Maliyet: $0 (Cerebras ücretsiz tier)      ║
         ╚════════════════════════════════════════════╝
                          │
             ┌────────────┴────────────┐
@@ -78,7 +106,7 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
 Sisteme gelen sorguların güvenli olup olmadığını tespit etmek. Saldırı amaçlı, zararlı veya uygunsuz sorguları en başta reddetmek.
 
 ### Teknoloji
-- **LLM-based classification**: Groq Llama 8B (ücretsiz)
+- **LLM-based classification**: Cerebras `gpt-oss-120b` (ücretsiz tier) — fallback zinciri ile
 - **Prompt engineering**: Single-shot classification
 - **Kategoriler**: 5 kategori (safe_defensive, safe_educational, ambiguous, unsafe_offensive, unsafe_spam)
 
@@ -135,7 +163,7 @@ Classification:"""
 
 ### Performans
 - **Süre**: 500-800ms
-- **Maliyet**: $0 (Groq ücretsiz)
+- **Maliyet**: $0 (Cerebras ücretsiz tier)
 - **Doğruluk**: ~99%
 
 ### Layer Path
@@ -224,7 +252,7 @@ ML + Pattern kombinasyonu ile final karar:
 ### Performans
 - **Süre**: <10ms (ML), <1ms (pattern)
 - **Maliyet**: $0
-- **Doğruluk**: %85.37 (ML), %100 (pattern for smalltalk)
+- **Doğruluk**: %90.48 test (ML), %82.10 5-fold CV (±3.46), %100 (pattern for smalltalk)
 
 ### Layer Path'ler
 - **Smalltalk**: `1→2→3A`
@@ -310,7 +338,7 @@ User Question: {soru}
 
 Answer (Türkçe, detaylı, CIS Benchmark'a göre):"""
 
-answer = groq.chat(prompt, model="llama-3.3-70b-versatile")
+answer = llm_large(prompt)  # Cerebras gpt-oss-120b (FallbackLLM)
 ```
 
 ### Akıllı RAG Tetikleme (Smart RAG Triggering)
@@ -439,7 +467,7 @@ Requirements:
 
 Script:"""
 
-script = groq.chat(prompt, model="llama-3.3-70b-versatile")
+script = llm_large(prompt)  # Cerebras gpt-oss-120b (FallbackLLM)
 ```
 
 #### 4. Zero Trust Enrichment
@@ -641,7 +669,7 @@ Her katmanın ne aldığını, nasıl işlediğini ve ne ürettiğini adım adı
 
 **PROCESSING (İşlem):**
 1. LLM'e safety classification prompt gönder
-2. Groq llama-3.1-8b-instant modeli kullan (hızlı)
+2. Cerebras gpt-oss-120b modeli kullan (hızlı)
 3. 5 kategori arasında sınıflandır:
    - safe_defensive, safe_educational, ambiguous, unsafe_offensive, unsafe_spam
 
@@ -751,7 +779,7 @@ prompt = """Sen bir siber güvenlik uzmanısın.
 Kullanıcı sorusu: SSH nedir ve nasıl çalışır?
 Türkçe, detaylı açıkla."""
 
-answer = llm_small(prompt)  # Groq llama-3.1-8b-instant
+answer = llm_small(prompt)  # Cerebras gpt-oss-120b
 # Time: ~800ms
 ```
 
@@ -787,7 +815,7 @@ Kullanıcı sorusu: {question}
 
 Context'i kullanarak Türkçe, detaylı yanıt ver."""
 
-answer = llm_large(prompt)  # Groq llama-3.3-70b-versatile
+answer = llm_large(prompt)  # Cerebras gpt-oss-120b
 # Time: ~1.5s (RAG) + ~800ms (LLM) = ~2.3s
 ```
 

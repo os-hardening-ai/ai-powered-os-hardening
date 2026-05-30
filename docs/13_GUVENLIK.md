@@ -7,9 +7,32 @@ Bu belge sistemin güvenlik mimarisini ve önlemlerini açıklar.
 1. **Input Validation** — `api/security.py`, prompt injection ve dangerous pattern tespiti
 2. **Safety Classifier** — LLM tabanlı güvenlik sınıflandırması (Layer 1), **fail-closed**
 3. **Output Validation** — üretilen script'lerde tehlikeli komut tespiti
-4. **Authentication** — API-key (header) tabanlı erişim kontrolü
-5. **Rate Limiting** — IP başına istek sınırlama (Redis-backed, graceful fallback)
-6. **Security Headers** — XSS, clickjacking, MIME-sniffing koruması
+4. **Authentication** — **JWT (HS256) + RBAC** (4 rol); `/auth/login`, logout=jti blacklist
+5. **Authorization (RBAC)** — uç bazında `require_role(...)`; yetersiz rol → 403
+6. **Audit Log** — SQLite `audit_log` (kim-ne-zaman); `AuditMiddleware` + login/logout
+7. **Rate Limiting** — **kullanıcı-bazlı** (`user:{name}`) veya IP (Redis-backed, graceful fallback)
+8. **Security Headers** — XSS, clickjacking, MIME-sniffing koruması
+
+### Kimlik Doğrulama + RBAC Akışı (Mermaid)
+
+```mermaid
+flowchart TD
+    L([POST /auth/login<br/>username + parola]) --> V{bcrypt doğrula<br/>SQLite users}
+    V -->|hatalı| F1([401 + audit login_failure])
+    V -->|doğru| T[JWT üret: sub, role, jti, exp<br/>+ audit login_success]
+    T --> C([İstemci token'ı saklar])
+
+    C -->|"Authorization: Bearer JWT"| R[get_current_user]
+    R --> D{decode + exp + imza}
+    D -->|geçersiz/expired| E1([401 UNAUTHORIZED])
+    D -->|geçerli| B{jti blacklist'te mi?}
+    B -->|evet logout| E1
+    B -->|hayır| RB{require_role<br/>rol yeterli mi?}
+    RB -->|hayır| E2([403 FORBIDDEN])
+    RB -->|evet| OK[Endpoint çalışır<br/>+ AuditMiddleware kaydı]
+
+    C -.->|POST /auth/logout| BL[jti → blacklist<br/>doğal exp'e kadar]
+```
 
 ## Safety Classifier — Fail-Closed
 

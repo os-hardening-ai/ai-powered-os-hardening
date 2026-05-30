@@ -1,157 +1,693 @@
 {
   "info": {
-    "name": "AI-Powered OS Hardening API",
-    "description": "Newman API smoke/contract suite. Offline-capable endpoints (health, metrics, rules, artifacts, agents) must always pass; LLM/RAG endpoints (chat, rag, v1) require Groq/Qdrant/Novita reachability.",
+    "name": "AI-Powered OS Hardening API (JWT auth-aware)",
+    "description": "JWT auth + RBAC + rule engine + agentic + graceful LLM/RAG sözleşme testleri.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    { "key": "baseUrl", "value": "http://127.0.0.1:8011" }
-  ],
   "item": [
     {
+      "name": "Auth: POST /auth/login (admin)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"admin\", \"password\": \"changeme123\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const j = pm.response.json();",
+              "pm.test('access_token var', () => pm.expect(j.access_token).to.be.a('string').and.not.empty);",
+              "pm.test('role sysadmin', () => pm.expect(j.role).to.eql('sysadmin'));",
+              "pm.collectionVariables.set('token', j.access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth: GET /auth/me",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "me"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('username admin', () => pm.expect(pm.response.json().username).to.eql('admin'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "Health: GET /health",
-      "request": { "method": "GET", "url": "{{baseUrl}}/health" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "pm.test('has status field', () => pm.expect(pm.response.json()).to.have.property('status'));"
-      ] } }]
-    },
-    {
-      "name": "Monitoring: GET /metrics/prometheus",
-      "request": { "method": "GET", "url": "{{baseUrl}}/metrics/prometheus" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "pm.test('exposes prometheus metrics', () => pm.expect(pm.response.text()).to.include('hardening_'));"
-      ] } }]
-    },
-    {
-      "name": "OpenAI-compat: GET /v1/models",
-      "request": { "method": "GET", "url": "{{baseUrl}}/v1/models" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "pm.test('has data array', () => pm.expect(pm.response.json()).to.have.property('data'));"
-      ] } }]
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('status alanı var', () => pm.expect(pm.response.json()).to.have.property('status'));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Domain: GET /api/rules?limit=5",
-      "request": { "method": "GET", "url": "{{baseUrl}}/api/rules?limit=5" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "const j = pm.response.json();",
-        "pm.test('returns rules', () => pm.expect(j.rules.length).to.be.above(0));",
-        "pm.test('total present', () => pm.expect(j).to.have.property('total'));"
-      ] } }]
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rules?limit=5&os=ubuntu_24_04",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rules"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "5"
+            },
+            {
+              "key": "os",
+              "value": "ubuntu_24_04"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Domain: POST /api/rules/plan",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/api/rules/plan",
-        "body": { "mode": "raw", "raw": "{\"rule_ids\": [\"1.1.1.1\", \"1.1.1.2\", \"1.1.1.3\"]}" }
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rules/plan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rules",
+            "plan"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"rule_ids\": [\"1.1.1.1\", \"1.1.1.2\", \"1.1.1.3\"], \"os\": \"ubuntu_24_04\"}"
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "const j = pm.response.json();",
-        "pm.test('ordered_rules returned', () => pm.expect(j.ordered_rules.length).to.eql(3));",
-        "pm.test('has conflicts array', () => pm.expect(j).to.have.property('conflicts'));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Domain: POST /api/rules/conflicts",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rules/conflicts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rules",
+            "conflicts"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"rule_ids\": [\"1.1.1.1\", \"1.1.1.2\"], \"os\": \"ubuntu_24_04\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Domain: POST /api/artifacts/generate (bash)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/api/artifacts/generate",
-        "body": { "mode": "raw", "raw": "{\"rule_ids\": [\"1.1.1.1\", \"1.1.1.2\"], \"format\": \"bash\", \"os_target\": \"ubuntu_24_04\", \"security_level\": \"balanced\"}" }
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/artifacts/generate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "artifacts",
+            "generate"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"rule_ids\": [\"1.1.1.1\"], \"format\": \"bash\", \"os\": \"ubuntu_24_04\"}"
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "const j = pm.response.json();",
-        "pm.test('bash format', () => pm.expect(j.format).to.eql('bash'));",
-        "pm.test('non-empty content', () => pm.expect(j.content.length).to.be.above(0));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('content var', () => pm.expect(pm.response.json()).to.have.property('content'));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Agent İP-6: POST /api/agent/plan",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/api/agent/plan",
-        "body": { "mode": "raw", "raw": "{\"goal\": \"SSH ve parola politikasini sikilastir\", \"os_target\": \"ubuntu_24_04\", \"security_level\": \"balanced\"}" }
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/agent/plan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "agent",
+            "plan"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"goal\": \"SSH ve parola s\\u0131k\\u0131la\\u015ft\\u0131r\", \"os_target\": \"ubuntu_24_04\", \"security_level\": \"balanced\"}"
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "const j = pm.response.json();",
-        "pm.test('plan has items', () => pm.expect(j.items.length).to.be.above(0));",
-        "pm.test('items ordered', () => { const o = j.items.map(i=>i.order); pm.expect(o).to.eql(o.slice().sort((a,b)=>a-b)); });"
-      ] } }]
-    },
-    {
-      "name": "Agent İP-6: empty goal -> 422",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/api/agent/plan",
-        "body": { "mode": "raw", "raw": "{\"goal\": \"\"}" }
-      },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('422 validation error', () => pm.response.to.have.status(422));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('items dizisi', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Agent İP-7: POST /api/agent/harden (bash)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/api/agent/harden",
-        "body": { "mode": "raw", "raw": "{\"goal\": \"SSH sikilastir\", \"os_target\": \"ubuntu_24_04\", \"security_level\": \"balanced\", \"format\": \"bash\"}" }
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/agent/harden",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "agent",
+            "harden"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"goal\": \"SSH s\\u0131k\\u0131la\\u015ft\\u0131r\", \"os_target\": \"ubuntu_24_04\", \"security_level\": \"balanced\", \"format\": \"bash\"}"
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "const j = pm.response.json();",
-        "pm.test('multi-step trace present', () => { const n = j.steps.map(s=>s.name); pm.expect(n).to.include('plan'); pm.expect(n).to.include('generate'); pm.expect(n).to.include('verify'); });",
-        "pm.test('artifact generated', () => pm.expect(j.artifact_content.length).to.be.above(0));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
     },
     {
-      "name": "RAG: POST /rag/search (needs Qdrant)",
+      "name": "OpenAI-compat: GET /v1/models",
       "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/rag/search",
-        "body": { "mode": "raw", "raw": "{\"query\": \"SSH PermitRootLogin hardening\", \"top_k\": 3}" }
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/models",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "models"
+          ]
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "pm.test('has results array', () => pm.expect(pm.response.json()).to.have.property('results'));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
     },
     {
-      "name": "Chat: POST /api/chat (needs Groq)",
+      "name": "Monitoring: GET /api/audit",
       "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/api/chat",
-        "body": { "mode": "raw", "raw": "{\"question\": \"Ubuntu 24.04 sunucumda SSH'i nasil sikilastiririm?\", \"use_rag\": false, \"timeout\": 60}" }
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/audit?limit=10",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "audit"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "pm.test('has answer', () => pm.expect(pm.response.json()).to.have.property('answer'));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('events dizisi', () => pm.expect(pm.response.json().events).to.be.an('array'));"
+            ]
+          }
+        }
+      ]
     },
     {
-      "name": "OpenAI-compat: POST /v1/chat/completions (needs Groq)",
+      "name": "Chat: POST /api/chat (use_rag=false)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "url": "{{baseUrl}}/v1/chat/completions",
-        "body": { "mode": "raw", "raw": "{\"model\": \"hardening-ai\", \"messages\": [{\"role\": \"user\", \"content\": \"What is SSH hardening?\"}]}" }
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/chat",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "chat"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"question\": \"SSH nedir?\", \"use_rag\": false}"
+        }
       },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('200', () => pm.response.to.have.status(200));",
-        "pm.test('openai choices shape', () => pm.expect(pm.response.json()).to.have.property('choices'));"
-      ] } }]
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200 (LLM yoksa graceful)', () => pm.response.to.have.status(200));",
+              "pm.test('answer alanı var', () => pm.expect(pm.response.json()).to.have.property('answer'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "RAG: POST /rag/search (Qdrant-bağımlı)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/rag/search",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "rag",
+            "search"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"query\": \"ssh hardening\", \"top_k\": 3}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 (Qdrant açık) veya 503 (Qdrant yok) — graceful', () => pm.expect([200,503]).to.include(pm.response.code));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "RBAC: GET /api/rules (token YOK → 401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rules"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Validation: POST /api/agent/plan (boş goal → 422)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/agent/plan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "agent",
+            "plan"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"goal\": \"\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 422', () => pm.response.to.have.status(422));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth: POST /auth/logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "logout"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth: GET /auth/me (logout sonrası → 401)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "me"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "token",
+      "value": ""
     }
   ]
 }

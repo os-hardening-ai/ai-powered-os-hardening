@@ -25,10 +25,13 @@
 ### Test Kapsamı
 
 ```
-Toplam Test Dosyası: 15+
-Test Kategorileri: 7
-Toplam Test Case: 100+
-Test Coverage: ~85%
+Birim Test (tests/unit): 516 test GEÇİYOR
+Service-free Integration (router): 18 test GEÇİYOR
+Test Kategorileri: unit / integration / api / llm / rag
+Kapsam: auth (JWT/RBAC/blacklist/audit), refinement loop, RAG, pipeline,
+        rule engine, safety/intent classifier, prompts, evaluation harness
+Not: test_health_ok yalnız canlı Qdrant erişilemediğinde "degraded" verir (environmental).
+     Diğer integration dosyaları canlı Qdrant/LLM gerektirir.
 ```
 
 ### Test Ortamları

@@ -51,8 +51,9 @@ def client(tmp_path, monkeypatch):
     p = tmp_path / "rules.yaml"
     p.write_text(RULES_YAML, encoding="utf-8")
     engine = RuleEngine(p)
-    monkeypatch.setattr(ra, "_get_rule_engine", lambda: engine)
-    monkeypatch.setattr(ra, "_get_artifact_gen", lambda: ArtifactGenerator())
+    # _get_rule_engine(os_target) artık arg alıyor (multi-OS) → *args ile uyumlu monkeypatch.
+    monkeypatch.setattr(ra, "_get_rule_engine", lambda *a, **k: engine)
+    monkeypatch.setattr(ra, "_get_artifact_gen", lambda *a, **k: ArtifactGenerator())
     app = FastAPI()
     app.add_exception_handler(APIError, api_error_handler)
     app.include_router(router, prefix="/api")

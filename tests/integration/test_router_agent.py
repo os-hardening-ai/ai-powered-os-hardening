@@ -46,12 +46,16 @@ def client(tmp_path, monkeypatch):
     p.write_text(RULES_YAML, encoding="utf-8")
     engine = RuleEngine(p)
     # Inject fixture engine + disable LLM (deterministic planning)
-    monkeypatch.setattr(ra, "_get_rule_engine", lambda: engine)
+    monkeypatch.setattr(ra, "_get_rule_engine", lambda *a, **k: engine)
     monkeypatch.setattr(ra, "_get_small_llm", lambda: None)
 
     app = FastAPI()
     app.add_exception_handler(APIError, api_error_handler)
     app.include_router(agent_router, prefix="/api")
+    # /agent/harden artık RBAC korumalı (require_role) → testte sysadmin'e override et.
+    from api.auth import get_current_user
+    from api.auth_models import AuthenticatedUser, Role
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser("test", Role.SYSADMIN)
     return TestClient(app)
 
 

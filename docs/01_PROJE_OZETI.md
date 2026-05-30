@@ -17,10 +17,10 @@ Güvenlik odaklı mimari tasarladık:
 - **Katman 2 - Intent Detection**: Pattern matching (<1ms) + ML model (5–10ms) hibrit yaklaşımı
 - **Katman 3 - Routing**: İsteği doğru handler'a yönlendirir (Pattern/Info/Action)
   - **3A Pattern Responder**: Selamlama/veda gibi sorular anında yanıtlanır ($0, <20ms)
-  - **3B Info Pipeline**: Bilgi soruları RAG + LLM ile yanıtlanır (~8s)
-  - **3C Action Pipeline**: Script/hardening istekleri CoT ile üretilir (~5-7s)
-- SSE tabanlı streaming yanıtlar desteklenir
-- Provider fallback zinciri: Groq → Novita → OpenAI → Ollama
+  - **3B Info Pipeline**: Bilgi soruları RAG + LLM ile yanıtlanır (~3-4s)
+  - **3C Action Pipeline**: Script/hardening istekleri CoT ile üretilir (~4-5s)
+- Gerçek SSE token-streaming yanıtlar desteklenir
+- Provider fallback zinciri (fail-fast): Cerebras → SambaNova → Gemini 3.1 Flash Lite → Novita
 
 ### 2. Makine Öğrenmesi Tabanlı Intent Detection
 - **Dataset**: **1,677 etiketli örnek** (7 intent kategorisi) — Türkçe/İngilizce varyasyonlar
@@ -63,11 +63,11 @@ Desteklenen CIS Kaynakları:
 | Windows 11 CIS Rules (YAML) | YAML | 5 |
 
 ### 4. LLM Provider Entegrasyonu
-- **Aktif Provider: Groq** (ücretsiz, ~500 token/saniye)
-  - Small model: `llama-3.1-8b-instant` — Safety, QueryPlanner
-  - Large model: `llama-3.3-70b-versatile` — Yanıt üretimi
-- **Embedding Provider: Novita** — `qwen/qwen3-embedding-8b` (LLM için değil, embedding için)
-- Fallback zinciri: Groq → Novita → OpenAI → Ollama
+- **Primary Provider: Cerebras** (ücretsiz tier, 1M token/gün, `gpt-oss-120b`, özel donanım ~1.4s)
+  - Small + Large: `gpt-oss-120b` (Safety/QueryPlanner ve yanıt üretimi)
+- **Fallback zinciri (fail-fast, `max_retries=0`):** Cerebras → SambaNova (`gpt-oss-120b`) → Gemini 3.1 Flash Lite (OpenRouter, 1M context) → Novita (düşük ücretli güvenlik ağı)
+- **Embedding Provider: Novita** — `qwen/qwen3-embedding-8b` (4096 dim; LLM için değil, embedding için)
+- *Groq / Ollama / HuggingFace — DEPRECATED (otomatik zincirden çıkarıldı; yalnız açıkça seçilirse)*
 - Tüm ayarlar `config/config.json` + `.env` üzerinden yapılandırılabilir
 
 ### 5. Domain: Rule Engine + Artifact Generator
@@ -106,8 +106,8 @@ Desteklenen CIS Kaynakları:
 - **joblib**: Model persistance
 
 ### LLM & RAG
-- **Groq**: Birincil LLM provider (ücretsiz, hızlı)
-- **Novita**: Embedding provider (qwen3-embedding-8b)
+- **Cerebras**: Birincil LLM provider (`gpt-oss-120b`, ücretsiz tier, özel donanım ~1.4s) → SambaNova → Gemini 3.1 Flash Lite → Novita (fail-fast fallback)
+- **Novita**: Embedding provider (qwen3-embedding-8b, 4096 dim)
 - **Qdrant**: Cloud vektör veritabanı
 - **BM25**: Sparse retrieval (hibrit RAG)
 
@@ -123,14 +123,15 @@ Desteklenen CIS Kaynakları:
 | Metrik | Değer |
 |--------|-------|
 | ML Intent Accuracy | %90.48 |
-| Ortalama Yanıt (info + RAG) | ~8s |
+| Ortalama Yanıt (info + RAG) | ~3-4s (Cerebras; eski Groq ~8s) |
+| Tek LLM çağrısı | ~1.36s (Cerebras gpt-oss-120b) |
+| Agent plan / harden (medyan) | ~3.55s / ~4.62s (H3 <5sn ✓) |
 | Ortalama Yanıt (basit sorgu) | ~1.5s |
 | Pattern Response | <20ms |
 | Safety Classification | ~250ms |
 | QueryPlanner (3 parallel) | ~500ms |
-| RAG Retrieval (Qdrant) | ~4s |
-| LLM Generation (large model) | ~3-4s |
-| Maliyet (Groq free tier) | ~$0.0006/sorgu |
+| RAG Retrieval (Qdrant) | ~1-2.5s |
+| Maliyet (Cerebras free tier) | ~$0 (ücretsiz) |
 | Pattern Response Oranı | ~%35 (LLM çağrısı yok) |
 
 **pipeline_metrics.log örnek çıktısı:**
@@ -179,11 +180,11 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 
 | Özellik | Öncelik |
 |---------|---------|
-| Authentication / Authorization | P0 — Kritik |
-| HTTPS/SSL | P0 — Kritik |
-| Groq TPM rate limit (ücretsiz tier) | P1 — Önemli |
-| ClaimVerifier kalibrasyonu | P2 |
-| Windows YAML kuralları (şu an boş) | P2 |
+| ~~Authentication / Authorization~~ → **JWT + RBAC + Audit eklendi ✅** | Tamam |
+| HTTPS/SSL (production) | P0 — Kritik |
+| Cerebras RPM rate limit (ücretsiz tier, 30 RPM) — fallback zinciri telafi eder | P1 — Önemli |
+| ClaimVerifier kalibrasyonu (İP-5 groundedness 0.81→0.90) | P2 |
+| Windows Server 2025 YAML kuralları (şu an boş) | P2 |
 
 ---
 
@@ -221,7 +222,7 @@ ai-powered-os-hardening/
 │   │       ├── pattern_responder.py      # Katman 3A
 │   │       ├── info_pipeline.py          # Katman 3B (RAG + LLM)
 │   │       └── action_pipeline.py        # Katman 3C (script üretimi)
-│   ├── clients/               # Groq, Novita, OpenAI, Ollama client'ları
+│   ├── clients/               # Cerebras/SambaNova/Gemini (openai_compatible) + Novita + registry/FallbackLLM
 │   └── ml/models/             # intent_model.joblib, intent_vectorizer.joblib
 ├── rag/
 │   ├── query/                 # QueryPlanner, FilterAgent, QueryRewriter

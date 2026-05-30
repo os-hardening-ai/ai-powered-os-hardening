@@ -62,28 +62,29 @@ Date: 2026-05-29 (güncellendi: 2025-12-24 orijinal)
 
 ### CRITICAL Issues (Must Fix Before Production)
 
-#### 1. **No Authentication/Authorization** 🔴
-**Current State**: API is completely open, no auth required
-**Impact**: CRITICAL - Anyone can access and abuse the system
-**Recommendation**:
-- Implement API key authentication (X-API-Key header)
-- Add JWT token support for user sessions
-- Integrate OAuth2 for enterprise deployments
-- Add role-based access control (RBAC)
+#### 1. **Authentication/Authorization** ✅ RESOLVED
+**Previous State**: API was completely open (no auth).
+**Current State**: Full **JWT (HS256) authentication + RBAC + Audit Log + user-based rate limiting**
+implemented (`api/auth.py`, `api/router_auth.py`, `api/audit.py`). The earlier `X-API-Key`
+shared-secret was removed — JWT only.
+- ✅ `POST /auth/login` → JWT (`sub`, `role`, `jti`, `exp`); `/auth/logout` → jti blacklist (Redis/in-memory)
+- ✅ RBAC: 4 roles (sysadmin / security / developer / end_user), per-endpoint `require_role(...)`
+- ✅ Users in SQLite + bcrypt; Audit log in SQLite (`audit_log`) via `AuditMiddleware` + login/logout events
+- ✅ Rate limiting keyed by user (`user:{username}`) when authenticated, else IP
 
-**Implementation Priority**: P0 (Immediate)
+**Remaining (production)**: set `JWT_SECRET` (>=32 chars), enable HTTPS/TLS. OAuth2/SSO optional.
 
-**Example**:
+**Example** (current):
 ```python
 # api/auth.py
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException
+async def get_current_user(request, creds=Depends(bearer)) -> AuthenticatedUser:
+    payload = decode_token(_extract_token(request, creds))   # HS256 verify + exp
+    if is_blocked(payload.get("jti")):                        # logout blacklist
+        raise APIError(401, ErrorCode.UNAUTHORIZED, "Token iptal edilmis.")
+    return AuthenticatedUser(payload["sub"], Role.from_str(payload["role"]))
 
-security = HTTPBearer()
-
-def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if credentials.credentials != os.getenv("API_KEY"):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+def require_role(*allowed):   # RBAC dependency factory → 403 on mismatch
+    ...
 ```
 
 #### 2. **No Embedding Cache** ✅ ÇÖZÜLDÜ

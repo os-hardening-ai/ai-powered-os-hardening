@@ -14,202 +14,111 @@
 
 ## Authentication (Kimlik Doğrulama)
 
-### Mevcut Durum: Authentication YOK ⚠️
+### Mevcut Durum: JWT + RBAC Authentication ✅
 
-Şu anda sistem **authentication gerektirmez**. Bu bir **prototip/development** özelliğidir.
+Sistem **JWT (HS256) tabanlı kimlik doğrulama + RBAC + Audit Log + kullanıcı-bazlı rate limit**
+ile çalışır. (Eski `X-API-Key` shared-secret modeli kaldırıldı — sadece JWT.) `/health`,
+`/docs`, `/openapi.json` ve `/auth/login` public; diğer tüm uçlar geçerli Bearer token ister.
 
-### Ne İşe Yarar?
+### Akış
 
-API Authentication (Kimlik Doğrulama):
-1. ✅ **Kimlik Tespiti**: Kim API'yi kullanıyor?
-2. ✅ **Yetkilendirme**: Bu kullanıcının bu işlemi yapma yetkisi var mı?
-3. ✅ **Güvenlik**: Yetkisiz erişimi engeller
-4. ✅ **Rate Limiting**: Kullanıcı bazlı kota kontrolü
-5. ✅ **Audit/Logging**: Kim ne zaman ne yaptı?
-6. ✅ **Maliyet Kontrolü**: Kullanıcı başına LLM API cost tracking
+1. `POST /auth/login` (kullanıcı adı + parola) → JWT access token (`sub`, `role`, `jti`, `exp`).
+2. Korumalı isteklerde `Authorization: Bearer <token>` header'ı gönderilir.
+3. Sunucu token'ı doğrular (`get_current_user`) + rol kontrolü yapar (`require_role`).
+4. `POST /auth/logout` token'ın `jti`'sini blacklist'e alır (doğal süresine kadar geçersiz).
 
-### Kim Kullanır?
+### Roller (RBAC)
 
-**Kimlik doğrulama OLMADAN (şu anki durum):**
-- ❌ Herhangi biri API'yi kullanabilir (public access)
-- ❌ Kullanıcı takibi yapılamaz
-- ❌ Rate limit sadece IP bazlı (kolayca bypass edilir)
-- ❌ Abuse riski yüksek
+`sysadmin` (tam yetki) · `security` (sıkılaştırma + denetim) · `developer` (plan + artifact) ·
+`end_user` (yalnız sohbet/okuma). Uç bazında `require_role(...)` ile uygulanır; yetersiz rol → `403`.
 
-**Kimlik doğrulama ile (production):**
-- ✅ Sadece API key sahibi kullanıcılar erişebilir
-- ✅ Kullanıcı bazlı tracking
-- ✅ Kullanıcı başına rate limit
-- ✅ Abuse önlenir
-
-### Nasıl Kullanılır? (Production - Gelecek Özellik)
-
-**Örnek Implementation (FastAPI):**
-
-```python
-# api/auth.py
-from fastapi import Security, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-security = HTTPBearer()
-
-async def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    API key doğrulama
-
-    Headers'dan: Authorization: Bearer YOUR_API_KEY
-    """
-    api_key = credentials.credentials
-
-    # Database check (örnek)
-    user = db.get_user_by_api_key(api_key)
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Rate limit check (user-based)
-    if user.requests_today > user.quota:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Quota exceeded"
-        )
-
-    return user
-
-# Usage in endpoint
-@router.post("/chat")
-async def chat(
-    payload: ChatRequest,
-    user: User = Depends(verify_api_key)  # Auth required!
-):
-    # user.id, user.email, user.quota available
-    ...
-```
-
-**Frontend Kullanımı (React Example):**
-
-```typescript
-// WITH Authentication (production)
-const API_KEY = process.env.REACT_APP_API_KEY; // .env dosyasından
-
-const response = await axios.post(
-  'https://api.example.com/api/chat',
-  {
-    question: "Ubuntu SSH hardening",
-    os: "ubuntu_24_04"
-  },
-  {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`  // API key header
-    }
-  }
-);
-```
-
-**cURL Kullanımı (Terminal):**
+### Login örneği
 
 ```bash
-# WITH Authentication
-curl -X POST https://api.example.com/api/chat \
+# 1) Giriş yap → token al
+curl -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "question": "SSH nedir?"
-  }'
+  -d '{"username": "admin", "password": "changeme123"}'
+# → {"access_token":"eyJ...","token_type":"bearer","role":"sysadmin","expires_in":3600}
+
+# 2) Token ile korumalı uç
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJ..." \
+  -d '{"question": "SSH nedir?", "use_rag": true}'
 ```
 
-### Kullanmazsa Ne Olur?
+**Frontend (fetch):**
 
-**Production'da Authentication OLMADAN:**
-1. ❌ **Güvenlik Açığı**: Herkes sınırsız API kullanabilir
-2. ❌ **Maliyet Sorunu**: Groq ücretsiz ama OpenAI fallback maliyetli olabilir
-3. ❌ **Abuse**: Botlar sistemi spam'leyebilir
-4. ❌ **DoS Riski**: Rate limit sadece IP bazlı (VPN ile bypass)
-5. ❌ **Compliance**: GDPR/SOC2 için user tracking gerekli
-
-**Prototype/Development'da (şu anki durum):**
-- ✅ Hızlı test edilebilir
-- ✅ Frontend integration kolay
-- ✅ Demo/PoC için yeterli
-- ⚠️ **Production'a geçerken mutlaka eklenmelidir!**
-
-### Kullanıcı Nasıl Etkilenir?
-
-| Senaryo | Auth YOK (şimdi) | Auth VAR (production) |
-|---------|------------------|----------------------|
-| **İlk Kullanım** | Hemen başlayabilir | API key alması gerekir (signup) |
-| **API Call** | Direkt POST | Header'da Bearer token gerekir |
-| **Rate Limit** | IP bazlı (100/min) | Kullanıcı bazlı (1000/day gibi) |
-| **Hata Durumu** | Generic error | "Invalid API key" veya "Quota exceeded" |
-| **Maliyet** | Yok (free tier) | Kullanıcı bazlı pricing olabilir |
-
-### Frontend Yazarken Ara Bağlantı Nasıl Etkilenir?
-
-**ŞU ANKİ DURUM (Auth yok):**
 ```typescript
-// React component - Basit
-const sendMessage = async () => {
-  const response = await axios.post('/api/chat', {
-    question: userInput
-  });
-  // Başarılı!
+// 1) Login
+const { access_token } = await (await fetch("/auth/login", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ username, password }),
+})).json();
+
+// 2) Bearer ile istek
+await fetch("/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${access_token}` },
+  body: JSON.stringify({ question: "Ubuntu SSH hardening", os: "ubuntu_24_04" }),
+});
+// SSE (EventSource header gönderemez): /api/chat/stream?access_token=<token>
+```
+
+### Dev mode
+
+`JWT_SECRET` ayarlı değilse dev-mode: sabit dev-secret + 4 demo hesap (`admin`/`sec`/`dev`/`user`,
+parola `changeme123`) otomatik seed'lenir. Production'da `JWT_SECRET` (>=32 karakter) zorunludur;
+ilk açılışta `users` boşsa `admin` hesabı `AUTH_ADMIN_PASSWORD`'dan oluşturulur.
+
+### Hata kodları
+
+| Durum | Kod | Açıklama |
+|-------|-----|----------|
+| Token yok/geçersiz/expired | `401 UNAUTHORIZED` | `Authorization: Bearer <token>` gerekli |
+| Rol yetersiz | `403 FORBIDDEN` | Uç için gerekli rol(ler) sağlanmadı |
+| Kota aşımı | `429 RATE_LIMITED` | Kullanıcı-bazlı (`user:{name}`) veya IP limiti |
+
+### Frontend Yazarken JWT Akışı
+
+```typescript
+// 1. Login → token'ı sakla (memory veya httpOnly cookie tercih edilir)
+const login = async (username: string, password: string) => {
+  const { data } = await axios.post('/auth/login', { username, password });
+  setToken(data.access_token);          // data.role da gelir (RBAC için)
+  return data;
 };
-```
 
-**PRODUCTION (Auth var):**
-```typescript
-// React component - API key management gerekli
-const API_KEY = process.env.REACT_APP_API_KEY;
-
-// 1. API key validation on app load
-useEffect(() => {
-  if (!API_KEY) {
-    setError('API key not configured!');
-  }
-}, []);
-
-// 2. API call with auth header
+// 2. Her istekte Bearer header
 const sendMessage = async () => {
   try {
-    const response = await axios.post('/api/chat',
-      { question: userInput },
-      {
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`
-        }
-      }
+    const { data } = await axios.post('/api/chat',
+      { question: userInput, use_rag: true },
+      { headers: { Authorization: `Bearer ${token}` } }
     );
+    setAnswer(data.answer);
   } catch (error) {
-    if (error.response?.status === 401) {
-      setError('Invalid API key. Please check your credentials.');
-    } else if (error.response?.status === 429) {
-      setError('Quota exceeded. Please upgrade your plan.');
-    }
+    if (error.response?.status === 401) setError('Oturum süresi doldu — tekrar giriş yapın.');
+    else if (error.response?.status === 403) setError('Bu işlem için yetkiniz yok.');
+    else if (error.response?.status === 429) setError('İstek limiti aşıldı, lütfen yavaşlayın.');
   }
 };
 
-// 3. API key input (user-facing)
-// Kullanıcıdan API key isteme:
-<input
-  type="password"
-  placeholder="Enter your API key"
-  onChange={(e) => setApiKey(e.target.value)}
-/>
+// 3. SSE streaming (EventSource header gönderemez → query param)
+const es = new EventSource(`/api/chat/stream?access_token=${token}`);
 ```
 
-### Production Deployment İçin Öneriler
+### Production Deployment Durumu
 
-1. **JWT-based Authentication**: Token expiry, refresh tokens
-2. **OAuth2/OpenID Connect**: Google, GitHub login
-3. **API Key Tiers**: Free (1000/day), Pro (unlimited)
-4. **Rate Limiting**: User-based quotas
-5. **Audit Logging**: User activity tracking
-6. **IP Whitelisting**: Ek güvenlik katmanı
+| Özellik | Durum |
+|---------|-------|
+| **JWT Authentication** (login/logout/blacklist) | ✅ Mevcut |
+| **RBAC** (sysadmin/security/developer/end_user) | ✅ Mevcut |
+| **Audit Logging** (kim-ne-zaman, SQLite) | ✅ Mevcut |
+| **User-based Rate Limiting** | ✅ Mevcut |
+| HTTPS/TLS + spesifik CORS/ALLOWED_HOSTS | ⏳ Deployment'ta yapılandırılır |
+| OAuth2/SSO, refresh token | ◯ Kapsam dışı (opsiyonel gelecek) |
 
 ---
 
@@ -578,7 +487,7 @@ if use_rag_final and self.rag_builder:
     "layer_path": "1→2→3C",
     "rag_used": true,
     "rag_chunks": 6,
-    "model": "llama-3.3-70b-versatile",
+    "model": "gpt-oss-120b",
     "complexity": "complex"
   },
   "request_id": "req_1701234567890_abc123",
@@ -679,7 +588,7 @@ curl -X POST http://localhost:8000/api/chat \
     "total_time_s": 2.1,
     "rag_used": false,
     "rag_chunks": 0,
-    "model": "llama-3.1-8b-instant",
+    "model": "gpt-oss-120b",
     "complexity": "simple"
   },
   "estimated_cost": 0.0012,
@@ -725,7 +634,7 @@ curl -X POST http://localhost:8000/api/chat \
     "total_time_s": 3.8,
     "rag_used": true,
     "rag_chunks": 6,
-    "model": "llama-3.3-70b-versatile",
+    "model": "gpt-oss-120b",
     "complexity": "complex"
   },
   "estimated_cost": 0.0021,

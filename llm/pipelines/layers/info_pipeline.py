@@ -18,11 +18,10 @@ from typing import Callable, Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from llm.core.context import RequestContext, SafetyResult
+from llm.core.context import RequestContext
 from llm.utils.question_classifier import classify_question
 from llm.prompts.simple_prompts import get_prompt_for_complexity
 from llm.prompts.cot_prompts import CoTSecurityAnalyzer
-from llm.core.config import CONFIG
 
 # Type alias
 LLMCallable = Callable[[str], str]
@@ -75,6 +74,8 @@ class InfoPipeline:
         query_planner=None,
         claim_verifier=None,
         debug: bool = False,
+        enable_refinement: bool = True,
+        refine_threshold: float = 0.55,
     ):
         """
         Args:
@@ -84,6 +85,9 @@ class InfoPipeline:
             query_planner:  QueryPlanner instance (optional — expands queries)
             claim_verifier: ClaimVerifier instance (optional — halüsinasyon kontrolü)
             debug:          Enable debug logging
+            enable_refinement: Cevap-groundedness refinement loop'unu aç (düşük confidence
+                            → sorguyu genişlet + yeniden üret, 1 deneme).
+            refine_threshold: Bu eşiğin ALTINDAKİ verification confidence refinement tetikler.
         """
         self.llm_small = llm_small
         self.llm_large = llm_large
@@ -91,6 +95,8 @@ class InfoPipeline:
         self.query_planner = query_planner
         self.claim_verifier = claim_verifier
         self.debug = debug
+        self.enable_refinement = enable_refinement
+        self.refine_threshold = refine_threshold
 
         # CoT analyzer for complex queries
         self.cot_analyzer = CoTSecurityAnalyzer(use_few_shot=True)
@@ -102,6 +108,7 @@ class InfoPipeline:
             "complex_count": 0,
             "rag_used_count": 0,
             "rag_skipped_count": 0,
+            "refine_count": 0,
             "total_cost": 0.0,
         }
 
@@ -231,21 +238,7 @@ class InfoPipeline:
         # Route based on complexity — time the LLM generation separately
         _t0 = datetime.now()
         try:
-            if complexity == "simple":
-                result = self._simple_path(ctx)
-                self.stats["simple_count"] += 1
-                model_used = "small"
-                estimated_cost = 0.0002
-            elif complexity == "medium":
-                result = self._medium_path(ctx)
-                self.stats["medium_count"] += 1
-                model_used = "large"
-                estimated_cost = 0.0005
-            else:  # complex
-                result = self._complex_path(ctx)
-                self.stats["complex_count"] += 1
-                model_used = "large+CoT"
-                estimated_cost = 0.0015
+            result, model_used, estimated_cost = self._generate(ctx, complexity)
         except Exception as gen_exc:
             _logger.error("[InfoPipeline] LLM generation failed: %s", gen_exc)
             result = (
@@ -256,7 +249,7 @@ class InfoPipeline:
             estimated_cost = 0.0
         _t["llm_gen_s"] = (datetime.now() - _t0).total_seconds()
 
-        # Claim verification (only when RAG was used — no context = no verification)
+        # Claim verification + REFINEMENT LOOP (only when RAG was used)
         verification_confidence: float | None = None
         unsupported_claims: list = []
         if self.claim_verifier is not None and raw_results_for_verify:
@@ -264,6 +257,21 @@ class InfoPipeline:
                 _t0 = datetime.now()
                 vr = self.claim_verifier.verify(result, raw_results_for_verify)
                 _t["claim_verify_s"] = (datetime.now() - _t0).total_seconds()
+
+                # Cevap-groundedness refinement loop: üretilen cevap kaynaklarla yeterince
+                # örtüşmüyorsa (confidence < eşik) sorguyu GENİŞLET → yeniden retrieve →
+                # yeniden üret → yeniden doğrula; yalnız DAHA İYİ cevabı tut. Tek deneme
+                # (H3 latency sınırı). simple yol RAG'siz olduğu için hariç.
+                if (
+                    self.enable_refinement
+                    and complexity != "simple"
+                    and self.rag_builder is not None
+                    and vr.confidence < self.refine_threshold
+                ):
+                    result, raw_results_for_verify, vr = self._refine_answer(
+                        ctx, complexity, result, raw_results_for_verify, vr, _t
+                    )
+
                 verification_confidence = vr.confidence
                 unsupported_claims = list(vr.unsupported)
                 if not vr.is_valid:
@@ -355,6 +363,74 @@ class InfoPipeline:
 
         # Default: Simple queries without specific indicators → skip RAG
         return False
+
+    def _generate(self, ctx: RequestContext, complexity: str) -> tuple[str, str, float]:
+        """Karmaşıklığa göre cevap üret. Döndürür: (cevap, model_used, estimated_cost).
+
+        Refinement loop tarafından da yeniden çağrılır (aynı yolla yeniden üretim).
+        """
+        if complexity == "simple":
+            self.stats["simple_count"] += 1
+            return self._simple_path(ctx), "small", 0.0002
+        elif complexity == "medium":
+            self.stats["medium_count"] += 1
+            return self._medium_path(ctx), "large", 0.0005
+        else:  # complex
+            self.stats["complex_count"] += 1
+            return self._complex_path(ctx), "large+CoT", 0.0015
+
+    def _reformulate(self, question: str, unsupported: List[str]) -> str:
+        """Refinement için sorguyu deterministik genişlet: orijinal + (varsa) ilk
+        desteklenmeyen iddianın terimleri + spesifik yapılandırma/CIS vurgusu."""
+        hint = unsupported[0][:120] if unsupported else ""
+        return f"{question} {hint} CIS Benchmark tam yapılandırma adımları ve kesin komutlar".strip()
+
+    def _refine_answer(self, ctx, complexity, result, raw_results, vr, _t):
+        """Düşük groundedness'ta TEK refinement denemesi:
+        sorguyu genişlet → yeniden retrieve → yeniden üret → yeniden doğrula.
+        Yalnız confidence ARTARSA yeni cevabı tutar; aksi halde orijinali korur.
+        """
+        try:
+            self.stats["refine_count"] += 1
+            _logger.info(
+                "[RefinementLoop:answer] confidence %.2f < %.2f — genişletilmiş yeniden retrieval",
+                vr.confidence, self.refine_threshold,
+            )
+            refined_q = self._reformulate(ctx.user_question, list(vr.unsupported))
+
+            _t0 = datetime.now()
+            if self.query_planner is not None and hasattr(self.rag_builder, "retrieve_multi"):
+                plan = self.query_planner.plan(refined_q)
+                new_ctx, new_raw = self.rag_builder.retrieve_multi(
+                    queries=plan.all_queries(), original_query=ctx.user_question,
+                )
+            else:
+                new_ctx, new_raw = self.rag_builder.retrieve_balanced(refined_q)
+            _t["refine_retrieve_s"] = (datetime.now() - _t0).total_seconds()
+
+            if not new_raw:
+                return result, raw_results, vr
+
+            # Yeni context ile yeniden üret
+            prev_context = ctx.retrieved_context
+            ctx.retrieved_context = new_ctx
+            _t1 = datetime.now()
+            new_answer, _, _ = self._generate(ctx, complexity)
+            _t["refine_gen_s"] = (datetime.now() - _t1).total_seconds()
+
+            new_vr = self.claim_verifier.verify(new_answer, new_raw)
+            if new_vr.confidence > vr.confidence:
+                _logger.info(
+                    "[RefinementLoop:answer] iyileşti %.2f → %.2f", vr.confidence, new_vr.confidence
+                )
+                return new_answer, new_raw, new_vr
+
+            # İyileşmediyse orijinali koru (context'i geri al)
+            ctx.retrieved_context = prev_context
+            return result, raw_results, vr
+        except Exception as exc:
+            _logger.warning("[RefinementLoop:answer] failed: %s", exc)
+            return result, raw_results, vr
 
     def _simple_path(self, ctx: RequestContext) -> str:
         """

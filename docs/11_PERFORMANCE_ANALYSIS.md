@@ -1,8 +1,8 @@
 # Performance Analysis & Optimization Report
 
 **AI-Powered OS Hardening System**
-**Date**: 2026-05-29
-**Version**: v1.1.0 (Groq provider, per-step timing)
+**Date**: 2026-05-31
+**Version**: v1.3.0 (Cerebras primary + fail-fast fallback, per-step timing)
 
 ---
 
@@ -25,15 +25,18 @@
 ### Overall Performance Summary
 
 ```
-Provider: Groq (llama-3.1-8b-instant / llama-3.3-70b-versatile)
+Provider: Cerebras gpt-oss-120b (primary, free) → SambaNova → Gemini 3.1 Flash Lite → Novita
+Fallback: fail-fast (max_retries=0); Groq/Ollama/HF deprecated
 Embedding: Novita qwen/qwen3-embedding-8b (4096 dim)
 Vector Store: Qdrant Cloud
 
-Info + RAG query:    ~8s   (rag_ret ~4s + llm ~3.5s)
-Simple info query:   ~1.5s (no RAG, no QueryPlanner)
-Pattern response:    <20ms (no LLM)
+Single LLM call:     ~1.36s (Cerebras gpt-oss-120b, special hardware)
+Info + RAG query:    ~3-4s  (rag_ret ~1-2.5s + llm ~1.4s)
+Agent plan/harden:   ~3.55s / ~4.62s (median; H3 target <5s — met)
+Simple info query:   ~1.5s  (no RAG, no QueryPlanner)
+Pattern response:    <20ms  (no LLM)
 Safety check only:   ~250ms
-Average cost:        ~$0.0006/query (Groq free tier)
+Average cost:        ~$0 (Cerebras free tier, 1M tokens/day)
 ```
 
 ### Gerçek Ölçüm (pipeline_metrics.log)
@@ -51,7 +54,8 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 |---------|----------|-------------------|-----|
 | v0.1 | GPT-4 | ~6s | Her sorgu GPT-4 |
 | v1.0 | Novita DeepSeek-V3 | ~64s | Provider latency sorunu |
-| v1.1 | Groq llama-3.3-70b | **~8s** | Aktif versiyon |
+| v1.1 | Groq llama-3.3-70b | ~8s | (eski) |
+| **v1.3** | **Cerebras gpt-oss-120b** | **~3-4s** | Aktif — özel donanım + fail-fast fallback |
 
 ---
 
@@ -127,17 +131,21 @@ ThreadPoolExecutor(max_workers=3):
 | 1→2→3A | Selamlama (pattern) | <20ms |
 | 1→2→OUT_OF_SCOPE | Kapsam dışı | ~250ms |
 | 1→2→3B (simple, no RAG) | Genel bilgi | ~1.5s |
-| 1→2→3B (medium, with RAG) | OS-spesifik | ~8s |
-| 1→2→3B (complex, CoT+RAG) | Karmaşık analiz | ~10-12s |
-| 1→2→3C | Script üretimi | ~5-7s |
+| 1→2→3B (medium, with RAG) | OS-spesifik | ~3-4s (Cerebras; eski Groq ~8s) |
+| 1→2→3B (complex, CoT+RAG) | Karmaşık analiz | ~5-6s (eski ~10-12s) |
+| 1→2→3C | Script üretimi | ~4-5s |
 
 ### Gerçek Timing Dağılımı (info + RAG sorgusu)
 
+> **Not:** Aşağıdaki dağılım **v1.1 (Groq) ölçümüdür** (pipeline_metrics.log, eski). v1.3'te LLM
+> sağlayıcı **Cerebras gpt-oss-120b** olduğundan LLM üretim adımı ~3.4s → **~1.4s**'ye düşer ve
+> toplam **~3-4s** olur (H3 çözümü). RAG retrieval ve diğer adımlar benzer kalır.
+
 ```
-Timeline — Total: ~8s
+Timeline — Total: ~8s (v1.1 Groq baseline; v1.3 Cerebras ile ~3-4s)
 
   0ms    ├─ Layer 1: Safety Classification       → 248ms
-         │  Groq llama-3.1-8b-instant
+         │  (v1.1: Groq llama-3.1-8b-instant; v1.3: Cerebras gpt-oss-120b)
          │
 248ms    ├─ Layer 2: Intent Detection             → 2ms
          │  Pattern match (miss) + ML inference
@@ -156,10 +164,10 @@ Timeline — Total: ~8s
          │  │   ├─ Qdrant vector search × 3
          │  │   └─ Hybrid scoring + MMR rerank
          │  │
-         │  └─ LLM Generation:                     → 3,405ms
-         │      Groq llama-3.3-70b-versatile
+         │  └─ LLM Generation:                     → 3,405ms (v1.1 Groq)
+         │      v1.3: Cerebras gpt-oss-120b ≈ 1,400ms
          │
-8,018ms  └─ Response returned
+8,018ms  └─ Response returned  (v1.3 ≈ 3-4s)
 ```
 
 ---
@@ -297,12 +305,13 @@ Simple sorgu (QueryPlanner atlanıyor):
 
 | Sistem | Info + RAG Latency | Not |
 |--------|-------------------|-----|
-| Bizim sistemimiz | ~8s | Groq + Qdrant Cloud |
+| **Bizim sistemimiz (v1.3)** | **~3-4s** | **Cerebras gpt-oss-120b + Qdrant Cloud** |
+| Bizim sistemimiz (v1.1, eski) | ~8s | Groq llama-3.3-70b |
 | LangChain + OpenAI | ~4-6s | GPT-4o-mini |
 | LlamaIndex + OpenAI | ~3-5s | GPT-4o-mini |
 | ChatGPT (RAG yok) | ~2-4s | Karşılaştırma için |
 
-> RAG + QueryPlanner ek adımları (~4s + ~0.5s) hesaba katıldığında Groq'un LLM latency'si (~3.5s) rekabetçi. Temel gecikme Qdrant Cloud network latency'sinden kaynaklanıyor.
+> v1.3'te özel-donanım sağlayıcısı **Cerebras** (gpt-oss-120b, tek çağrı ~1.4s) sayesinde LLM adımı ~3.4s → ~1.4s düştü; toplam ~3-4s ile artık OpenAI tabanlı yığınlarla rekabetçi/üstün. Kalan gecikme ağırlıkla Qdrant Cloud network latency'sinden kaynaklanıyor.
 
 ### ML Intent Detection
 
