@@ -14,8 +14,20 @@ sys.path.insert(0, str(project_root))
 
 @pytest.fixture(scope="session")
 def app():
-    """FastAPI application instance (session-scoped)"""
+    """FastAPI application instance (session-scoped).
+
+    JWT auth tüm korumalı uçlarda zorunludur. Endpoint testlerinin (auth'a özel
+    OLMAYAN) çalışması için `get_current_user` bağımlılığını bir test-sysadmin'e
+    override ederiz; sysadmin tüm RBAC kontrollerini geçer. Auth'a özel testler
+    (test_auth.py) kendi app'ini kurar, bu override'dan etkilenmez.
+    """
     from main import app
+    from api.auth import get_current_user
+    from api.auth_models import AuthenticatedUser, Role
+
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
+        username="test", role=Role.SYSADMIN
+    )
     return app
 
 

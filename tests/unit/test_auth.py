@@ -1,72 +1,141 @@
 """
-Tests for API-key authentication (api.auth.require_api_key).
+Tests for JWT authentication + RBAC (api.auth).
 
-A minimal app mounts a protected route + a public route; the API_KEY env var
-is toggled via monkeypatch. Covers: enforced when configured, open in dev mode,
-wrong/missing key rejected, public routes always reachable.
+A minimal app mounts the real auth router (/auth/login, /logout, /me) plus two
+role-protected routes. Users live in a temporary SQLite DB (isolated per test),
+auth runs in dev mode (no JWT_SECRET → fixed dev secret). Covers: login success/
+failure, missing/garbage/expired token (401), logout→blacklist (401), RBAC (403),
+and the SSE query-token fallback.
 """
 
 from __future__ import annotations
 
+import time
+import uuid
+
+import jwt
 import pytest
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-import api.auth as auth
-from api.auth import require_api_key, auth_enabled, API_KEY_ENV
+from api import auth as auth_mod
+from api import auth_blacklist, db
+from api.auth import create_access_token, get_current_user, require_role
+from api.auth_models import AuthenticatedUser, Role
+from api.auth_store import user_store
 from api.errors import APIError, api_error_handler
+from api.router_auth import router as auth_router
 
 
 @pytest.fixture
-def client():
+def app_client(tmp_path, monkeypatch):
+    # Dev mode (sabit dev-secret) — JWT_SECRET kapalı.
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    db.reset_for_tests(str(tmp_path / "auth.db"))
+    auth_blacklist.reset_for_tests()
+    user_store.create("admin", "adminpass", Role.SYSADMIN)
+    user_store.create("ender", "userpass", Role.END_USER)
+
     app = FastAPI()
     app.add_exception_handler(APIError, api_error_handler)
+    app.include_router(auth_router)
 
-    @app.get("/protected", dependencies=[Depends(require_api_key)])
-    def protected():
+    @app.get("/sysadmin-only", dependencies=[Depends(require_role(Role.SYSADMIN))])
+    def sysadmin_only():
         return {"ok": True}
 
-    @app.get("/health")
-    def health():
-        return {"status": "ok"}
+    @app.get("/any-auth")
+    def any_auth(user: AuthenticatedUser = Depends(get_current_user)):
+        return {"user": user.username, "role": user.role.value}
 
-    return TestClient(app, raise_server_exceptions=False)
+    try:
+        yield TestClient(app, raise_server_exceptions=False)
+    finally:
+        # Global bağlantıyı varsayılana geri al (diğer testleri etkilemesin).
+        db.reset_for_tests("data/auth.db")
+        auth_blacklist.reset_for_tests()
 
 
-class TestAuthConfigured:
-    def test_missing_key_rejected(self, client, monkeypatch):
-        monkeypatch.setenv(API_KEY_ENV, "secret-key")
-        r = client.get("/protected")
+def _login(client, username, password):
+    return client.post("/auth/login", json={"username": username, "password": password})
+
+
+class TestLogin:
+    def test_login_success_returns_token(self, app_client):
+        r = _login(app_client, "admin", "adminpass")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["token_type"] == "bearer"
+        assert body["role"] == "sysadmin"
+        assert body["access_token"] and body["expires_in"] > 0
+
+    def test_login_wrong_password_401(self, app_client):
+        r = _login(app_client, "admin", "WRONG")
         assert r.status_code == 401
         assert r.json()["error"]["code"] == "UNAUTHORIZED"
 
-    def test_wrong_key_rejected(self, client, monkeypatch):
-        monkeypatch.setenv(API_KEY_ENV, "secret-key")
-        r = client.get("/protected", headers={"X-API-Key": "nope"})
+    def test_login_unknown_user_401(self, app_client):
+        assert _login(app_client, "ghost", "x").status_code == 401
+
+
+class TestProtectedRoutes:
+    def test_no_token_401(self, app_client):
+        assert app_client.get("/any-auth").status_code == 401
+
+    def test_garbage_token_401(self, app_client):
+        r = app_client.get("/any-auth", headers={"Authorization": "Bearer not.a.jwt"})
         assert r.status_code == 401
 
-    def test_correct_key_allowed(self, client, monkeypatch):
-        monkeypatch.setenv(API_KEY_ENV, "secret-key")
-        r = client.get("/protected", headers={"X-API-Key": "secret-key"})
+    def test_valid_token_200(self, app_client):
+        tok = _login(app_client, "ender", "userpass").json()["access_token"]
+        r = app_client.get("/any-auth", headers={"Authorization": f"Bearer {tok}"})
         assert r.status_code == 200
-        assert r.json() == {"ok": True}
+        assert r.json() == {"user": "ender", "role": "end_user"}
 
-    def test_health_is_public_even_with_auth(self, client, monkeypatch):
-        monkeypatch.setenv(API_KEY_ENV, "secret-key")
-        assert client.get("/health").status_code == 200
+    def test_query_param_token_fallback(self, app_client):
+        # EventSource/SSE: Authorization header gönderemez → ?access_token=
+        tok = _login(app_client, "ender", "userpass").json()["access_token"]
+        r = app_client.get(f"/any-auth?access_token={tok}")
+        assert r.status_code == 200
+        assert r.json()["user"] == "ender"
+
+    def test_expired_token_401(self, app_client):
+        # Geçmiş exp ile manuel token üret (dev secret ile imzalı).
+        payload = {
+            "sub": "admin", "role": "sysadmin", "jti": uuid.uuid4().hex,
+            "iat": int(time.time()) - 200, "exp": int(time.time()) - 100,
+        }
+        tok = jwt.encode(payload, auth_mod._secret(), algorithm=auth_mod._algorithm())
+        r = app_client.get("/any-auth", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 401
 
 
-class TestAuthDisabled:
-    def test_dev_mode_allows_without_key(self, client, monkeypatch):
-        monkeypatch.delenv(API_KEY_ENV, raising=False)
-        auth._warned = False  # reset one-time warning
-        r = client.get("/protected")
+class TestLogoutBlacklist:
+    def test_logout_blacklists_token(self, app_client):
+        tok = _login(app_client, "admin", "adminpass").json()["access_token"]
+        h = {"Authorization": f"Bearer {tok}"}
+        assert app_client.get("/auth/me", headers=h).status_code == 200
+        assert app_client.post("/auth/logout", headers=h).status_code == 200
+        # Aynı token artık reddedilmeli
+        assert app_client.get("/auth/me", headers=h).status_code == 401
+
+
+class TestRBAC:
+    def test_end_user_forbidden_on_sysadmin_route(self, app_client):
+        tok = _login(app_client, "ender", "userpass").json()["access_token"]
+        r = app_client.get("/sysadmin-only", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 403
+        assert r.json()["error"]["code"] == "FORBIDDEN"
+
+    def test_sysadmin_allowed_on_sysadmin_route(self, app_client):
+        tok = _login(app_client, "admin", "adminpass").json()["access_token"]
+        r = app_client.get("/sysadmin-only", headers={"Authorization": f"Bearer {tok}"})
         assert r.status_code == 200
 
-    def test_auth_enabled_flag(self, monkeypatch):
-        monkeypatch.delenv(API_KEY_ENV, raising=False)
-        assert auth_enabled() is False
-        monkeypatch.setenv(API_KEY_ENV, "x")
-        assert auth_enabled() is True
-        monkeypatch.setenv(API_KEY_ENV, "   ")  # whitespace = not configured
-        assert auth_enabled() is False
+
+class TestTokenRoundtrip:
+    def test_create_then_decode(self, app_client):
+        tok, expires_in = create_access_token(AuthenticatedUser("admin", Role.SYSADMIN))
+        payload = auth_mod.decode_token(tok)
+        assert payload["sub"] == "admin" and payload["role"] == "sysadmin"
+        assert "jti" in payload and expires_in > 0

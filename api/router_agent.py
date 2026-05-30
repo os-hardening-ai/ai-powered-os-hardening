@@ -17,9 +17,11 @@ import time
 from pathlib import Path
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from api.auth import require_role
+from api.auth_models import Role
 from api.errors import APIError, ErrorCode, raise_internal_error
 
 router = APIRouter()
@@ -174,7 +176,12 @@ async def agent_plan(body: PlanRequest):
         raise_internal_error("agent_plan", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
-@router.post("/agent/harden", response_model=HardenResponse, tags=["agents"])
+@router.post(
+    "/agent/harden",
+    response_model=HardenResponse,
+    tags=["agents"],
+    dependencies=[Depends(require_role(Role.SYSADMIN, Role.SECURITY))],
+)
 async def agent_harden(body: HardenRequest):
     """İP-7 — Multi-step ajan: plan → script üret → self-verify → (gerekirse) refine."""
     try:
