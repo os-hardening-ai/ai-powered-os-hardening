@@ -27,9 +27,10 @@ from prometheus_metrics import record_safety_check, record_rejection
 SafetyCategory = Literal[
     "safe_defensive",      # Legitimate security hardening
     "safe_educational",    # Learning/research query
-    "ambiguous",           # Unclear intent
+    "ambiguous",           # Unclear intent (model DELIBERATELY classified → proceed w/ caution)
     "unsafe_offensive",    # Attack/exploit development
-    "unsafe_spam"          # Spam/abuse attempt
+    "unsafe_spam",         # Spam/abuse attempt
+    "unverified",          # Safety COULD NOT be verified (LLM error/parse failure) → fail CLOSED
 ]
 
 
@@ -156,11 +157,17 @@ Classification:"""
             if self.debug:
                 print(f"[SafetyClassifier] Error: {e}")
 
-            # Fallback: Default to safe but ambiguous
+            # FAIL CLOSED: classifier could not run (provider down, timeout, etc.).
+            # Returning a "safe" result here would silently disable the entire
+            # security gate on any LLM outage — so we mark it unverified/unsafe.
+            self.stats["total_classifications"] += 1
+            self.stats["unsafe_count"] += 1
+            record_safety_check(category="unverified", outcome="blocked")
+            record_rejection(layer="1")
             return SafetyResult(
-                category="ambiguous",
-                confidence=0.5,
-                reason=f"Classification failed: {str(e)}"
+                category="unverified",
+                confidence=0.0,
+                reason=f"Safety classification unavailable: {str(e)}",
             )
 
     def _parse_response(self, response: str) -> SafetyResult:
@@ -187,12 +194,13 @@ Classification:"""
             confidence = float(data.get("confidence", 0.5))
             reason = data.get("reason", "No reason provided")
 
-            # Validate category
+            # Validate category — an unrecognised label from the model is
+            # untrustworthy, so fail CLOSED (unverified) rather than to ambiguous.
             valid_categories = ["safe_defensive", "safe_educational", "ambiguous", "unsafe_offensive", "unsafe_spam"]
             if category not in valid_categories:
-                category = "ambiguous"
-                confidence = 0.5
-                reason = f"Invalid category: {category}"
+                reason = f"Invalid category returned by model: {category!r}"
+                category = "unverified"
+                confidence = 0.0
 
             return SafetyResult(
                 category=category,  # type: ignore
@@ -208,13 +216,22 @@ Classification:"""
             category_match = re.search(r'"category":\s*"(\w+)"', response)
             confidence_match = re.search(r'"confidence":\s*([\d.]+)', response)
 
-            category = category_match.group(1) if category_match else "ambiguous"
-            confidence = float(confidence_match.group(1)) if confidence_match else 0.5
+            valid_categories = ["safe_defensive", "safe_educational", "ambiguous", "unsafe_offensive", "unsafe_spam"]
+            extracted = category_match.group(1) if category_match else None
+            if extracted in valid_categories:
+                category = extracted
+                confidence = float(confidence_match.group(1)) if confidence_match else 0.5
+                reason = "Parsed with regex fallback"
+            else:
+                # No parseable/valid category → fail CLOSED, do not assume safe.
+                category = "unverified"
+                confidence = 0.0
+                reason = "Unparseable safety response"
 
             return SafetyResult(
                 category=category,  # type: ignore
                 confidence=confidence,
-                reason="Parsed with regex fallback"
+                reason=reason,
             )
 
     def get_stats(self) -> dict:

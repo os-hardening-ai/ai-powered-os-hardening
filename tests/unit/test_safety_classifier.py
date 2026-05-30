@@ -31,6 +31,10 @@ class TestSafetyResult:
         for cat in ("unsafe_offensive", "unsafe_spam"):
             assert not SafetyResult(category=cat, confidence=0.9, reason="x").is_safe
 
+    def test_unverified_is_not_safe(self):
+        # Fail-closed sentinel: safety could not be verified → must NOT pass.
+        assert not SafetyResult(category="unverified", confidence=0.0, reason="x").is_safe
+
 
 class TestClassify:
     def test_empty_question_is_spam(self):
@@ -69,14 +73,44 @@ class TestClassify:
         assert res.category == "unsafe_spam"
         assert res.confidence == pytest.approx(0.7)
 
-    def test_llm_exception_falls_back_to_ambiguous(self):
+    def test_llm_exception_fails_closed(self):
+        """Provider down / timeout must FAIL CLOSED — never silently pass as safe."""
         def boom(_):
             raise RuntimeError("provider down")
 
         clf = SafetyClassifier(boom)
         res = clf.classify("anything")
+        assert res.category == "unverified"
+        assert res.is_safe is False
+        assert res.confidence == 0.0
+        # exception path still records the classification for observability
+        assert clf.get_stats()["total_classifications"] == 1
+        assert clf.get_stats()["unsafe_count"] == 1
+
+    def test_invalid_category_fails_closed(self):
+        """An unrecognised category label from the model must not pass as safe."""
+        clf = SafetyClassifier(
+            fake_llm('{"category": "totally_made_up", "confidence": 0.99, "reason": "x"}')
+        )
+        res = clf.classify("anything")
+        assert res.category == "unverified"
+        assert res.is_safe is False
+
+    def test_unparseable_response_fails_closed(self):
+        """No JSON and no extractable valid category → fail closed, not ambiguous."""
+        clf = SafetyClassifier(fake_llm("the model rambled with no structure at all"))
+        res = clf.classify("anything")
+        assert res.category == "unverified"
+        assert res.is_safe is False
+
+    def test_ambiguous_classification_still_proceeds(self):
+        """A DELIBERATE 'ambiguous' classification keeps the documented proceed-with-caution design."""
+        clf = SafetyClassifier(
+            fake_llm('{"category": "ambiguous", "confidence": 0.5, "reason": "unclear"}')
+        )
+        res = clf.classify("security tricks?")
         assert res.category == "ambiguous"
-        assert res.confidence == 0.5
+        assert res.is_safe is True
 
     def test_stats_accumulate(self):
         clf = SafetyClassifier(

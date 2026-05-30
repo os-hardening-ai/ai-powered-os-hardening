@@ -518,6 +518,16 @@ Lutfen guvenlik veya sistem sikilaştirma ile ilgili bir soru sorun."""
 
     def _build_rejection_message(self, safety: SafetyResult) -> str:
         """Build user-friendly rejection message for unsafe queries"""
+        # Fail-closed (classifier unavailable) → honest "service" message, not a
+        # policy-violation accusation. The user did nothing wrong.
+        if safety.category == "unverified":
+            return (
+                "GUVENLIK DOGRULAMASI GECICI OLARAK YAPILAMADI\n\n"
+                "Sorunuzun guvenlik kontrolu su anda tamamlanamadi (siniflandirma "
+                "servisi gecici olarak erisilemez). Guvenlik gerekcesiyle istek "
+                "islenmedi.\n\n"
+                "Lutfen birkac saniye sonra tekrar deneyin."
+            )
         return f"""GUVENLIK UYARISI
 
 Bu soru guvenlik politikalarimiz kapsaminda yanitlanamıyor.
