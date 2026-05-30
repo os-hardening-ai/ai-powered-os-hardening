@@ -10,6 +10,8 @@ LLM erişilemezse her iki uç da deterministik (RuleEngine + ArtifactGenerator)
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from pathlib import Path
 from typing import List, Literal, Optional
 
@@ -22,24 +24,27 @@ router = APIRouter()
 
 _UBUNTU_RULES_PATH = Path("data/rules/ubuntu_24_04_rules.yaml")
 
-# Lazy singletons
+# Lazy singletons — eşzamanlı ilk isteklerde çift-init yarışını önlemek için kilit.
 _rule_engine = None
 _small_llm: Optional[object] = None
 _small_llm_resolved = False
+_init_lock = threading.Lock()
 
 
 def _get_rule_engine():
     global _rule_engine
     if _rule_engine is None:
-        from domain.rule_engine.rule_engine import RuleEngine
-        if not _UBUNTU_RULES_PATH.exists():
-            raise APIError(
-                status_code=503,
-                error_code=ErrorCode.SERVICE_UNAVAILABLE,
-                message="Rules YAML not found — ensure data/rules/ubuntu_24_04_rules.yaml exists",
-                details={"path": str(_UBUNTU_RULES_PATH)},
-            )
-        _rule_engine = RuleEngine(_UBUNTU_RULES_PATH)
+        with _init_lock:
+            if _rule_engine is None:  # double-checked locking
+                from domain.rule_engine.rule_engine import RuleEngine
+                if not _UBUNTU_RULES_PATH.exists():
+                    raise APIError(
+                        status_code=503,
+                        error_code=ErrorCode.SERVICE_UNAVAILABLE,
+                        message="Rules YAML not found — ensure data/rules/ubuntu_24_04_rules.yaml exists",
+                        details={"path": str(_UBUNTU_RULES_PATH)},
+                    )
+                _rule_engine = RuleEngine(_UBUNTU_RULES_PATH)
     return _rule_engine
 
 
@@ -47,13 +52,15 @@ def _get_small_llm():
     """Best-effort small LLM callable; None if providers unavailable (→ deterministic)."""
     global _small_llm, _small_llm_resolved
     if not _small_llm_resolved:
-        _small_llm_resolved = True
-        try:
-            from llm.clients import get_llm_clients
-            small, _large = get_llm_clients()
-            _small_llm = small
-        except Exception:
-            _small_llm = None
+        with _init_lock:
+            if not _small_llm_resolved:  # double-checked locking
+                try:
+                    from llm.clients import get_llm_clients
+                    small, _large = get_llm_clients()
+                    _small_llm = small
+                except Exception:
+                    _small_llm = None
+                _small_llm_resolved = True
     return _small_llm
 
 
@@ -139,7 +146,10 @@ async def agent_plan(body: PlanRequest):
     try:
         from llm.agents.task_planner import TaskPlanner
         planner = TaskPlanner(rule_engine=_get_rule_engine(), llm_fn=_get_small_llm())
-        plan = planner.plan(body.goal, os_target=body.os_target, security_level=body.security_level)
+        # Senkron + LLM çağrılı iş — event loop'u bloklamamak için thread'e al.
+        plan = await asyncio.to_thread(
+            planner.plan, body.goal, body.os_target, body.security_level
+        )
         return _plan_to_response(plan)
     except APIError:
         raise
@@ -153,9 +163,12 @@ async def agent_harden(body: HardenRequest):
     try:
         from llm.agents.hardening_agent import HardeningAgent
         agent = HardeningAgent(rule_engine=_get_rule_engine(), llm_fn=_get_small_llm())
-        res = agent.run(
-            body.goal, os_target=body.os_target,
-            security_level=body.security_level, fmt=body.format,
+        # Çok-adımlı + LLM çağrılı iş — event loop'u bloklamamak için thread'e al.
+        res = await asyncio.to_thread(
+            agent.run, body.goal,
+            os_target=body.os_target,
+            security_level=body.security_level,
+            fmt=body.format,
         )
         return HardenResponse(
             success=res.success,
