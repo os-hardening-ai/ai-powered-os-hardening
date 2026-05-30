@@ -94,29 +94,70 @@ flowchart TD
 
     subgraph PIPE["4-Katmanlı Güvenlik Pipeline"]
         direction TB
-        L1[Layer 1: Safety Classification] --> L2[Layer 2: Intent Detection<br/>ML %90.48 + pattern]
+        L1[Layer 1: Safety Classification] -->|safe| L2[Layer 2: Intent Detection<br/>pattern → düşük conf ise ML %90.48]
         L2 --> L3{Layer 3: Routing}
         L3 -->|3A| PAT[Pattern: selamlama/yardım]
-        L3 -->|3B| INFO[Info: RAG + LLM]
+        L3 -->|3B| INFO[Info Pipeline]
         L3 -->|3C| ACT[Action: script üretimi]
-        INFO --> L4[Layer 4: Generation<br/>+ ClaimVerifier + Refinement]
-        ACT --> L4
+        ACT --> L4[Layer 4: Generation<br/>prompt = soru + RAG bağlamı]
     end
 
-    INFO -.->|use_rag| RAG
+    %% Layer 1 fail-closed: güvensiz sorgu pipeline'a girmeden reddedilir
+    L1 -.->|unsafe: fail-closed| Reject
+
+    %% use_rag ise önce bağlam getirilir, sonra bağlam L4 Generation prompt'una eklenir
+    INFO -->|use_rag=true| QP
+    INFO -.->|RAG yok| L4
     subgraph RAG["RAG (Qdrant)"]
         direction TB
         QP[QueryPlanner<br/>HyDE+subquery+stepback] --> RET[Hybrid BM25+Dense + MMR]
-        RET --> REF[Refinement loop<br/>düşük skor/conf → yeniden]
+        RET --> REF{Retrieval refinement<br/>max skor &lt; 0.55?}
+        REF -->|evet → top_k×2, min_score↓<br/>≤2 deneme| RET
     end
+    REF -->|hayır: bağlam hazır| L4
 
-    L4 --> LLM
+    L4 -->|LLM çağrısı bağlamla| LLM
     subgraph LLM["LLM Fallback (fail-fast)"]
         direction LR
-        C[Cerebras gpt-oss-120b] --> S[SambaNova] --> G[Gemini 3.1 Flash Lite] --> N[Novita]
+        C[Cerebras gpt-oss-120b] -->|429/hata| S[SambaNova] -->|429/hata| G[Gemini 3.1 Flash Lite] -->|429/hata| N[Novita]
     end
 
-    LLM --> Resp([Yanıt + kaynaklar + confidence])
+    LLM -->|üretilen cevap| CV{ClaimVerifier<br/>groundedness yeterli mi?}
+    CV -.->|düşük → sorguyu genişlet,<br/>yeniden retrieve + üret 1x| QP
+    CV -->|yeterli| Resp([Yanıt + kaynaklar + confidence])
+```
+
+> **Geri-besleme döngüleri (özet):** ① Retrieval-skoru refinement (skor<0.55 → yeniden retrieve, ≤2×) ·
+> ② Cevap-groundedness refinement (ClaimVerifier düşük → genişletilmiş yeniden retrieve+üret, 1×) ·
+> ③ Agentic self-verify (İP-7, aşağıda) · ④ LLM fail-fast fallback · ⑤ Intent pattern→ML fallback · ⑥ Layer-1 fail-closed.
+
+### Action path — İP-7 Agentic self-verify döngüsü
+
+`POST /api/agent/harden` çok-adımlı ajan: planla → topla → üret → **self-verify** → tehlikeliyse **refine** (≤1×).
+
+```mermaid
+flowchart LR
+    G([Hedef + OS]) --> P[PLAN<br/>TaskPlanner İP-6<br/>kural seç + sırala]
+    P --> COL[COLLECT<br/>kurallar + remediation]
+    COL --> GEN[GENERATE<br/>ArtifactGenerator<br/>bash/ps/ansible/reg/gpo]
+    GEN --> V{VERIFY<br/>OutputValidator<br/>tehlikeli komut?}
+    V -->|tehlikeli → REFINE<br/>düzelt/çıkar, ≤1x| GEN
+    V -->|temiz| SUM[SUMMARIZE] --> OUT([AgentResult<br/>script + steps + verify ok])
+```
+
+> LLM erişilemezse PLAN/GENERATE deterministik (RuleEngine + ArtifactGenerator) çalışmaya devam eder.
+
+### Multi-turn — Session + Query Rewrite döngüsü
+
+`session_id` ile gelen takip soruları, geçmişe göre standalone sorguya yeniden yazılır.
+
+```mermaid
+flowchart LR
+    Q([Soru + session_id]) --> H[Geçmişi yükle<br/>son 10 tur]
+    H -->|geçmiş var + coreference| RW[QueryRewriter<br/>bunu/onu → standalone]
+    H -->|geçmiş yok| PIPE2[Pipeline]
+    RW --> PIPE2[Pipeline → cevap]
+    PIPE2 --> SAVE[add_turn user+assistant] -.->|sonraki turda| H
 ```
 
 Detaylı mimari: [docs/02_PIPELINE_VE_ROUTELAR.md](docs/02_PIPELINE_VE_ROUTELAR.md) · [docs/10_ARCHITECTURE_ANALYSIS.md](docs/10_ARCHITECTURE_ANALYSIS.md)
