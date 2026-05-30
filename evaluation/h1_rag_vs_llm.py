@@ -362,6 +362,8 @@ def save_results(report: H1Report, out_dir: str | Path = "evaluation/results") -
 
 def main() -> None:
     import os
+    from evaluation import force_utf8_output
+    force_utf8_output()                       # Türkçe log Windows'ta bozulmasın
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     from llm.clients import get_llm_clients
     small, large = get_llm_clients()

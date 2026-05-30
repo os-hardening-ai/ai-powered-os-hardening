@@ -46,10 +46,18 @@ class ClaimVerifier:
         llm_fn: LLMCallable,
         min_confidence: float = 0.6,
         max_claims: int = 6,
+        max_chunk_chars: int = 600,
+        max_context_chars: int = 4000,
     ) -> None:
         self._llm = llm_fn
         self.min_confidence = min_confidence
         self.max_claims = max_claims
+        # Doğrulama bağlamı pencereleri (token/maliyet sınırı). Üretim makul sınırlı;
+        # değerlendirme (İP-5) TAM bağlama karşı doğrulamak için bunları büyütür.
+        # Eski sabit 2000 kr ~3 chunk'ı gösteriyordu → uzaktaki desteklenen iddialar
+        # sahte "desteklenmiyor" sayılıyordu (groundedness yapay düşüktü).
+        self.max_chunk_chars = max_chunk_chars
+        self.max_context_chars = max_context_chars
 
     def verify(self, answer: str, chunks: List[dict]) -> VerificationResult:
         """
@@ -68,7 +76,7 @@ class ClaimVerifier:
             return VerificationResult(is_valid=True, confidence=1.0)
 
         context = "\n\n".join(
-            f"[{i + 1}] {c.get('text', '')[:600]}"
+            f"[{i + 1}] {c.get('text', '')[:self.max_chunk_chars]}"
             for i, c in enumerate(chunks)
         )
 
@@ -106,16 +114,21 @@ class ClaimVerifier:
     # ── private helpers ──────────────────────────────────────────────────────
 
     def _extract_claims(self, answer: str) -> List[str]:
+        # Atıf işaretlerini ([1], [2]...) çıkar: yoksa "1", "3" gibi anlamsız parçalar
+        # "iddia" olarak çıkıyor ve bağlama karşı denetlenince hep "desteklenmiyor" sayılıyor.
+        cleaned = re.sub(r"\[\s*\d+\s*\]", " ", answer)
         prompt = (
             f"Extract up to {self.max_claims} atomic factual claims from this answer.\n"
-            "Focus on: shell commands, file paths, config keys/values, CIS section IDs.\n"
+            "Each claim MUST be a COMPLETE standalone sentence stating ONE verifiable fact "
+            "(a directive, config key/value, command, or CIS recommendation). "
+            "Do NOT return bare fragments, numbers, paths, or citation markers on their own.\n"
             "Return ONLY a JSON array of strings — no markdown, no explanation.\n\n"
-            f"Answer:\n{answer[:1500]}"
+            f"Answer:\n{cleaned[:1500]}"
         )
         try:
             resp = self._llm(prompt)
             items = _parse_json_list(resp, self.max_claims)
-            return items
+            return _filter_claims(items)
         except Exception as exc:
             logger.warning("[ClaimVerifier] claim extraction failed: %s", exc)
             return []
@@ -125,7 +138,7 @@ class ClaimVerifier:
             "Is this claim DIRECTLY supported by the context below?\n"
             'Answer with JSON only: {"supported": true/false, "reason": "one sentence"}\n\n'
             f"Claim: {claim}\n\n"
-            f"Context (truncated):\n{context[:2000]}"
+            f"Context (truncated):\n{context[:self.max_context_chars]}"
         )
         try:
             resp = self._llm(prompt)
@@ -137,6 +150,26 @@ class ClaimVerifier:
             logger.warning("[ClaimVerifier] claim check failed: %s", exc)
         # Conservative fallback — treat as supported to avoid false negatives
         return True, "parse_error"
+
+
+def _filter_claims(items: List[str]) -> List[str]:
+    """Doğrulanamaz 'iddia'ları ele: çok kısa, salt sayı/noktalama, tek kelime parça.
+
+    Teşhiste extraction'ın "/etc", "CIS Benchmark", "1", "3" gibi parçalar ürettiği
+    görüldü; bunları bağlama karşı denetlemek anlamsız (hep 'desteklenmiyor' → yapay
+    düşük groundedness). Gerçek iddia = çok kelimeli, anlamlı uzunlukta cümle.
+    """
+    out: List[str] = []
+    for c in items:
+        s = str(c).strip()
+        if len(s) < 15:                      # "/etc", "1", "CIS" gibi parçalar
+            continue
+        if " " not in s:                      # tek kelime → iddia değil
+            continue
+        if re.fullmatch(r"[\d\W]+", s):       # salt sayı/noktalama
+            continue
+        out.append(s)
+    return out
 
 
 def _parse_json_list(text: str, max_items: int) -> List[str]:

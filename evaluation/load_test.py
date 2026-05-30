@@ -8,13 +8,23 @@ Bu script FastAPI uygulamasını in-process TestClient ile ayağa kaldırır, ag
 uçlarına eşzamanlı (concurrent) istek atar, her isteğin gecikmesini ölçer ve
 P50/P95/P99 dağılımını çıkarır. Percentile hesabı api/metrics.py'den yeniden kullanılır.
 
-Çalıştırma (kotasız sağlayıcı önerilir):
-    LLM_PROVIDER=novita LOAD_N=20 LOAD_CONCURRENCY=4 python -m evaluation.load_test
+Çalıştırma:
+    # Birincil/üretim sağlayıcı (hız) — H3'ün asıl hedefi bu konfigürasyondur:
+    LLM_PROVIDER=groq LOAD_N=8 LOAD_CONCURRENCY=2 LOAD_THROTTLE_S=2 python -m evaluation.load_test
+    # Kotasız sağlayıcı (kalite modeli, daha yavaş) ile karşılaştırma:
+    LLM_PROVIDER=novita LOAD_N=10 LOAD_CONCURRENCY=3 python -m evaluation.load_test
+
+Env:
+    LOAD_N            uç başına istek sayısı (varsayılan 20)
+    LOAD_CONCURRENCY  eşzamanlı istek (varsayılan 4)
+    LOAD_THROTTLE_S   istek başlangıçları arası GLOBAL min aralık (sn); ücretsiz-tier 429'unu önler (varsayılan 0)
+    LOAD_ONLY         virgülle ayrık uç adları (örn. "agent_plan,agent_harden")
 
 Çıktı: evaluation/results/load_test_report.md + load_test_results.json
+       (rapor HANGİ sağlayıcı/modelle ölçüldüğünü de yazar — kendini-belgeleyen artefakt)
 
-NOT: Gerçek LLM çağrısı yapılır → gecikme gerçekçidir. Eşzamanlılık yüksekse sağlayıcı
-throttle/kota yiyebilir; örneklem küçükse rapor bunu dürüstçe belirtir.
+NOT: Gerçek LLM çağrısı yapılır → gecikme gerçekçidir. Latency büyük ölçüde SAĞLAYICIYA
+bağlıdır (hızlı=Groq, yavaş ama kaliteli=Novita-large). Örneklem küçükse rapor bunu belirtir.
 """
 
 from __future__ import annotations
@@ -22,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -34,6 +45,30 @@ logger = logging.getLogger(__name__)
 from api.metrics import MetricsCollector
 
 _P95_TARGET_S = 5.0  # H3 hedefi
+
+
+# ── Global istek-hızı sınırlayıcı ────────────────────────────────────────────────
+# Eşzamanlılıktan BAĞIMSIZ gerçek bir hız tavanı uygular. Ücretsiz-tier (örn. Groq)
+# sağlayıcılarda 429 backoff fırtınasını önler — backoff'a düşen tek bir çağrı P95'i
+# 100+ saniyeye fırlatabilir (önceki ölçümdeki 136s outlier'ın kök nedeni buydu).
+_rate_state = {"lock": threading.Lock(), "last": 0.0}
+
+
+def _rate_limit(throttle_s: float, state: dict | None = None) -> None:
+    """İstek BAŞLANGIÇLARINI global olarak en az throttle_s aralıklı tut.
+
+    Ölçülen gecikme bu beklemeyi İÇERMEZ: çağıran taraf t0'ı bu fonksiyon
+    döndükten SONRA alır (aşağıda `run_endpoint._one`).
+    """
+    if throttle_s <= 0:
+        return
+    st = state if state is not None else _rate_state
+    with st["lock"]:
+        now = time.monotonic()
+        wait = throttle_s - (now - st["last"])
+        if wait > 0:
+            time.sleep(wait)
+        st["last"] = time.monotonic()
 
 
 @dataclass
@@ -76,11 +111,13 @@ class EndpointResult:
 @dataclass
 class LoadReport:
     concurrency: int
+    provider_info: Dict[str, str] = field(default_factory=dict)
     results: List[EndpointResult] = field(default_factory=list)
 
     def summary(self) -> Dict[str, object]:
         return {
             "concurrency": self.concurrency,
+            "provider": self.provider_info,   # GERÇEKTE kullanılan sağlayıcı/model — artefaktı kendini-belgeleyen yapar
             "p95_target_s": _P95_TARGET_S,
             "endpoints": {
                 r.name: {"n": r.n, "ok": r.ok, "errors": r.errors,
@@ -94,6 +131,39 @@ class LoadReport:
 def _percentile(durations: List[float], q: float) -> float:
     """api/metrics._percentile'ı kullan (tutarlı percentile tanımı)."""
     return round(MetricsCollector._percentile(sorted(durations), q), 3)
+
+
+def _model_name_of(fn) -> str:
+    """Callable LLM'den model adını defansif çıkar (yoksa '?')."""
+    if hasattr(fn, "model_name"):
+        return str(getattr(fn, "model_name"))
+    for attr in ("_primary", "active_client", "client", "_client"):
+        c = getattr(fn, attr, None)
+        if c is not None and hasattr(c, "model_name"):
+            return str(c.model_name)
+    return "?"
+
+
+def _provider_info() -> Dict[str, str]:
+    """Yük testinin GERÇEKTE kullandığı sağlayıcı + modelleri kaydet.
+
+    Önceki karışıklığın kök nedeni: rapor hangi sağlayıcıyla ölçüldüğünü yazmıyordu
+    (doküman Groq sayısı iddia ederken artefakt Novita koşumuydu). Bu fonksiyon
+    sağlayıcıyı env'den, model adlarını birincil (fallback'siz) istemcilerden okur.
+    """
+    provider = (os.environ.get("LLM_PROVIDER") or "groq").lower()
+    cheap = (os.environ.get("LLM_INCLUDE_CHEAP", "") or "").lower()
+    info = {"provider": provider,
+            "fallback_cheap": "on" if cheap in ("1", "true", "yes") else "off",
+            "small_model": "?", "large_model": "?"}
+    try:
+        from llm.clients import get_llm_clients
+        small, large = get_llm_clients(enable_fallback=False)  # birincil istemci nesneleri (.model_name var)
+        info["small_model"] = _model_name_of(small)
+        info["large_model"] = _model_name_of(large)
+    except Exception as exc:  # pragma: no cover - bilgi amaçlı; başarısızlık ölçümü engellemez
+        logger.warning("[Load] saglayici bilgisi alinamadi: %s", exc)
+    return info
 
 
 def _build_client():
@@ -114,11 +184,13 @@ def _warmup(client, specs: List[EndpointSpec]) -> None:
             pass
 
 
-def run_endpoint(client, spec: EndpointSpec, n: int, concurrency: int) -> EndpointResult:
+def run_endpoint(client, spec: EndpointSpec, n: int, concurrency: int,
+                 throttle_s: float = 0.0) -> EndpointResult:
     durations: List[float] = []
     statuses: List[int] = []
 
     def _one(_i: int):
+        _rate_limit(throttle_s)          # global hız tavanı (ÖLÇÜMDEN ÖNCE bekle)
         t0 = time.monotonic()
         try:
             r = client.request(spec.method, spec.path, json=spec.payload)
@@ -146,10 +218,14 @@ def run_endpoint(client, spec: EndpointSpec, n: int, concurrency: int) -> Endpoi
 
 
 def to_markdown(rep: LoadReport) -> str:
+    pi = rep.provider_info or {}
     L = [
         "# H3 — P95 Gecikme Yük Testi",
         "",
         f"**Hipotez (H3):** P95 cevap süresi < {_P95_TARGET_S:.0f} sn.",
+        f"**Sağlayıcı:** `{pi.get('provider', '?')}` "
+        f"(small=`{pi.get('small_model', '?')}`, large=`{pi.get('large_model', '?')}`, "
+        f"ucuz-fallback={pi.get('fallback_cheap', '?')})",
         f"**Yöntem:** In-process FastAPI (TestClient), eşzamanlılık={rep.concurrency}, "
         "gerçek LLM çağrısı. Percentile: `api/metrics.MetricsCollector._percentile` (index tabanlı).",
         "",
@@ -179,8 +255,10 @@ def save_results(rep: LoadReport, out_dir: str | Path = "evaluation/results") ->
 
 
 def print_report(rep: LoadReport) -> None:
+    pi = rep.provider_info or {}
     print("\n" + "=" * 60)
-    print(f"H3 P95 YUK TESTI (concurrency={rep.concurrency}, hedef <{_P95_TARGET_S:.0f}s)")
+    print(f"H3 P95 YUK TESTI (provider={pi.get('provider', '?')}, "
+          f"concurrency={rep.concurrency}, hedef <{_P95_TARGET_S:.0f}s)")
     print("=" * 60)
     for r in rep.results:
         mark = "[OK]" if r.passed_h3 else "[!!]"
@@ -190,9 +268,12 @@ def print_report(rep: LoadReport) -> None:
 
 
 def main() -> None:
+    from evaluation import force_utf8_output
+    force_utf8_output()                       # Türkçe log Windows'ta bozulmasın
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     n = int(os.environ.get("LOAD_N", "20"))
     concurrency = int(os.environ.get("LOAD_CONCURRENCY", "4"))
+    throttle = float(os.environ.get("LOAD_THROTTLE_S", "0"))  # istek-başı global hız tavanı (sn) — 429'a karşı
     only = os.environ.get("LOAD_ONLY")  # virgülle ayrık uç adları (opsiyonel)
 
     specs = ENDPOINTS
@@ -202,10 +283,11 @@ def main() -> None:
 
     client = _build_client()
     _warmup(client, specs)  # init yarışını ölçümden önce çöz
-    rep = LoadReport(concurrency=concurrency)
+    rep = LoadReport(concurrency=concurrency, provider_info=_provider_info())
     for spec in specs:
-        logger.info("[Load] %s × %d (concurrency=%d)...", spec.name, n, concurrency)
-        rep.results.append(run_endpoint(client, spec, n, concurrency))
+        logger.info("[Load] %s × %d (concurrency=%d, throttle=%.1fs)...",
+                    spec.name, n, concurrency, throttle)
+        rep.results.append(run_endpoint(client, spec, n, concurrency, throttle_s=throttle))
 
     out = save_results(rep)
     print(f"Rapor: {out / 'load_test_report.md'} ve {out / 'load_test_results.json'}")

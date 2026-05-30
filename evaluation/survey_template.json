@@ -1,0 +1,62 @@
+{
+  "_README": "Bu dosyayı evaluation/results/survey_responses.json olarak KOPYALAYIN ve gerçek pilot verisiyle doldurun. Aşağıdaki 2 satır 'example: true' ile işaretli ÖRNEKTİR — skorlamada atlanır. Gerçek katılımcılarda 'example' alanını silin (veya false yapın). Likert: 1-5. verdict: accept|modify|reject. Süreler saniye. Protokol: docs/16_KULLANICI_CALISMASI.md",
+  "study": "OS Hardening Karar-Destek — İP-12 / H2 / H4",
+  "participants": [
+    {
+      "id": "ORNEK-1",
+      "example": true,
+      "role": "sysadmin",
+      "tasks": [
+        {
+          "task_id": "ssh_hardening",
+          "decision_time_baseline_s": 210,
+          "decision_time_with_tool_s": 55,
+          "recommendations": [
+            {"id": "permit_root_login_no", "verdict": "accept"},
+            {"id": "max_auth_tries_4", "verdict": "accept"},
+            {"id": "idle_timeout", "verdict": "modify"}
+          ]
+        },
+        {
+          "task_id": "password_policy",
+          "decision_time_baseline_s": 180,
+          "decision_time_with_tool_s": 70,
+          "recommendations": [
+            {"id": "pass_min_len_14", "verdict": "accept"},
+            {"id": "pass_max_days_365", "verdict": "reject"}
+          ]
+        }
+      ],
+      "survey": {
+        "usefulness": 5,
+        "trust": 4,
+        "clarity": 5,
+        "would_use_again": 5,
+        "overall_satisfaction": 4
+      }
+    },
+    {
+      "id": "ORNEK-2",
+      "example": true,
+      "role": "developer",
+      "tasks": [
+        {
+          "task_id": "firewall_rules",
+          "decision_time_baseline_s": 240,
+          "decision_time_with_tool_s": 90,
+          "recommendations": [
+            {"id": "default_deny", "verdict": "accept"},
+            {"id": "allow_ssh_only", "verdict": "modify"}
+          ]
+        }
+      ],
+      "survey": {
+        "usefulness": 4,
+        "trust": 3,
+        "clarity": 4,
+        "would_use_again": 4,
+        "overall_satisfaction": 4
+      }
+    }
+  ]
+}
