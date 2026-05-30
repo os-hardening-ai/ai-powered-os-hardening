@@ -215,6 +215,11 @@ GROQ_API_KEY           = CONFIG.groq_api_key
 GROQ_SMALL_MODEL_NAME  = CONFIG.groq_small_model
 GROQ_LARGE_MODEL_NAME  = CONFIG.groq_large_model
 
+NOVITA_API_KEY           = CONFIG.novita_api_key
+NOVITA_BASE_URL          = CONFIG.novita_base_url
+NOVITA_SMALL_MODEL_NAME  = CONFIG.novita_small_model
+NOVITA_LARGE_MODEL_NAME  = CONFIG.novita_large_model
+
 OLLAMA_BASE_URL          = CONFIG.ollama_base_url
 OLLAMA_SMALL_MODEL_NAME  = CONFIG.ollama_small_model
 OLLAMA_LARGE_MODEL_NAME  = CONFIG.ollama_large_model
