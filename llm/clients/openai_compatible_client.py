@@ -148,25 +148,37 @@ def build_from_preset(
 
 
 # ── (small, large) factory'leri — registry/builders bunları kullanır ─────────────
-# small = sınıflandırma/doğrulama (düşük temp değil; SMALL_MODEL_TEMPERATURE),
-# large = üretim (LARGE_MODEL_TEMPERATURE, daha deterministik). Cerebras'ta tek hızlı
-# model (gpt-oss-120b) olduğundan small=large modeli, yalnızca temperature ayrışır.
+# small = sınıflandırma/doğrulama (SMALL_MODEL_TEMPERATURE), large = üretim
+# (LARGE_MODEL_TEMPERATURE). Cerebras'ta tek hızlı model (gpt-oss-120b) olduğundan
+# small=large modeli, yalnızca temperature ayrışır.
+#
+# FAIL-FAST: zincir client'larında max_retries=0. FallbackLLM zaten sağlayıcılar
+# arası retry katmanıdır; SDK'nın provider-İÇİ retry'ı (429'da Retry-After ile 30-60s
+# backoff) fallback'i geciktiriyordu (H3 testinde rate-limited cerebras 56-63s'ye
+# çıkarıyordu). 0 retry → 429/hata anında bir sonraki HIZLI sağlayıcıya (sambanova) düşer.
+_CHAIN_RETRIES = 0
+
 
 def get_small_cerebras_llm() -> OpenAICompatibleClient:
     from llm.core.config import SMALL_MODEL_TEMPERATURE
-    return build_from_preset("cerebras", temperature=SMALL_MODEL_TEMPERATURE)
+    # İKİ-KATMAN: small = llama3.1-8b ($0.10/$0.10, en hızlı) — sınıflandırma/router/doğrulama.
+    # Cerebras'ta gpt-oss-120b'nin yanında llama3.1-8b de serverless mevcut (canlı console).
+    model = os.environ.get("CEREBRAS_SMALL_MODEL", "llama3.1-8b")
+    return build_from_preset("cerebras", model=model, temperature=SMALL_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
 
 
 def get_large_cerebras_llm() -> OpenAICompatibleClient:
     from llm.core.config import LARGE_MODEL_TEMPERATURE
-    return build_from_preset("cerebras", temperature=LARGE_MODEL_TEMPERATURE)
+    # large = gpt-oss-120b ($0.35/$0.75, frontier reasoning MoE) — üretim
+    model = os.environ.get("CEREBRAS_LARGE_MODEL", "gpt-oss-120b")
+    return build_from_preset("cerebras", model=model, temperature=LARGE_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
 
 
 def get_small_sambanova_llm() -> OpenAICompatibleClient:
     from llm.core.config import SMALL_MODEL_TEMPERATURE
-    return build_from_preset("sambanova", temperature=SMALL_MODEL_TEMPERATURE)
+    return build_from_preset("sambanova", temperature=SMALL_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
 
 
 def get_large_sambanova_llm() -> OpenAICompatibleClient:
     from llm.core.config import LARGE_MODEL_TEMPERATURE
-    return build_from_preset("sambanova", temperature=LARGE_MODEL_TEMPERATURE)
+    return build_from_preset("sambanova", temperature=LARGE_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
