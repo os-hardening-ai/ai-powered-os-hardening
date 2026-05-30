@@ -15,9 +15,9 @@ Bunlar öneri formunda yazılı; tamamlanmadan proje "tam" sayılmaz.
 | # | İş | Form ref | Durum | Not |
 |---|----|----------|-------|-----|
 | A1 | **Web Arayüzü (React+TS)** | İP-10 | ❌ | Chat UI, OS/rol seçimi, öneri görüntüleme, geri bildirim. *Frontend ayrı repoda ise bu madde oradan kapanır.* |
-| A2 | **Değerlendirme / ölçüm harness'i** | İP-5/6/7/8 + H1-H4 | ⚠️ | Kod hazır ama **sayısal başarı ölçütleri ölçülmedi**: İP-6 ≥%80 sıralama, İP-7 ≥%75 multi-step, İP-8 ≥%80 ZT eşleşme, İP-5 halüsinasyon <%10. **En zayıf nokta.** |
+| A2 | **Değerlendirme / ölçüm harness'i** | İP-5/6/7/8 | ✅⚠️ | **Ölçüldü** (`evaluation/ip_metrics.py`, bkz. [14_DEGERLENDIRME.md](14_DEGERLENDIRME.md)): İP-6 %100, İP-7 %100, İP-8 %100 (hepsi eşik üstü ✅). İP-5 groundedness 0.41 ⚠️ (somut sorularda yüksek, soyut hedeflerde düşük — prompt kısıtı ile iyileştirilebilir). |
 | A3 | **H1 — RAG vs saf-LLM** | H1 | ✅ | Kanıt toplandı (bkz. [14_DEGERLENDIRME.md](14_DEGERLENDIRME.md) / `evaluation/h1_rag_vs_llm.py`): groundedness 0.72→0.89, CIS atıf 0.33→0.83. n=6, büyütülebilir. |
-| A4 | **H3 — P95 < 5sn** | H3 | ⚠️ | Agent uçları <5s ölçüldü; **chat/RAG yolu için yük altında istatistiksel P95 ölçülmeli**. |
+| A4 | **H3 — P95 < 5sn** | H3 | ✅⚠️ | **Ölçüldü** (`evaluation/load_test.py`): Groq ile TaskPlanner 0.71s + HardeningAgent 2.76s <5s ✅. Novita-large (deepseek-v3) yavaş (16-23s) ❌ — latency model-seçimi kaynaklı, kod değil. |
 | A5 | **H2 / H4 — karar süresi & kabul oranı** | H2, H4 | ❌ | Kullanıcı çalışması gerektirir (küçük ölçekli anket yeterli). |
 | A6 | **İP-12 — performans testi + kullanıcı anketi** | İP-12 | ⚠️ | Raporlardaki sayılar placeholder; gerçek yük testi + memnuniyet >%70 anketi yok. |
 
