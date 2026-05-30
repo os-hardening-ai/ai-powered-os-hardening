@@ -59,12 +59,12 @@ _REGISTRY: Dict[str, ProviderSpec] = {
         "ollama", "llm.clients.ollama_client:get_small_ollama_llm,get_large_ollama_llm",
         Cost.FREE, free_priority=30, notes="Yerel, limitsiz, offline (kurulum gerekir)",
     ),
-    # CHEAP_PAID — düşük ücretli, kotasız. Ücretsizler bittiğinde 429'a karşı
-    # güvenlik ağı olarak istenirse zincire alınır (kullanıcı: "düşük ücretler de ok").
+    # CHEAP_PAID — düşük ücretli, kotasız. Groq 429'u için öncelikli güvenlik ağı;
+    # free_priority=25 → Ollama'dan (30) ÖNCE denenir.
     "novita": ProviderSpec(
         "novita", "llm.clients.novita_llm_client:get_small_novita_llm,get_large_novita_llm",
-        Cost.CHEAP_PAID, free_priority=800,
-        notes="Düşük ücretli + kotasız — 429 güvenlik ağı (include_cheap ile)",
+        Cost.CHEAP_PAID, free_priority=25,
+        notes="Düşük ücretli + kotasız — Groq 429 sonrası ilk fallback, Ollama'dan önce",
     ),
     # PAID — pahalı; yalnızca açıkça primary seçilirse.
     "openai": ProviderSpec(

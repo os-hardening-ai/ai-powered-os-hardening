@@ -13,49 +13,39 @@ from fastapi.responses import StreamingResponse
 
 async def stream_chat_response(
     generator: AsyncIterator[str],
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    sources: Optional[list] = None,
+    done_extra: Optional[Dict[str, Any]] = None,
 ) -> StreamingResponse:
     """
     Create a streaming response using Server-Sent Events (SSE).
 
-    Args:
-        generator: Async generator yielding tokens
-        metadata: Optional metadata to send before streaming
-
-    Returns:
-        StreamingResponse with content-type: text/event-stream
-
-    SSE Format:
-        event: message
-        data: {"token": "Hello"}
-
-        event: metadata
-        data: {"intent": "info_request", "rag_used": true}
-
-        event: done
-        data: {"total_tokens": 150}
+    SSE event order:
+        event: metadata   — intent, safety, rag_used, layer_path
+        event: sources    — rag_sources list (only if sources provided)
+        event: message    — one per token
+        event: done       — total_tokens, status + done_extra fields
     """
 
     async def event_generator():
         try:
-            # Send metadata first (if provided)
             if metadata:
                 yield format_sse_event("metadata", metadata)
 
-            # Stream tokens
+            if sources is not None:
+                yield format_sse_event("sources", {"rag_sources": sources})
+
             token_count = 0
             async for token in generator:
                 token_count += 1
                 yield format_sse_event("message", {"token": token})
 
-            # Send completion event
-            yield format_sse_event("done", {
-                "total_tokens": token_count,
-                "status": "completed"
-            })
+            done_payload: Dict[str, Any] = {"total_tokens": token_count, "status": "completed"}
+            if done_extra:
+                done_payload.update(done_extra)
+            yield format_sse_event("done", done_payload)
 
         except Exception as e:
-            # Send error event
             yield format_sse_event("error", {
                 "message": str(e),
                 "type": type(e).__name__
