@@ -19,6 +19,7 @@ from api.router_health import router as health_router
 from api.router_analytics import router as analytics_router
 from api.router_openai import router as openai_router
 from api.router_artifacts import router as artifacts_router
+from api.router_agent import router as agent_router
 from api.security import (
     RateLimitMiddleware,
     RateLimitConfig,
@@ -159,6 +160,9 @@ def create_app() -> FastAPI:
 
     # Rule Engine + Artifact Generator
     app.include_router(artifacts_router, prefix="/api", tags=["domain"])
+
+    # Agentic AI — İP-6 Görev Planlayıcı + İP-7 multi-step ajan
+    app.include_router(agent_router, prefix="/api", tags=["agents"])
 
     # ── Metrics Endpoint ──
     @app.get("/metrics", tags=["monitoring"])
