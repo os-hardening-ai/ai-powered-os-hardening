@@ -69,7 +69,8 @@ def classify_error(exc: Exception, provider: str = "") -> LLMProviderError:
     if isinstance(exc, LLMProviderError):
         return exc
 
-    msg = str(exc).lower()
+    # Alt çizgileri boşluğa çevir ki "model_not_supported" ~ "model not supported".
+    msg = str(exc).lower().replace("_", " ")
     if "rate" in msg and "limit" in msg or "429" in msg or "quota" in msg or "too many requests" in msg:
         return RateLimitError(f"{provider}: rate limit / kota aşıldı", provider, cause=exc)
     if "401" in msg or "unauthorized" in msg or "invalid api key" in msg or "api key" in msg and "invalid" in msg:
