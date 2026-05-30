@@ -1,12 +1,13 @@
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 from typing import Optional
 from config.schemas import (
     AppConfig, AppConfigRoot, ApiConfig, EmbeddingConfig, LlmConfig,
     RagConfig, RulesConfig, SourceDocumentConfig, VectorStoreConfig,
     PipelineConfig, MonitoringConfig, DataPathsConfig, LateChunkingConfig,
-    RedisConfig,
+    RedisConfig, AuthConfig,
 )
 
 
@@ -107,6 +108,20 @@ class ConfigLoader:
             url=rd_raw.get("url", "redis://localhost:6379/0"),
             embedding_cache_ttl_seconds=rd_raw.get("embedding_cache_ttl_seconds", 86400),
             session_ttl_seconds=rd_raw.get("session_ttl_seconds", 3600),
+        )
+
+        # Auth — JWT_SECRET env (prod) > config.json > boş (dev-mode)
+        au_raw = raw.get("auth", {})
+        auth_cfg = AuthConfig(
+            access_token_expiry_minutes=int(
+                os.environ.get("JWT_EXPIRY_MINUTES")
+                or au_raw.get("access_token_expiry_minutes", 60)
+            ),
+            algorithm=au_raw.get("algorithm", "HS256"),
+            db_path=au_raw.get("db_path", "data/auth.db"),
+            audit_enabled=au_raw.get("audit_enabled", True),
+            jwt_secret=(os.environ.get("JWT_SECRET") or "").strip()
+            or au_raw.get("jwt_secret", ""),
         )
 
         self._config = AppConfigRoot(

@@ -34,10 +34,10 @@ Bunlar öneri formunda yazılı; tamamlanmadan proje "tam" sayılmaz.
 |---|----|-------|-----|
 | B1 | Windows Server 2025 YAML kuralları | ❌ | Dosya var, **0 kural (boş)**. Win11 ✅ 516 kural. |
 | B2 | Compliance Report (PDF/HTML/MD) | ❌ | Öneri formu "rapor çıktısı"na değiniyor; raporlama modülü yok. |
-| B3 | JWT + RBAC | ⚠️ | **API-key auth var** (eklendi); JWT login/logout + rol-bazlı (sysadmin/developer/security/end_user) yok. Form'da "RBAC" anahtar kelimesi geçiyor. |
-| B4 | Gerçek SSE token streaming | ⚠️ | Mevcut `/api/chat/stream` cevabı `.split()` ile böler — **gerçek LLM token-stream değil**. Düzeltilmeli. |
-| B5 | Audit Log (kim-ne-zaman) | ❌ | Request log var ama denetim tablosu yok. |
-| B6 | User-based rate limiting | ⚠️ | Redis rate limiter IP-bazlı var; kullanıcı-bazlı için auth (B3) gerekir. |
+| B3 | JWT + RBAC | ✅ | **YAPILDI**: JWT login/logout/me (`api/router_auth.py`) + 4 rol RBAC (sysadmin/security/developer/end_user, `require_role`). Kullanıcılar SQLite + bcrypt; logout = jti blacklist (Redis/in-memory). X-API-Key kaldırıldı (sadece JWT). |
+| B4 | Gerçek SSE token streaming | ✅ | **YAPILDI** (önceki merge): `/api/chat/stream` gerçek LLM token-stream (`.split()` kaldırıldı). |
+| B5 | Audit Log (kim-ne-zaman) | ✅ | **YAPILDI**: `api/audit.py` — SQLite `audit_log` (ts/user/action/endpoint/status/ip), `AuditMiddleware` her isteği yazar + login/logout açık olayları; `GET /api/audit` (sysadmin/security). |
+| B6 | User-based rate limiting | ✅ | **YAPILDI**: `RateLimitMiddleware` anahtarı geçerli JWT'de `user:{username}`, yoksa `ip:{ip}` (`peek_username`). |
 | B7 | Ground-truth dataset 12 → 50-100 | ⚠️ | Şu an H1 için 12 Q/A. Genişletme akademik gücü artırır. |
 | B8 | RAGAS + Ablation **runner + gerçek koşum** | ⚠️ | `evaluation/ragas_evaluator.py` + `ablation_study.py` sınıfları var, CLI runner + sonuç yok. **Not:** `ragas` paketi kurulu değil → custom implementasyon (akademik dürüstlük için belirtilmeli). |
 

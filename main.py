@@ -40,7 +40,10 @@ from api.metrics import (
     MetricsMiddleware,
     metrics_collector,
 )
-from api.auth import require_api_key
+from api.auth import get_current_user, require_role, bootstrap_auth
+from api.auth_models import Role
+from api.router_auth import router as auth_router
+from api.audit import AuditMiddleware, audit_router
 from prometheus_metrics import setup_metrics, setup_tracing
 from config.config_loader import get_config
 import uvicorn
@@ -71,6 +74,10 @@ TAGS_METADATA = [
 
 def create_app() -> FastAPI:
     cfg = get_config()
+
+    # Auth: SQLite DB'yi kur + (boşsa) hesapları seed'le (dev demo / prod admin).
+    bootstrap_auth()
+
     app = FastAPI(
         title="AI-Powered OS Hardening API",
         version=cfg.app.version,
@@ -125,6 +132,10 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(RateLimitMiddleware, config=rate_limit_config)
 
+    # 6b. Audit log — her isteği kaydeder (RateLimit'in DIŞINDA → 429/401/403 da kaydedilir).
+    if cfg.auth.audit_enabled:
+        app.add_middleware(AuditMiddleware, enabled=True)
+
     # 7. Compression
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -155,33 +166,43 @@ def create_app() -> FastAPI:
         max_age=600,
     )
 
-    # API-key auth: health hariç tüm uçlar korunur (API_KEY env set ise zorunlu,
-    # değilse dev modda açık + uyarı). Dependency router seviyesinde uygulanır.
-    _auth = [Depends(require_api_key)]
+    # JWT auth + RBAC: tüm korumalı uçlar geçerli Bearer token ister. Roller (öneri formu):
+    #   _any      → herhangi doğrulanmış kullanıcı (chat/rag — okuma/öneri)
+    #   _role_dev → sysadmin + security + developer (plan + artifact üretimi)
+    #   _role_sec → sysadmin + security (sıkılaştırma + izleme + denetim)
+    _any = [Depends(get_current_user)]
+    _role_dev = [Depends(require_role(Role.SYSADMIN, Role.SECURITY, Role.DEVELOPER))]
+    _role_sec = [Depends(require_role(Role.SYSADMIN, Role.SECURITY))]
 
-    # RAG-only endpoint (backward compatibility)
-    app.include_router(rag_router, prefix="/rag", tags=["rag"], dependencies=_auth)
+    # Auth uçları — /auth/login PUBLIC; /auth/logout, /auth/me kendi dependency'leriyle korunur.
+    app.include_router(auth_router, tags=["auth"])
 
-    # RAG + LLM combined endpoint (yeni!)
-    app.include_router(chat_router, prefix="/api", tags=["chat"], dependencies=_auth)
+    # RAG-only endpoint (backward compatibility) — her doğrulanmış kullanıcı
+    app.include_router(rag_router, prefix="/rag", tags=["rag"], dependencies=_any)
+
+    # RAG + LLM combined endpoint — her doğrulanmış kullanıcı
+    app.include_router(chat_router, prefix="/api", tags=["chat"], dependencies=_any)
 
     # Health check — PUBLIC (liveness/readiness probe'ları için)
     app.include_router(health_router)
 
-    # Advanced analytics
-    app.include_router(analytics_router, prefix="/api", tags=["monitoring"], dependencies=_auth)
+    # Advanced analytics — sysadmin/security
+    app.include_router(analytics_router, prefix="/api", tags=["monitoring"], dependencies=_role_sec)
 
-    # OpenAI-compatible endpoint
-    app.include_router(openai_router, prefix="/v1", tags=["openai-compat"], dependencies=_auth)
+    # Audit log sorgulama — kendi require_role'ü (sysadmin/security) ucun içinde
+    app.include_router(audit_router, prefix="/api", tags=["monitoring"])
 
-    # Rule Engine + Artifact Generator
-    app.include_router(artifacts_router, prefix="/api", tags=["domain"], dependencies=_auth)
+    # OpenAI-compatible endpoint — sysadmin/security
+    app.include_router(openai_router, prefix="/v1", tags=["openai-compat"], dependencies=_role_sec)
 
-    # Agentic AI — İP-6 Görev Planlayıcı + İP-7 multi-step ajan
-    app.include_router(agent_router, prefix="/api", tags=["agents"], dependencies=_auth)
+    # Rule Engine + Artifact Generator — sysadmin/security/developer
+    app.include_router(artifacts_router, prefix="/api", tags=["domain"], dependencies=_role_dev)
 
-    # ── Metrics Endpoint ──
-    @app.get("/metrics", tags=["monitoring"], dependencies=_auth)
+    # Agentic AI — İP-6 plan (dev+) ; İP-7 harden uç-düzeyinde sysadmin/security'ye daraltılır
+    app.include_router(agent_router, prefix="/api", tags=["agents"], dependencies=_role_dev)
+
+    # ── Metrics Endpoint ── (sysadmin/security)
+    @app.get("/metrics", tags=["monitoring"], dependencies=_role_sec)
     async def get_metrics(
         endpoint: str = None,
         window_minutes: int = None
@@ -224,7 +245,7 @@ def create_app() -> FastAPI:
             "llm_models": agg_metrics.model_stats,
         }
 
-    @app.get("/metrics/errors", tags=["monitoring"], dependencies=_auth)
+    @app.get("/metrics/errors", tags=["monitoring"], dependencies=_role_sec)
     async def get_recent_errors(limit: int = 10):
         """
         Get recent errors.
@@ -252,7 +273,7 @@ def create_app() -> FastAPI:
             ]
         }
 
-    @app.get("/metrics/slow", tags=["monitoring"], dependencies=_auth)
+    @app.get("/metrics/slow", tags=["monitoring"], dependencies=_role_sec)
     async def get_slow_requests(limit: int = 10):
         """
         Get slowest requests.

@@ -124,6 +124,29 @@ class RedisConfig:
 
 
 @dataclass
+class AuthConfig:
+    """JWT auth + RBAC + audit ayarları.
+
+    `jwt_secret` repoda boş bırakılır; gerçek değer JWT_SECRET env'inden gelir.
+    Boşsa dev-mode (sabit dev-secret + demo hesap seed'i) devreye girer.
+    """
+    access_token_expiry_minutes: int = 60
+    algorithm: str = "HS256"
+    db_path: str = "data/auth.db"
+    audit_enabled: bool = True
+    jwt_secret: str = ""
+
+    def __post_init__(self) -> None:
+        if self.access_token_expiry_minutes < 5:
+            raise ValueError("auth.access_token_expiry_minutes >= 5 olmalı")
+        if self.algorithm not in ("HS256", "HS384", "HS512"):
+            raise ValueError(f"auth.algorithm desteklenmiyor: {self.algorithm}")
+        # Secret SET ise (prod) en az 32 karakter olmalı; boşsa dev-mode (auth.py uyarır).
+        if self.jwt_secret and len(self.jwt_secret) < 32:
+            raise ValueError("JWT_SECRET en az 32 karakter olmalı")
+
+
+@dataclass
 class AppConfigRoot:
     app: AppConfig
     api: ApiConfig
@@ -135,6 +158,7 @@ class AppConfigRoot:
     monitoring: MonitoringConfig
     data_paths: DataPathsConfig
     redis: RedisConfig = field(default_factory=RedisConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
 
 @dataclass

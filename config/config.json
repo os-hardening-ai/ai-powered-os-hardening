@@ -130,6 +130,13 @@
     "embedding_cache_ttl_seconds": 86400,
     "session_ttl_seconds": 3600
   },
+  "auth": {
+    "access_token_expiry_minutes": 60,
+    "algorithm": "HS256",
+    "db_path": "data/auth.db",
+    "audit_enabled": true,
+    "jwt_secret": ""
+  },
   "vector_store": {
     "provider": "qdrant",
     "qdrant": {

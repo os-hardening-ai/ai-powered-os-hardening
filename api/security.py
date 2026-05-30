@@ -132,10 +132,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.trust_proxy = os.environ.get("TRUST_PROXY", "").lower() in ("1", "true", "yes")
 
     async def dispatch(self, request: Request, call_next):
-        client_ip = self._get_client_ip(request)
-        if not self.limiter.allow(client_ip, time.time()):
+        client_id = self._get_rate_limit_key(request)
+        if not self.limiter.allow(client_id, time.time()):
             return self._rate_limited_response()
         return await call_next(request)
+
+    def _get_rate_limit_key(self, request: Request) -> str:
+        # Kullanıcı-bazlı kota: geçerli JWT varsa anahtar `user:{username}` (IP'den bağımsız,
+        # NAT/paylaşılan-IP arkasında adil). Token yoksa IP-bazlı (`ip:{ip}`) geri düşer.
+        try:
+            from api.auth import peek_username
+            username = peek_username(request)
+            if username:
+                return f"user:{username}"
+        except Exception:
+            pass
+        return f"ip:{self._get_client_ip(request)}"
 
     def _get_client_ip(self, request: Request) -> str:
         # Default: real peer address (spoof-resistant). Only honour XFF when the
