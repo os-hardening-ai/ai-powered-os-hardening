@@ -56,8 +56,11 @@ class TestShortCircuits:
 
 
 class TestConfidence:
+    # NOT: iddialar gerçek cümle olmalı — _filter_claims kısa/tek-kelime parçaları eler.
     def test_all_supported_high_confidence(self):
-        llm = _ScriptedLLM(claims=["PermitRootLogin no", "Port 2222"], verdicts=[True, True])
+        llm = _ScriptedLLM(claims=["PermitRootLogin no disables direct root login",
+                                   "Port 2222 changes the SSH listening port"],
+                           verdicts=[True, True])
         v = ClaimVerifier(llm_fn=llm, min_confidence=0.6)
         res = v.verify("answer", CHUNKS)
         assert res.confidence == 1.0
@@ -65,7 +68,9 @@ class TestConfidence:
         assert res.unsupported == []
 
     def test_half_unsupported_below_threshold(self):
-        llm = _ScriptedLLM(claims=["claim a", "claim b"], verdicts=[True, False])
+        llm = _ScriptedLLM(claims=["the first hardening claim about ssh config",
+                                   "the second hardening claim about ports"],
+                           verdicts=[True, False])
         v = ClaimVerifier(llm_fn=llm, min_confidence=0.6)
         res = v.verify("answer", CHUNKS)
         assert res.confidence == 0.5
@@ -73,7 +78,7 @@ class TestConfidence:
         assert len(res.unsupported) == 1
 
     def test_max_claims_cap(self):
-        claims = [f"claim {i}" for i in range(10)]
+        claims = [f"hardening claim number {i} about a config value" for i in range(10)]
         llm = _ScriptedLLM(claims=claims, verdicts=[True] * 10)
         v = ClaimVerifier(llm_fn=llm, max_claims=3)
         res = v.verify("answer", CHUNKS)
@@ -108,3 +113,70 @@ class TestFallbacks:
     def test_returns_verification_result_type(self):
         v = ClaimVerifier(llm_fn=lambda _p: "[]")
         assert isinstance(v.verify("a", []), VerificationResult)
+
+
+class _RecordingLLM:
+    """Prompt'ları kaydeder; 1. çağrı extraction (claims JSON), sonrası 'supported:true'."""
+
+    def __init__(self, claims):
+        import threading
+        self.prompts = []
+        self._claims_json = "[" + ", ".join(f'"{c}"' for c in claims) + "]"
+        self._n = 0
+        self._lock = threading.Lock()
+
+    def __call__(self, prompt: str) -> str:
+        with self._lock:
+            self.prompts.append(prompt)
+            self._n += 1
+            first = self._n == 1
+        return self._claims_json if first else '{"supported": true, "reason": "x"}'
+
+
+class TestFilterClaims:
+    """_filter_claims: teşhiste görülen '/etc','1','3','CIS Benchmark' çöpünü eler."""
+
+    def test_drops_fragments_numbers_and_short(self):
+        from rag.verify.claim_verifier import _filter_claims
+        out = _filter_claims(["/etc", "CIS Benchmark", "1", "3", "...",
+                              "PermitRootLogin should be set to no"])
+        assert out == ["PermitRootLogin should be set to no"]
+
+    def test_keeps_real_multiword_claims(self):
+        from rag.verify.claim_verifier import _filter_claims
+        claims = ["ufw default deny incoming should be enabled",
+                  "PASS_MAX_DAYS must be 365 days or less"]
+        assert _filter_claims(claims) == claims
+
+    def test_single_long_word_dropped(self):
+        from rag.verify.claim_verifier import _filter_claims
+        assert _filter_claims(["antidisestablishmentarianism"]) == []  # uzun ama tek kelime
+
+    def test_empty(self):
+        from rag.verify.claim_verifier import _filter_claims
+        assert _filter_claims([]) == []
+
+
+class TestCitationStripping:
+    def test_citation_markers_removed_before_extraction(self):
+        llm = _RecordingLLM(["a complete verifiable claim about ssh hardening"])
+        ClaimVerifier(llm_fn=llm).verify(
+            "Use PermitRootLogin no [1] and set Port 2222 [3] per CIS.", CHUNKS)
+        extraction_prompt = llm.prompts[0]
+        assert "[1]" not in extraction_prompt and "[3]" not in extraction_prompt
+
+
+class TestConfigurableContextWindow:
+    def test_smaller_window_yields_shorter_check_prompt(self):
+        chunks = [{"text": "A" * 3000, "metadata": {}}, {"text": "B" * 3000, "metadata": {}}]
+        claim = ["a genuine multiword claim about hardening configuration"]
+        small = _RecordingLLM(list(claim))
+        ClaimVerifier(llm_fn=small, max_chunk_chars=4000, max_context_chars=1500).verify("ans", chunks)
+        big = _RecordingLLM(list(claim))
+        ClaimVerifier(llm_fn=big, max_chunk_chars=4000, max_context_chars=5000).verify("ans", chunks)
+        # 2. prompt = iddia denetimi; küçük pencere → daha kısa bağlam → daha kısa prompt
+        assert len(small.prompts[1]) < len(big.prompts[1])
+
+    def test_defaults_are_configurable(self):
+        v = ClaimVerifier(llm_fn=lambda _p: "[]")
+        assert v.max_chunk_chars == 600 and v.max_context_chars == 4000

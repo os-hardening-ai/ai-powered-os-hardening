@@ -266,9 +266,10 @@ class IPMetricsHarness:
         from rag.verify.claim_verifier import ClaimVerifier
         from llm.rag.integration import RAGContextBuilder
         from llm.prompts.simple_prompts import GROUNDING_DIRECTIVE
-        # gerçek bağlam çek
+        # gerçek bağlam çek — os_version geçilir ki Ubuntu hedefi Windows chunk'ı çekmesin
+        # (teşhis: os_version'sız retrieval Ubuntu hedefine Win CIS chunk'ları getiriyordu).
         try:
-            rag = RAGContextBuilder(top_k=5, min_score=0.4)
+            rag = RAGContextBuilder(top_k=5, min_score=0.4, os_version=sc.os_target)
             _ctx, chunks = rag.retrieve_balanced(sc.goal)
         except Exception as exc:
             logger.warning("[İP-5] RAG retrieval başarısız: %s", exc)
@@ -284,7 +285,11 @@ class IPMetricsHarness:
         else:
             prompt = f"'{sc.goal}' için kısa öneri:"
         answer = self._llm(prompt)
-        cv = ClaimVerifier(llm_fn=self._verifier_llm, min_confidence=0.9, max_claims=self.max_claims)
+        # İP-5 ölçümü TAM bağlama karşı doğrular (üretim cost-bound varsayılanları yerine):
+        # iddialar tüm chunk'lara karşı denetlenir → kesme kaynaklı sahte-negatif olmaz.
+        cv = ClaimVerifier(llm_fn=self._verifier_llm, min_confidence=0.9,
+                           max_claims=self.max_claims,
+                           max_chunk_chars=4000, max_context_chars=24000)
         vr = cv.verify(answer, chunks)
         return IP5Sample(goal=sc.goal, groundedness=round(vr.confidence, 4),
                          is_grounded=vr.confidence >= 0.9, n_chunks=len(chunks))
