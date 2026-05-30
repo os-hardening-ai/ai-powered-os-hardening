@@ -17,6 +17,7 @@ Kurulum:
 from __future__ import annotations
 import requests
 from typing import Optional
+from llm.clients import token_tracker
 
 class OllamaClient:
     """
@@ -70,6 +71,9 @@ class OllamaClient:
             response.raise_for_status()
 
             result = response.json()
+            token_tracker.add(
+                result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+            )
             return result.get("response", "").strip()
 
         except requests.exceptions.ConnectionError:

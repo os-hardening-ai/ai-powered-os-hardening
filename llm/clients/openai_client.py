@@ -20,6 +20,7 @@ from llm.core.config import (
     REQUEST_TIMEOUT,
     MAX_RETRIES,
 )
+from llm.clients import token_tracker
 
 
 class OpenAIClient:
@@ -82,6 +83,9 @@ class OpenAIClient:
 
             if content is None:
                 raise RuntimeError("OpenAI API boş content döndürdü")
+
+            if response.usage:
+                token_tracker.add(response.usage.total_tokens)
 
             return content
 

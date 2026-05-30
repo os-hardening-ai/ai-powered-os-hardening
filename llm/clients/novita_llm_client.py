@@ -12,6 +12,7 @@ from llm.core.config import (
     REQUEST_TIMEOUT,
     MAX_RETRIES,
 )
+from llm.clients import token_tracker
 
 
 class NovitaLLMClient:
@@ -59,6 +60,11 @@ class NovitaLLMClient:
             content = response.choices[0].message.content
             if content is None:
                 raise RuntimeError("Novita API boş content döndürdü")
+
+            # Token kullanımını kaydet (WGR'den gelen token_tracker entegrasyonu)
+            if response.usage:
+                token_tracker.add(response.usage.total_tokens)
+
             return content.strip()
         except Exception as e:
             error_msg = str(e)
