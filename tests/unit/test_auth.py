@@ -139,3 +139,61 @@ class TestTokenRoundtrip:
         payload = auth_mod.decode_token(tok)
         assert payload["sub"] == "admin" and payload["role"] == "sysadmin"
         assert "jti" in payload and expires_in > 0
+
+
+class TestTokenSecurity:
+    def test_foreign_secret_token_rejected(self, app_client):
+        # Baska bir secret ile imzalanmis token → imza dogrulanmaz → 401
+        bad = jwt.encode(
+            {"sub": "admin", "role": "sysadmin", "jti": uuid.uuid4().hex,
+             "iat": int(time.time()), "exp": int(time.time()) + 600},
+            "totally-different-secret-not-ours-xxxxxxxx", algorithm="HS256",
+        )
+        r = app_client.get("/any-auth", headers={"Authorization": f"Bearer {bad}"})
+        assert r.status_code == 401
+
+    def test_tampered_token_rejected(self, app_client):
+        tok = _login(app_client, "admin", "adminpass").json()["access_token"]
+        tampered = tok[:-3] + ("aaa" if not tok.endswith("aaa") else "bbb")
+        r = app_client.get("/any-auth", headers={"Authorization": f"Bearer {tampered}"})
+        assert r.status_code == 401
+
+    def test_missing_role_claim_rejected(self, app_client):
+        tok = jwt.encode(
+            {"sub": "admin", "jti": uuid.uuid4().hex,
+             "iat": int(time.time()), "exp": int(time.time()) + 600},
+            auth_mod._secret(), algorithm=auth_mod._algorithm(),
+        )
+        r = app_client.get("/any-auth", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 401
+
+    def test_invalid_role_value_rejected(self, app_client):
+        tok = jwt.encode(
+            {"sub": "admin", "role": "superduper", "jti": uuid.uuid4().hex,
+             "iat": int(time.time()), "exp": int(time.time()) + 600},
+            auth_mod._secret(), algorithm=auth_mod._algorithm(),
+        )
+        r = app_client.get("/any-auth", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 401
+
+
+class TestAuthConfigValidation:
+    def test_short_secret_rejected(self):
+        from config.schemas import AuthConfig
+        with pytest.raises(ValueError):
+            AuthConfig(jwt_secret="too-short")
+
+    def test_valid_long_secret_ok(self):
+        from config.schemas import AuthConfig
+        cfg = AuthConfig(jwt_secret="x" * 32)
+        assert cfg.jwt_secret == "x" * 32
+
+    def test_bad_algorithm_rejected(self):
+        from config.schemas import AuthConfig
+        with pytest.raises(ValueError):
+            AuthConfig(algorithm="RS256-bogus")
+
+    def test_too_short_expiry_rejected(self):
+        from config.schemas import AuthConfig
+        with pytest.raises(ValueError):
+            AuthConfig(access_token_expiry_minutes=1)
