@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from api.errors import APIError, ErrorCode
+from api.errors import APIError, ErrorCode, raise_internal_error
 
 router = APIRouter()
 
@@ -119,10 +119,7 @@ async def get_execution_plan(body: RulePlanRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Rule engine failed: {exc}", details={},
-        )
+        raise_internal_error("rules_plan", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.post("/rules/conflicts", response_model=List[ConflictResponse], tags=["domain"])
@@ -138,10 +135,7 @@ async def detect_conflicts(body: RulePlanRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Conflict detection failed: {exc}", details={},
-        )
+        raise_internal_error("rules_conflicts", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.get("/rules", response_model=RuleListResponse, tags=["domain"])
@@ -165,10 +159,7 @@ async def list_rules(
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Rule listing failed: {exc}", details={},
-        )
+        raise_internal_error("rules_list", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 # ── Artifact Endpoints ────────────────────────────────────────────────────────
@@ -213,7 +204,4 @@ async def generate_artifact(body: ArtifactRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Artifact generation failed: {exc}", details={},
-        )
+        raise_internal_error("artifact_generate", exc, error_code=ErrorCode.PIPELINE_ERROR)

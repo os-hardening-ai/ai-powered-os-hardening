@@ -24,7 +24,7 @@ from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.clients import get_llm_clients
 from llm.rag.integration import RAGContextBuilder
 from api.security import validate_chat_input, sanitize_output
-from api.errors import APIError, ErrorCode
+from api.errors import APIError, ErrorCode, raise_internal_error
 from log_manager import get_logger
 
 _logger = get_logger("openai_compat")
@@ -260,12 +260,7 @@ async def openai_chat_completions(payload: OAIChatRequest) -> OAIChatResponse:
     except APIError:
         raise
     except Exception as e:
-        raise APIError(
-            status_code=500,
-            error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Pipeline failed: {str(e)}",
-            details={"stage": "openai_compat"},
-        )
+        raise_internal_error("openai_compat", e, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.get(

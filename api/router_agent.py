@@ -16,7 +16,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from api.errors import APIError, ErrorCode
+from api.errors import APIError, ErrorCode, raise_internal_error
 
 router = APIRouter()
 
@@ -144,10 +144,7 @@ async def agent_plan(body: PlanRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Task planner failed: {exc}", details={},
-        )
+        raise_internal_error("agent_plan", exc, error_code=ErrorCode.PIPELINE_ERROR)
 
 
 @router.post("/agent/harden", response_model=HardenResponse, tags=["agents"])
@@ -178,7 +175,4 @@ async def agent_harden(body: HardenRequest):
     except APIError:
         raise
     except Exception as exc:
-        raise APIError(
-            status_code=500, error_code=ErrorCode.PIPELINE_ERROR,
-            message=f"Hardening agent failed: {exc}", details={},
-        )
+        raise_internal_error("agent_harden", exc, error_code=ErrorCode.PIPELINE_ERROR)
