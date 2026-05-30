@@ -97,26 +97,30 @@ flowchart TD
         L1[Layer 1: Safety Classification] --> L2[Layer 2: Intent Detection<br/>ML %90.48 + pattern]
         L2 --> L3{Layer 3: Routing}
         L3 -->|3A| PAT[Pattern: selamlama/yardım]
-        L3 -->|3B| INFO[Info: RAG + LLM]
+        L3 -->|3B| INFO[Info Pipeline]
         L3 -->|3C| ACT[Action: script üretimi]
-        INFO --> L4[Layer 4: Generation<br/>+ ClaimVerifier + Refinement]
-        ACT --> L4
+        ACT --> L4[Layer 4: Generation<br/>prompt = soru + RAG bağlamı]
     end
 
-    INFO -.->|use_rag| RAG
+    %% use_rag ise önce bağlam getirilir, sonra bağlam L4 Generation prompt'una eklenir
+    INFO -->|use_rag=true| RAG
+    INFO -.->|RAG yok| L4
     subgraph RAG["RAG (Qdrant)"]
         direction TB
         QP[QueryPlanner<br/>HyDE+subquery+stepback] --> RET[Hybrid BM25+Dense + MMR]
-        RET --> REF[Refinement loop<br/>düşük skor/conf → yeniden]
+        RET --> REF[Retrieval refinement<br/>düşük skor → yeniden retrieve]
     end
+    REF -->|getirilen bağlam| L4
 
-    L4 --> LLM
+    L4 -->|LLM çağrısı bağlamla| LLM
     subgraph LLM["LLM Fallback (fail-fast)"]
         direction LR
         C[Cerebras gpt-oss-120b] --> S[SambaNova] --> G[Gemini 3.1 Flash Lite] --> N[Novita]
     end
 
-    LLM --> Resp([Yanıt + kaynaklar + confidence])
+    LLM -->|üretilen cevap| CV{ClaimVerifier<br/>groundedness yeterli mi?}
+    CV -.->|düşük → genişlet + yeniden üret| RAG
+    CV -->|yeterli| Resp([Yanıt + kaynaklar + confidence])
 ```
 
 Detaylı mimari: [docs/02_PIPELINE_VE_ROUTELAR.md](docs/02_PIPELINE_VE_ROUTELAR.md) · [docs/10_ARCHITECTURE_ANALYSIS.md](docs/10_ARCHITECTURE_ANALYSIS.md)
