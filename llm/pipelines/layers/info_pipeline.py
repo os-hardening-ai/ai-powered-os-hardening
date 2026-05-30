@@ -43,6 +43,7 @@ class InfoQueryResult:
     estimated_cost: float = 0.0
     rag_sources: list = field(default_factory=list)
     verification_confidence: float | None = None  # None = not checked
+    unsupported_claims: list = field(default_factory=list)  # bağlamca DESTEKLENMEYEN iddialar
     timing: Dict[str, float] = field(default_factory=dict)  # per-step breakdown (seconds)
 
 
@@ -257,12 +258,14 @@ class InfoPipeline:
 
         # Claim verification (only when RAG was used — no context = no verification)
         verification_confidence: float | None = None
+        unsupported_claims: list = []
         if self.claim_verifier is not None and raw_results_for_verify:
             try:
                 _t0 = datetime.now()
                 vr = self.claim_verifier.verify(result, raw_results_for_verify)
                 _t["claim_verify_s"] = (datetime.now() - _t0).total_seconds()
                 verification_confidence = vr.confidence
+                unsupported_claims = list(vr.unsupported)
                 if not vr.is_valid:
                     _logger.warning(
                         "[InfoPipeline] Low verification confidence %.2f — unsupported: %s",
@@ -294,6 +297,7 @@ class InfoPipeline:
             estimated_cost=estimated_cost,
             rag_sources=rag_sources,
             verification_confidence=verification_confidence,
+            unsupported_claims=unsupported_claims,
             timing=_t,
         )
 
