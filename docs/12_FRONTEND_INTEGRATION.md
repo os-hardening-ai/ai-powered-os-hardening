@@ -31,17 +31,34 @@ Development: http://localhost:8000
 Production: https://your-domain.com
 ```
 
-### Authentication
+### Authentication (JWT)
 
-Currently, the API does not require authentication (⚠️ Production blocker - see [docs/10_ARCHITECTURE_ANALYSIS.md](10_ARCHITECTURE_ANALYSIS.md#security-weaknesses)).
+The API requires **JWT Bearer authentication** on all protected endpoints (`/health`,
+`/docs`, `/auth/login` are public). Flow: login → receive token → send it as a Bearer header.
 
-For future versions with authentication:
 ```javascript
-headers: {
-  'Authorization': 'Bearer YOUR_API_KEY',
-  'Content-Type': 'application/json'
-}
+// 1) Login → get token
+const res = await fetch(`${API_BASE}/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username, password }),  // dev demo: admin / changeme123
+});
+const { access_token, role } = await res.json();
+
+// 2) Use the token on every request
+const headers = {
+  'Authorization': `Bearer ${access_token}`,
+  'Content-Type': 'application/json',
+};
 ```
+
+**RBAC**: the token carries a `role` (sysadmin / security / developer / end_user). Some
+endpoints require specific roles (e.g. `/api/agent/harden` → security+); insufficient role → `403`.
+
+**SSE note**: `EventSource` cannot set headers — for `/api/chat/stream` pass the token as a
+query param: `/api/chat/stream?access_token=<token>` (or use `fetch` streaming with the header).
+
+**Logout**: `POST /auth/logout` (with the Bearer header) revokes the token until it expires.
 
 ---
 

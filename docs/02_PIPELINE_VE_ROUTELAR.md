@@ -6,6 +6,34 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
 
 **Önemli Not**: Sistem kullanıcıdan gelen `use_rag` parametresini kabul eder ancak **akıllı RAG tetikleme** mantığı ile son kararı otomatik verir. Generic sorular için RAG otomatik olarak skip edilir (%55 performans artışı).
 
+> **LLM sağlayıcı notu:** Aşağıdaki şema/örneklerde geçen `Groq`/`groq.chat(...)` ifadeleri eski
+> sürümden kalma **gösterim amaçlıdır**. Güncel aktif sağlayıcı **Cerebras `gpt-oss-120b`**
+> (ücretsiz), fail-fast fallback zinciri: **Cerebras → SambaNova → Gemini 3.1 Flash Lite → Novita**.
+
+### Akış Diyagramı (Mermaid)
+
+```mermaid
+flowchart TD
+    Q([Kullanıcı sorusu]) --> L1[Katman 1: Safety<br/>LLM tehdit tespiti]
+    L1 -->|unsafe| REJ([Kibar ret])
+    L1 -->|safe| L2[Katman 2: Intent<br/>pattern <1ms + ML %90.48]
+    L2 --> L3{Katman 3: Routing}
+    L3 -->|smalltalk| P3A[3A Pattern Responder<br/>&lt;20ms, LLM yok]
+    L3 -->|info_request| P3B[3B Info Pipeline]
+    L3 -->|action_request| P3C[3C Action Pipeline]
+    L3 -->|out_of_scope| REJ
+
+    P3B --> RAGD{use_rag &amp;&amp;<br/>akıllı tetikleme?}
+    RAGD -->|hayır| GEN
+    RAGD -->|evet| RAG[QueryPlanner → Hybrid+MMR<br/>→ retrieval-skoru refinement]
+    RAG --> GEN[Katman 4: Generation<br/>complexity-bazlı model]
+    P3C --> GEN
+    GEN --> CV{ClaimVerifier<br/>groundedness}
+    CV -->|düşük conf| RF[Cevap-refinement:<br/>genişlet+yeniden üret 1x]
+    RF --> OUT
+    CV -->|yeterli| OUT([Yanıt + kaynaklar + confidence])
+```
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    KULLANICI SORUSU                           │
@@ -17,9 +45,9 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
         ║  KATMAN 1: SAFETY CLASSIFICATION           ║
         ║  ────────────────────────────────          ║
         ║  Amaç: Tehlikeli/zararlı sorguları tespit ║
-        ║  Teknoloji: LLM (Groq Llama 8B)            ║
-        ║  Süre: ~500-800ms                          ║
-        ║  Maliyet: $0 (Groq ücretsiz)               ║
+        ║  Teknoloji: LLM (Cerebras gpt-oss-120b)    ║
+        ║  Süre: ~300-600ms                          ║
+        ║  Maliyet: $0 (Cerebras ücretsiz tier)      ║
         ╚════════════════════════════════════════════╝
                          │
             ┌────────────┴────────────┐
@@ -78,7 +106,7 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
 Sisteme gelen sorguların güvenli olup olmadığını tespit etmek. Saldırı amaçlı, zararlı veya uygunsuz sorguları en başta reddetmek.
 
 ### Teknoloji
-- **LLM-based classification**: Groq Llama 8B (ücretsiz)
+- **LLM-based classification**: Cerebras `gpt-oss-120b` (ücretsiz tier) — fallback zinciri ile
 - **Prompt engineering**: Single-shot classification
 - **Kategoriler**: 5 kategori (safe_defensive, safe_educational, ambiguous, unsafe_offensive, unsafe_spam)
 

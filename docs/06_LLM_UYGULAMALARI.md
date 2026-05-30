@@ -6,19 +6,25 @@ Bu proje **2 temel AI/ML teknolojisi** kullanır:
 1. **Makine Öğrenmesi (ML)**: Intent detection için
 2. **Large Language Models (LLM)**: Güvenlik classification ve yanıt generation için
 
+> **LLM sağlayıcı notu:** Bu belgedeki bazı kod örnekleri eski sürümden kalma `groq.chat(...)` /
+> `model="llama-..."` ifadeleri içerir — bunlar **gösterim amaçlıdır**. Güncel aktif sağlayıcı
+> **Cerebras `gpt-oss-120b`** (ücretsiz tier); fail-fast fallback: **Cerebras → SambaNova →
+> Gemini 3.1 Flash Lite → Novita**. Gerçek çağrılar `llm_small`/`llm_large` (FallbackLLM) üzerinden
+> yapılır; sağlayıcı `llm/clients/registry.py`'de seçilir. (Groq/Ollama/HuggingFace deprecated.)
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    AI/ML ARCHITECTURE                         │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
 │  Layer 1: Safety Classification                              │
-│  └─ LLM (Groq llama-3.1-8b-instant) - ~250ms               │
+│  └─ LLM (Cerebras gpt-oss-120b) - ~250-500ms                │
 │                                                               │
 │  Layer 2: Intent Detection                                   │
 │  └─ ML Hybrid (Logistic Regression + Pattern) - <10ms       │
 │                                                               │
 │  Layer 3: Generation                                         │
-│  └─ LLM (Groq llama-3.3-70b-versatile) + RAG - ~8s (RAG)   │
+│  └─ LLM (Cerebras gpt-oss-120b) + RAG - ~3-4s (RAG)         │
 │     QueryPlanner: 3 paralel LLM çağrısı (~500ms wall-clock) │
 │                                                               │
 │  Output Validation: Regex + LLM Hybrid - <100ms             │
@@ -386,8 +392,8 @@ class HybridIntentDetector:
 
 ### Layer 1: Safety Classification
 
-**Model**: Groq Llama 3.1 8B (ücretsiz, hızlı)
-**Dosya**: [llm/layers/safety_classifier.py](../llm/layers/safety_classifier.py:1-150)
+**Model**: Cerebras `gpt-oss-120b` (ücretsiz tier, ~1.4s; fail-fast fallback zinciri)
+**Dosya**: [llm/pipelines/layers/safety_classifier.py](../llm/pipelines/layers/safety_classifier.py)
 
 **Prompt Engineering:**
 ```python
@@ -435,7 +441,7 @@ response = groq_client.chat.completions.create(
 
 ### Layer 3B/3C: Generation Pipeline
 
-**Model**: Groq Llama 3.3 70B (ücretsiz, kaliteli)
+**Model**: Cerebras `gpt-oss-120b` (ücretsiz tier, kaliteli; İP-6/7/8 = %100, groundedness 0.81)
 
 **Dosyalar**:
 - Info: [llm/layers/info_pipeline.py](../llm/layers/info_pipeline.py:1-200)
