@@ -35,6 +35,7 @@ from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResu
 from llm.core.config import CONFIG
 from log_manager import get_logger
 from prometheus_metrics import layer_timer, record_query, record_rejection
+from llm.clients import token_tracker
 
 _pipeline_logger = get_logger("pipeline_metrics")
 
@@ -176,6 +177,7 @@ class SecurePipelineV2:
             PipelineResult with final answer and metadata
         """
         start_time = datetime.now()
+        token_tracker.reset()
 
         if self.debug:
             print("="*70)
@@ -291,6 +293,10 @@ class SecurePipelineV2:
         self.stats["total_queries"] += 1
         self.stats["total_cost"] += result.estimated_cost
 
+        # Token sayısını metadata'ya ekle (router → request.state → /metrics)
+        total_tokens = token_tracker.get()
+        result.metadata["tokens_used"] = total_tokens
+
         # Prometheus query record
         record_query(
             status="answered" if result.success else "rejected",
@@ -298,18 +304,26 @@ class SecurePipelineV2:
             complexity=result.metadata.get("complexity", "unknown"),
             model=result.metadata.get("model", "unknown"),
             rag_used=result.metadata.get("rag_used", False),
-            input_tokens=0,
+            input_tokens=total_tokens,
             output_tokens=0,
         )
 
         # Log pipeline metrics
         rag_used = result.metadata.get("rag_used", False)
         rag_chunks = result.metadata.get("rag_chunks", 0)
+        step_timing = result.metadata.get("step_timing", {})
         _pipeline_logger.info(
-            f"intent={intent.type} path={result.layer_path} "
-            f"layer1={layer1_time_s:.3f}s layer2={layer2_time_s:.3f}s "
-            f"layer3={layer3_time_s:.3f}s total={result.total_time_s:.3f}s "
-            f"rag={rag_used} chunks={rag_chunks} cost=${result.estimated_cost:.4f}"
+            "intent=%s path=%s "
+            "layer1=%.3fs layer2=%.3fs layer3=%.3fs "
+            "qplan=%.3fs rag_ret=%.3fs llm=%.3fs verify=%.3fs "
+            "total=%.3fs rag=%s chunks=%d cost=$%.4f",
+            intent.type, result.layer_path,
+            layer1_time_s, layer2_time_s, layer3_time_s,
+            step_timing.get("query_planner_s", 0.0),
+            step_timing.get("rag_retrieve_s", 0.0),
+            step_timing.get("llm_gen_s", 0.0),
+            step_timing.get("claim_verify_s", 0.0),
+            result.total_time_s, rag_used, rag_chunks, result.estimated_cost,
         )
 
         # Final logging
@@ -398,6 +412,7 @@ class SecurePipelineV2:
                 "model": info_result.model_used,
                 "rag_sources": info_result.rag_sources,
                 "verification_confidence": info_result.verification_confidence,
+                "step_timing": info_result.timing,
             }
         )
 

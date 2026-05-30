@@ -54,23 +54,33 @@ class QueryPlanner:
         self.max_subqueries = max_subqueries
 
     def plan(self, query: str) -> QueryPlan:
+        from concurrent.futures import ThreadPoolExecutor
         plan = QueryPlan(original=query)
 
-        if self.enable_subqueries:
+        tasks: dict = {}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            if self.enable_subqueries:
+                tasks["subqueries"] = pool.submit(self._decompose, query)
+            if self.enable_hyde:
+                tasks["hyde"] = pool.submit(self._generate_hyde, query)
+            if self.enable_stepback:
+                tasks["stepback"] = pool.submit(self._stepback, query)
+
+        if "subqueries" in tasks:
             try:
-                plan.subqueries = self._decompose(query)
+                plan.subqueries = tasks["subqueries"].result()
             except Exception as exc:
                 logger.warning("[QueryPlanner] subquery decomposition failed: %s", exc)
 
-        if self.enable_hyde:
+        if "hyde" in tasks:
             try:
-                plan.hyde_passages = self._generate_hyde(query)
+                plan.hyde_passages = tasks["hyde"].result()
             except Exception as exc:
                 logger.warning("[QueryPlanner] HyDE generation failed: %s", exc)
 
-        if self.enable_stepback:
+        if "stepback" in tasks:
             try:
-                plan.stepback = self._stepback(query)
+                plan.stepback = tasks["stepback"].result()
             except Exception as exc:
                 logger.warning("[QueryPlanner] stepback failed: %s", exc)
 

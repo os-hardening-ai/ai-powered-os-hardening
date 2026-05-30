@@ -9,6 +9,7 @@ from llm.core.config import (
     LARGE_MODEL_TEMPERATURE,
     MAX_TOKENS,
 )
+from llm.clients import token_tracker
 
 
 class GroqClient:
@@ -56,6 +57,9 @@ class GroqClient:
 
             if content is None:
                 raise RuntimeError("Groq API boş content döndürdü")
+
+            if response.usage:
+                token_tracker.add(response.usage.total_tokens)
 
             return content.strip()
             

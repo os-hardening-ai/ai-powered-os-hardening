@@ -152,6 +152,8 @@ class RAGContextBuilder:
             return combined
 
         # Step 1: hybrid BM25 re-scoring
+        # Ranking uses fused_score (RRF); displayed/filtered score uses dense_score
+        # (cosine similarity 0-1) so min_score thresholds remain meaningful.
         if self._hybrid_scorer is not None:
             fused = self._hybrid_scorer.score(query, combined, top_n=None)
             combined = [
@@ -159,8 +161,8 @@ class RAGContextBuilder:
                     "id": r.id,
                     "text": r.text,
                     "metadata": r.metadata,
-                    "score": r.fused_score,
-                    "dense_score": r.dense_score,
+                    "score": r.dense_score,
+                    "fused_score": r.fused_score,
                     "sparse_score": r.sparse_score,
                 }
                 for r in fused

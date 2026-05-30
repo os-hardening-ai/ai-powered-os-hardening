@@ -13,16 +13,15 @@ AI-powered OS hardening system that analyzes OS security configurations using CI
 ### Key Features
 
 - **4-Layer Security Pipeline**: Safety Classification → Intent Detection → Routing → Generation
-- **Enhanced RAG Pipeline (v1.1.0)**: Hybrid BM25+Dense retrieval, MMR reranking, Query Planning (HyDE + subqueries + stepback), Claim Verification, Fail-Open search
-- **LLM Integration**: Groq (free), Novita (DeepSeek), OpenAI, Ollama support with provider fallback
-- **ML Intent Detection**: 90.48% accuracy, 5-10ms latency, local inference ($0 cost)
-- **Zero Trust Enrichment**: Automatic ZT principles, CIS/NIST/ISO standards, rollback strategies
-- **Hybrid Validation**: Regex (fast, $0) + LLM (deep, $0.001) dangerous command detection
-- **Out-of-Scope Handling**: Politely rejects non-security topics
-- **Multi-Path Routing**: Pattern (3A), Info (3B), Action (3C), Out-of-Scope
-- **Security**: Rate limiting (100 req/min), input validation, security headers
-- **Monitoring**: Real-time metrics, latency tracking, analytics dashboard, Prometheus + OpenTelemetry
-- **API Documentation**: OpenAPI/Swagger UI with comprehensive examples
+- **Gelişmiş RAG**: Hybrid BM25+Dense retrieval, MMR reranking, QueryPlanner (HyDE + subqueries + stepback paralel), FilterAgent (OS/rol çıkarımı)
+- **LLM**: Groq (primary, ücretsiz) → OpenAI → Ollama fallback zinciri
+- **Embedding**: Novita `qwen/qwen3-embedding-8b` (4096 dim, LLM değil embedding için)
+- **Redis Cache**: Embedding cache (SHA256, 24h TTL) + Session store
+- **ML Intent Detection**: 1,677 örnek, %90.48 accuracy, <10ms, yerel inference ($0)
+- **Rule Engine + Artifact Generator**: 312 CIS kuralı, bash/PowerShell/Ansible/REG/GPO üretimi
+- **Monitoring**: Prometheus `/metrics/prometheus`, OpenTelemetry/Jaeger, per-step timing
+- **SSE Streaming**: Real-time token akışı
+- **API Docs**: OpenAPI/Swagger UI
 
 ### Performance Highlights
 
@@ -30,8 +29,9 @@ AI-powered OS hardening system that analyzes OS security configurations using CI
 |--------|-------|---------|
 | **ML Intent Detection** | **90.48% test accuracy** | 1677 examples, 7 categories, 100% test set accuracy |
 | **Cross-Validation** | 82.10% (±3.46%) | 5-fold CV, robust performance |
-| **Response Time** | 2.3s average | RAG + LLM pipeline, 60% improvement from v0.1 |
-| **Cost** | $0.0004/query | 87% cost reduction, free tier with Groq |
+| **Response Time (RAG)** | ~8s (ölçülen) | `qplan=0.566s rag_ret=4.044s llm=3.405s` |
+| **Response Time (basit)** | ~1.5s | QueryPlanner atlandı, RAG yok |
+| **Cost** | ~$0 | Groq + Novita ücretsiz tier |
 | **Throughput** | 500+ token/s | Groq Llama models |
 | **ML Latency** | 5-10ms | Intent prediction (no API cost) |
 | **RAG Availability** | 100% | CIS Benchmark integration with Qdrant |
@@ -43,20 +43,17 @@ AI-powered OS hardening system that analyzes OS security configurations using CI
 ## Quick Start
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/your-org/ai-powered-os-hardening.git
-cd ai-powered-os-hardening
+# 1. API key'leri doldur
+cp .env.example .env
+# GROQ_API_KEY, NOVITA_API_KEY, QDRANT_URL, QDRANT_API_KEY, REDIS_URL ayarla
 
-# 2. Install dependencies
-pip install -r requirements.txt
+# 2. Docker ile başlat (önerilen)
+docker compose up -d
 
-# 3. Configure .env
-echo "LLM_PROVIDER=groq" > .env
-echo "GROQ_API_KEY=your_key_here" >> .env
-echo "NOVITA_API_KEY=your_key_here" >> .env
-
-# 4. Start API
-python main.py
+# 3. Test
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Ubuntu 24.04 SSH hardening nasıl yapılır?", "use_rag": true}'
 ```
 
 **API**: http://localhost:8000
@@ -264,21 +261,23 @@ All comprehensive documentation is available in Turkish in the `docs/` folder:
 
 ## Technology Stack
 
-**Backend Framework**: FastAPI, Pydantic, Uvicorn
-**LLM Providers**:
-- Groq (llama-3.3-70b, llama-3.1-8b) - FREE tier, primary provider
-- OpenAI (GPT-4o, GPT-4o-mini) - Fallback option
-- Ollama (local models) - Offline fallback
+**Backend Framework**: FastAPI, Pydantic v2, Uvicorn
 
-**RAG Components**:
-- **Embeddings**: Novita `qwen3-embedding-8b` (4096 dimensions)
-- **Vector Store**: Qdrant Cloud
-- **Chunking**: CIS section chunking (PDF) + YAML rules chunking
-- **Hybrid Retrieval**: In-context BM25 + dense RRF fusion (v1.1.0)
-- **MMR Reranking**: Maximal Marginal Relevance diversity reranking (v1.1.0)
-- **Query Planning**: HyDE + subquery decomposition + stepback generalization (v1.1.0)
-- **Claim Verification**: LLM-based answer confidence scoring (v1.1.0)
-- **Fail-Open Search**: Progressive `min_score` relaxation to prevent zero-result failures (v1.1.0)
+**LLM Providers** (fallback zinciri):
+- **Groq** — primary, ücretsiz (`llama-3.1-8b-instant` + `llama-3.3-70b-versatile`)
+- OpenAI — fallback
+- Ollama — offline fallback
+
+**Embedding**: Novita `qwen/qwen3-embedding-8b` (4096 dim) — LLM değil sadece embedding
+
+**Cache**: Redis — embedding cache + session store
+
+**RAG Stack**:
+- **Vector Store**: Qdrant Cloud — koleksiyon: `cis_ubuntu_2404_windows11_winserver2025_with_rules`
+- **Hibrit Retrieval**: BM25 (sparse) + Dense RRF fusion
+- **MMR Reranking**: Diversity reranking
+- **QueryPlanner**: HyDE + subquery decomposition + stepback (paralel 3 LLM çağrısı, ~500ms)
+- **FilterAgent**: OS türü ve kullanıcı rolünü pattern → LLM fallback ile çıkarır
 
 **Machine Learning**:
 - **Model**: Logistic Regression + TF-IDF
@@ -444,11 +443,10 @@ For detailed test documentation, see [tests/README.md](tests/README.md)
 
 | Query Type | Latency | Example |
 |------------|---------|---------|
-| Pattern response | 10-20ms | "Merhaba" → greeting template |
-| Simple info (no RAG) | 1.2s | "SSH nedir?" → LLM only |
-| Medium info (with RAG) | 2.5s | "Ubuntu SSH hardening" → RAG + LLM |
-| Complex (CoT + RAG) | 4.2s | "Compare SSH configurations" |
-| Script generation | 4.5s | "Create firewall script" |
+| Pattern response | <20ms | "Merhaba" → şablon yanıt, LLM yok |
+| Simple info (no RAG) | ~1.5s | "SSH nedir?" → QueryPlanner atlandı |
+| Medium/complex (RAG) | ~8s | `qplan=0.566s rag_ret=4.044s llm=3.405s` |
+| Script generation | ~5-7s | CoT + RAG |
 
 ### Cost Analysis
 
@@ -608,6 +606,6 @@ MIT License - See [LICENSE](LICENSE) file
 
 **Built with ❤️ for Computer Engineering Graduation Project**
 
-**Last Updated**: 2026-04-29
+**Last Updated**: 2026-05-29
 **Version**: v1.1.0
-**Status**: Production Ready (90%)
+**Status**: Demo-Ready — Production için auth + HTTPS gerekli

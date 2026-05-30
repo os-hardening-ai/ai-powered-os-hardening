@@ -12,16 +12,16 @@ Bu proje **2 temel AI/ML teknolojisi** kullanır:
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
 │  Layer 1: Safety Classification                              │
-│  └─ LLM (Groq Llama 8B) - ~700ms                            │
+│  └─ LLM (Groq llama-3.1-8b-instant) - ~250ms               │
 │                                                               │
 │  Layer 2: Intent Detection                                   │
 │  └─ ML Hybrid (Logistic Regression + Pattern) - <10ms       │
 │                                                               │
 │  Layer 3: Generation                                         │
-│  └─ LLM (Groq Llama 70B) + RAG - ~2-3s                      │
+│  └─ LLM (Groq llama-3.3-70b-versatile) + RAG - ~8s (RAG)   │
+│     QueryPlanner: 3 paralel LLM çağrısı (~500ms wall-clock) │
 │                                                               │
-│  Layer 4: Output Validation                                  │
-│  └─ Regex + LLM Hybrid - <100ms                             │
+│  Output Validation: Regex + LLM Hybrid - <100ms             │
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -62,9 +62,9 @@ elif "nedir" in soru or "açıkla" in soru:
 
 ### Dataset Oluşturma
 
-**Dosya**: [data/intent_training_dataset.csv](../data/intent_training_dataset.csv:1-1230)
+**Dosya**: [data/intent_training_dataset.csv](../data/intent_training_dataset.csv)
 
-**Toplam**: 1,230 etiketli örnek
+**Toplam**: 1,677 etiketli örnek
 
 **Kategoriler ve Dağılımlar**:
 | Intent | Örnekler | Açıklama |
@@ -169,7 +169,7 @@ TfidfVectorizer(
 
 ### Model Eğitimi
 
-**Dosya**: [llm/ml_intent_detector.py](../llm/ml_intent_detector.py:1-200)
+**Dosya**: [llm/ml/intent_detector.py](../llm/ml/intent_detector.py)
 
 **Adımlar:**
 
@@ -226,14 +226,12 @@ joblib.dump(vectorizer, 'models/intent_vectorizer.joblib')
 
 ### Performans Metrikleri
 
-**Test Set Results (246 samples):**
+**Test Set Sonuçları:**
 
-| Metric | Value |
+| Metrik | Değer |
 |--------|-------|
-| Training Accuracy | 91.16% |
-| Test Accuracy | 82.52% |
-| CV Mean | 85.37% |
-| CV Std | ± 2.72% |
+| Test Accuracy | **90.48%** |
+| Cross-Validation Mean | 82.10% (±3.46%) |
 
 **Class-wise Performance:**
 
@@ -447,20 +445,20 @@ response = groq_client.chat.completions.create(
 
 **1. Semantic Search:**
 ```python
-# Embed user question
-query_embedding = cohere.embed(
-    texts=[question],
-    model="embed-multilingual-v3.0",
-    input_type="search_query"
-).embeddings[0]  # 1024-dim vector
+# Embed user question — Novita qwen/qwen3-embedding-8b (4096 dim)
+query_embedding = novita_client.embed(texts=[question])  # 4096-dim vector
 
-# Search in Qdrant
+# QueryPlanner (medium/complex sorgularda): 3 paralel LLM çağrısı
+# subqueries + HyDE + stepback → 3 farklı embedding vektörü
+
+# Search in Qdrant Cloud
 results = qdrant_client.search(
-    collection_name="cis_benchmarks",
+    collection_name="cis_ubuntu_2404_windows11_winserver2025_with_rules",
     query_vector=query_embedding,
-    limit=5,
-    score_threshold=0.7
+    limit=3,
+    score_threshold=0.5
 )
+# + BM25 hybrid scoring + MMR reranking
 ```
 
 **2. Context Construction:**
@@ -880,13 +878,16 @@ results = await asyncio.gather(
 
 | Component | Technology | Latency | Cost | Purpose |
 |-----------|------------|---------|------|---------|
-| Intent Detection | Logistic Regression | <10ms | $0 | Route to handler |
-| Safety Classification | Groq Llama 8B | ~700ms | $0 | Detect unsafe |
-| Info Generation | Groq Llama 70B + RAG | ~2s | $0 | Answer questions |
-| Action Generation | Groq Llama 70B + RAG + ZT | ~3s | $0 | Generate scripts |
-| Output Validation | Regex + Groq Llama 8B | <200ms | $0 | Detect dangerous |
+| Intent Detection | Logistic Regression + TF-IDF | <10ms | $0 | Route to handler |
+| Safety Classification | Groq llama-3.1-8b-instant | ~250ms | $0 | Detect unsafe |
+| QueryPlanner (3 paralel) | Groq llama-3.1-8b-instant | ~566ms | $0 | Query genişletme |
+| RAG Retrieval | Novita embed + Qdrant Cloud | ~4,044ms | $0 | Context alma |
+| Info Generation | Groq llama-3.3-70b-versatile | ~3,405ms | $0 | Yanıt üretimi |
+| Script Generation | Groq llama-3.3-70b + RAG + ZT | ~5-7s | $0 | Script üretimi |
+| Output Validation | Regex + Groq llama-3.1-8b | <200ms | $0 | Dangerous cmd tespiti |
 
-**Total Pipeline (Action Request)**: ~4s, $0
+**Total Pipeline (Info + RAG)**: ~8s, $0 (Groq + Novita ücretsiz tier)  
+**Total Pipeline (Script)**: ~5-7s, $0
 
 ---
 

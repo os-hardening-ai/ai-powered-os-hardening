@@ -9,7 +9,8 @@ Amaç:
 - Aynı session_id ile gelen isteklerde son N turu history olarak kullanabilmek.
 - Örn: history'den kısa bir özet üretip RequestContext.retrieved_context içine eklemek.
 
-Bu yapı basit bir in-memory store'dur; prod ortamda Redis vb. ile değiştirilebilir.
+Bu yapı basit bir in-memory store'dur. Production için redis_session_store.py kullanılır;
+router_chat.py startup'ta Redis'e bağlanmayı dener, başarısız olursa bu sınıfa fallback yapar.
 """
 
 from dataclasses import dataclass, field

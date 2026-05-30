@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
 
 from llm.core.context import RequestContext
@@ -148,7 +148,7 @@ def _get_llm_clients():
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(payload: ChatRequest) -> ChatResponse:
+async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     """
     RAG + LLM birlesik chat endpoint (4-Layer Security Pipeline).
 
@@ -301,8 +301,19 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         _conv_logger.info(f"Q: {payload.question}")
         _conv_logger.info(f"A: {sanitized_answer}")
 
-        # Response olustur
+        # Pipeline LLM bilgisini middleware için request.state'e yaz
         _meta = result.metadata or {}
+        from config.config_loader import get_config as _gcfg
+        _cfg = _gcfg()
+        _provider = _cfg.llm.default_provider
+        _model_tier = _meta.get("model", "unknown")  # "small", "large", "large+CoT" etc.
+        _provider_models = _cfg.llm.providers.get(_provider, {}).get("models", {})
+        _base_tier = _model_tier.split("+")[0]  # "large+CoT" → "large"
+        _model_name = _provider_models.get(_base_tier, {}).get("name") or _model_tier
+        request.state.llm_provider = _provider
+        request.state.llm_model = _model_name
+        request.state.llm_tokens = _meta.get("tokens_used", 0)
+
         return ChatResponse(
             answer=sanitized_answer,
             intent=result.intent.type if result.intent else None,

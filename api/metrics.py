@@ -251,7 +251,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             # Calculate duration
             duration_ms = (time.time() - start_time) * 1000
 
-            # Create metric
+            # Create metric (LLM fields populated by router via request.state)
             metric = RequestMetrics(
                 timestamp=datetime.now(),
                 endpoint=request.url.path,
@@ -259,6 +259,9 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 status_code=status_code,
                 duration_ms=duration_ms,
                 error=error,
+                llm_provider=getattr(request.state, "llm_provider", None),
+                llm_model=getattr(request.state, "llm_model", None),
+                tokens_used=getattr(request.state, "llm_tokens", 0),
             )
 
             # Record metric
