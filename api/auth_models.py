@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -56,3 +57,23 @@ class TokenResponse(BaseModel):
 class UserOut(BaseModel):
     username: str
     role: str
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64, examples=["yeni_kullanici"])
+    password: str = Field(..., min_length=6, max_length=256, examples=["parola123"])
+
+
+class ForgotPasswordRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    # Dev-mode'da reset token doğrudan döner (e-posta altyapısı yok); prod'da None.
+    reset_token: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=6, max_length=256)
