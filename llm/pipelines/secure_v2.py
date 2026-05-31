@@ -415,6 +415,7 @@ class SecurePipelineV2:
                 "model": info_result.model_used,
                 "rag_sources": info_result.rag_sources,
                 "verification_confidence": info_result.verification_confidence,
+                "unsupported_claims": info_result.unsupported_claims,
                 "step_timing": info_result.timing,
             }
         )

@@ -11,7 +11,9 @@ LLM erişilemezse her iki uç da deterministik (RuleEngine + ArtifactGenerator)
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
+import time
 from pathlib import Path
 from typing import List, Literal, Optional
 
@@ -100,6 +102,10 @@ class PlanResponse(BaseModel):
     items: List[PlanItemResponse]
     conflicts: List[ConflictResponse]
     warnings: List[str]
+    # Gözlemlenebilirlik metaverisi (chat ucuyla tutarlı) — hangi sağlayıcı + gecikme.
+    # Not: artifact rule_count'u CIS-grounding sinyalidir (deterministik kural sayısı).
+    provider: str = ""
+    latency_s: float = 0.0
 
 
 class HardenRequest(PlanRequest):
@@ -119,14 +125,21 @@ class HardenResponse(BaseModel):
     os_target: str
     format: str
     summary: str
-    rule_count: int
+    rule_count: int            # kaç CIS kuralı kullanıldı (deterministik grounding sinyali)
     artifact_content: str
     issues: List[str]
     steps: List[AgentStepResponse]
     plan: PlanResponse
+    provider: str = ""
+    latency_s: float = 0.0
 
 
-def _plan_to_response(plan) -> PlanResponse:
+def _active_provider() -> str:
+    """Yapılandırılmış birincil sağlayıcı (fallback zincirinin başı)."""
+    return os.environ.get("LLM_PROVIDER", "cerebras")
+
+
+def _plan_to_response(plan, provider: str = "", latency_s: float = 0.0) -> PlanResponse:
     return PlanResponse(
         goal=plan.goal,
         os_target=plan.os_target,
@@ -135,6 +148,8 @@ def _plan_to_response(plan) -> PlanResponse:
         items=[PlanItemResponse(**vars(i)) for i in plan.items],
         conflicts=[ConflictResponse(**vars(c)) for c in plan.conflicts],
         warnings=plan.warnings,
+        provider=provider,
+        latency_s=latency_s,
     )
 
 
@@ -147,10 +162,12 @@ async def agent_plan(body: PlanRequest):
         from llm.agents.task_planner import TaskPlanner
         planner = TaskPlanner(rule_engine=_get_rule_engine(), llm_fn=_get_small_llm())
         # Senkron + LLM çağrılı iş — event loop'u bloklamamak için thread'e al.
+        _t0 = time.monotonic()
         plan = await asyncio.to_thread(
             planner.plan, body.goal, body.os_target, body.security_level
         )
-        return _plan_to_response(plan)
+        return _plan_to_response(plan, provider=_active_provider(),
+                                 latency_s=round(time.monotonic() - _t0, 3))
     except APIError:
         raise
     except Exception as exc:
@@ -164,12 +181,15 @@ async def agent_harden(body: HardenRequest):
         from llm.agents.hardening_agent import HardeningAgent
         agent = HardeningAgent(rule_engine=_get_rule_engine(), llm_fn=_get_small_llm())
         # Çok-adımlı + LLM çağrılı iş — event loop'u bloklamamak için thread'e al.
+        _t0 = time.monotonic()
         res = await asyncio.to_thread(
             agent.run, body.goal,
             os_target=body.os_target,
             security_level=body.security_level,
             fmt=body.format,
         )
+        _dt = round(time.monotonic() - _t0, 3)
+        _prov = _active_provider()
         return HardenResponse(
             success=res.success,
             goal=res.goal,
@@ -180,10 +200,12 @@ async def agent_harden(body: HardenRequest):
             artifact_content=res.artifact.content if res.artifact else "",
             issues=res.issues,
             steps=[AgentStepResponse(**vars(s)) for s in res.steps],
-            plan=_plan_to_response(res.plan) if res.plan else PlanResponse(
+            plan=_plan_to_response(res.plan, provider=_prov, latency_s=_dt) if res.plan else PlanResponse(
                 goal=res.goal, os_target=res.os_target, security_level=body.security_level,
                 summary="", items=[], conflicts=[], warnings=[],
             ),
+            provider=_prov,
+            latency_s=_dt,
         )
     except APIError:
         raise

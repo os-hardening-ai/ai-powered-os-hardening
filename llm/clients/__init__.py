@@ -60,20 +60,47 @@ def _get_ollama_clients() -> Tuple[LLMCallable, LLMCallable]:
 
 
 def _get_huggingface_clients() -> Tuple[LLMCallable, LLMCallable]:
-    """HuggingFace client'larını local import ile al (ücretsiz tier)."""
+    """HuggingFace client'larını local import ile al (ücretsiz tier — DEPRECATED, bkz. registry)."""
     from .huggingface_client import get_small_hf_llm, get_large_hf_llm
 
     return get_small_hf_llm(), get_large_hf_llm()
+
+
+def _get_cerebras_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """Cerebras (gpt-oss-120b) — generic OpenAI-uyumlu client (en hızlı + ücretsiz 1M/gün)."""
+    from .openai_compatible_client import get_small_cerebras_llm, get_large_cerebras_llm
+
+    return get_small_cerebras_llm(), get_large_cerebras_llm()
+
+
+def _get_sambanova_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """SambaNova (gpt-oss-120b) — generic OpenAI-uyumlu client (hızlı fallback)."""
+    from .openai_compatible_client import get_small_sambanova_llm, get_large_sambanova_llm
+
+    return get_small_sambanova_llm(), get_large_sambanova_llm()
+
+
+def _get_gemini_clients() -> Tuple[LLMCallable, LLMCallable]:
+    """Gemini 3.1 Flash Lite (OpenRouter üzerinden) — hızlı + 1M context fallback."""
+    from .openai_compatible_client import get_small_gemini_llm, get_large_gemini_llm
+
+    return get_small_gemini_llm(), get_large_gemini_llm()
 
 
 # Sağlayıcı adı → (small, large) çifti kuran fonksiyon.
 # Not: builder'lar burada tutulur (ollama özel kwargs gerektirir); registry yalnızca
 # SIRA + maliyet metaverisi için kullanılır (ücretsiz-first politikası tek yerde).
 _PROVIDER_BUILDERS: Dict[str, Callable[[], Tuple[LLMCallable, LLMCallable]]] = {
-    "groq": _get_groq_clients,
-    "huggingface": _get_huggingface_clients,
-    "ollama": _get_ollama_clients,
+    "cerebras": _get_cerebras_clients,
+    "sambanova": _get_sambanova_clients,
+    "gemini": _get_gemini_clients,
     "novita": _get_novita_clients,
+    # Aşağıdakiler registry'de deprecated (varsayılan zincirde DEĞİL); yalnızca açıkça
+    # LLM_PROVIDER=<x> seçilirse kullanılır. Kullanıcı kararı: groq (riskli/flaky),
+    # ollama (GPU yok), huggingface (bozuk) → otomatik akıştan çıkarıldı.
+    "groq": _get_groq_clients,
+    "ollama": _get_ollama_clients,
+    "huggingface": _get_huggingface_clients,
     "openai": _get_openai_clients,
 }
 
@@ -147,6 +174,53 @@ class FallbackLLM:
         self.stats["failures"] += 1
         raise RuntimeError(
             f"Tüm LLM sağlayıcıları başarısız oldu (denenen: {attempted or self.providers}). "
+            f"Son hata: {last_exc}"
+        )
+
+    def stream(self, prompt: str):
+        """GERÇEK token streaming + fallback. İlk token'ı veren sağlayıcıdan akıtır;
+        bir sağlayıcı ilk token'dan ÖNCE hata verirse sonrakine geçer (commit-on-first-token).
+        `stream()` desteklemeyen sağlayıcı (örn. Novita-net) → tam cevabı tek parça yield eder.
+        """
+        from llm.clients.base import classify_error, ModelUnavailableError
+
+        self.stats["total_calls"] += 1
+        last_exc: Optional[Exception] = None
+        attempted: List[str] = []
+        for idx, provider in enumerate(self.providers):
+            client = self._client(provider)
+            if client is None:
+                continue
+            attempted.append(provider)
+            try:
+                if hasattr(client, "stream"):
+                    gen = client.stream(prompt)
+                    first = next(gen)                 # ilk token → hata burada sağlayıcıyı atlatır
+                    self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
+                    if idx > 0:
+                        self.stats["fallback_count"] += 1
+                        logger.info("[FallbackLLM.stream] '%s' ile kurtarıldı", provider)
+                    yield first
+                    yield from gen
+                    return
+                else:  # stream'siz sağlayıcı → tam cevabı tek parça akıt (graceful degrade)
+                    result = client(prompt)
+                    self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
+                    if idx > 0:
+                        self.stats["fallback_count"] += 1
+                    yield result
+                    return
+            except StopIteration:
+                last_exc = ModelUnavailableError(f"{provider}: boş stream", provider)
+                continue
+            except Exception as exc:
+                last_exc = classify_error(exc, provider)
+                logger.warning("[FallbackLLM.stream] '%s' başarısız (%s), sıradakine: %s",
+                               provider, type(last_exc).__name__, last_exc)
+                continue
+        self.stats["failures"] += 1
+        raise RuntimeError(
+            f"Tüm LLM sağlayıcıları (stream) başarısız (denenen: {attempted or self.providers}). "
             f"Son hata: {last_exc}"
         )
 
