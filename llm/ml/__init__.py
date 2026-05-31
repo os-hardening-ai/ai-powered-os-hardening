@@ -18,14 +18,13 @@ ML models for intent detection and evaluation.
 """
 
 try:
-    from .intent_detector import MLIntentDetector, train_intent_model
+    from .intent_detector import MLIntentDetector
     ML_AVAILABLE = True
-except ImportError:
+except ImportError as exc:
     ML_AVAILABLE = False
-    print("[WARNING] ML models not available")
+    print(f"[WARNING] ML models not available: {exc}")
 
 __all__ = [
     "MLIntentDetector",
-    "train_intent_model",
     "ML_AVAILABLE",
 ]
