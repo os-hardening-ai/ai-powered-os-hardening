@@ -46,8 +46,10 @@ def app_client(tmp_path, monkeypatch):
         auth_reset.reset_for_tests()
 
 
-def _register(client, username, password):
-    return client.post("/auth/register", json={"username": username, "password": password})
+def _register(client, username, password, email="yeni@ornek.com"):
+    return client.post(
+        "/auth/register", json={"username": username, "password": password, "email": email}
+    )
 
 
 def _forgot(client, username):
@@ -90,6 +92,9 @@ class TestRegister:
 
     def test_short_password_422(self, app_client):
         assert _register(app_client, "gecerli_ad", "123").status_code == 422
+
+    def test_invalid_email_422(self, app_client):
+        assert _register(app_client, "mailsiz_kisi", "parola123", email="gecersiz").status_code == 422
 
 
 class TestForgotPassword:

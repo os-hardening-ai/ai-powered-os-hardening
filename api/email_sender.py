@@ -62,3 +62,14 @@ def send_email(to: str, subject: str, body: str) -> None:
             server.send_message(msg)
 
     _logger.info("e-posta gönderildi to=%s subject=%r", to, subject)
+
+
+def send_reset_email(to: str, token: str) -> None:
+    """Parola sıfırlama token'ını e-postayla gönderir (forgot-password akışı)."""
+    body = (
+        "Parola sıfırlama talebiniz alındı.\n\n"
+        f"Sıfırlama token'ınız:\n{token}\n\n"
+        "Uygulamadaki 'Parolamı unuttum' ekranında bu token'ı ve yeni parolanızı girin.\n"
+        "Token 15 dakika geçerlidir. Bu talebi siz yapmadıysanız bu e-postayı yok sayın.\n"
+    )
+    send_email(to, "OS Hardening — Parola sıfırlama", body)

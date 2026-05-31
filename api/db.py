@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL,
+    email         TEXT,
     created_at    TEXT NOT NULL
 );
 
@@ -87,6 +88,11 @@ def init_db(db_path: Optional[str] = None) -> sqlite3.Connection:
         except Exception as exc:  # bazı dosya sistemlerinde WAL desteklenmez
             _logger.warning("PRAGMA ayarlanamadı: %s", exc)
         conn.executescript(_SCHEMA)
+        # Migration: mevcut (eski) DB'lerde 'email' kolonu yoksa ekle (idempotent)
+        _cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "email" not in _cols:
+            conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            _logger.info("migration: users.email kolonu eklendi")
         conn.commit()
         _conn, _db_path = conn, path
         _logger.info("SQLite hazır: %s", path)

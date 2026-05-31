@@ -48,7 +48,7 @@ class UserStore:
 
     def get(self, username: str) -> Optional[dict]:
         row = get_conn().execute(
-            "SELECT username, password_hash, role, created_at FROM users WHERE username = ?",
+            "SELECT username, password_hash, role, email, created_at FROM users WHERE username = ?",
             (username,),
         ).fetchone()
         return dict(row) if row else None
@@ -59,8 +59,8 @@ class UserStore:
     def count(self) -> int:
         return int(get_conn().execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"])
 
-    def create(self, username: str, password: str, role: Role) -> None:
-        """Yeni kullanıcı ekle. Aynı username varsa ValueError."""
+    def create(self, username: str, password: str, role: Role, email: Optional[str] = None) -> None:
+        """Yeni kullanıcı ekle. Aynı username varsa ValueError. email opsiyonel (parola sıfırlama için)."""
         role_val = role.value if isinstance(role, Role) else Role.from_str(role).value
         with write_lock():
             conn = get_conn()
@@ -70,11 +70,11 @@ class UserStore:
             if exists:
                 raise ValueError(f"Kullanıcı zaten var: {username!r}")
             conn.execute(
-                "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
-                (username, hash_password(password), role_val, _now_iso()),
+                "INSERT INTO users (username, password_hash, role, email, created_at) VALUES (?, ?, ?, ?, ?)",
+                (username, hash_password(password), role_val, email, _now_iso()),
             )
             conn.commit()
-        _logger.info("user created username=%s role=%s", username, role_val)
+        _logger.info("user created username=%s role=%s email=%s", username, role_val, bool(email))
 
     def verify_credentials(self, username: str, password: str) -> Optional[Role]:
         """Kullanıcı adı + parola doğruysa Role döndürür, yoksa None."""

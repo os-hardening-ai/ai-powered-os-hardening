@@ -62,6 +62,12 @@ class UserOut(BaseModel):
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64, examples=["yeni_kullanici"])
     password: str = Field(..., min_length=6, max_length=256, examples=["parola123"])
+    email: str = Field(
+        ..., min_length=5, max_length=254,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+        description="Parola sıfırlama e-postası buraya gider",
+        examples=["kisi@ornek.com"],
+    )
 
 
 class ForgotPasswordRequest(BaseModel):

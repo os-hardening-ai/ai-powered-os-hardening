@@ -10,9 +10,12 @@ Login başarı/başarısızlığı ve logout, audit_log'a açık olay olarak yaz
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, Request
 
 from api import auth_reset
+from api.email_sender import send_reset_email, smtp_configured
 from api.audit import record_event
 from api.auth import create_access_token, get_current_user, is_dev_mode
 from api.auth_blacklist import block_token
@@ -85,7 +88,7 @@ async def register(payload: RegisterRequest, request: Request) -> TokenResponse:
     """Yeni kullanıcı kaydı (varsayılan rol: end_user) + otomatik giriş (token döner)."""
     ip = _client_ip(request)
     try:
-        user_store.create(payload.username, payload.password, Role.END_USER)
+        user_store.create(payload.username, payload.password, Role.END_USER, email=payload.email)
     except ValueError:
         await record_event(
             "register_failure", username=payload.username, endpoint="/auth/register",
@@ -109,15 +112,26 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request) -> F
     """Parola sıfırlama token'ı üretir. Kullanıcı enumeration'a karşı her durumda aynı mesaj döner;
     token yalnız kullanıcı VARSA üretilir ve DEV-mode'da yanıtta döner (prod'da e-posta — SMTP gerekir)."""
     ip = _client_ip(request)
-    exists = user_store.exists(payload.username)
-    token = auth_reset.issue(payload.username) if exists else None
+    rec = user_store.get(payload.username)
+    token = auth_reset.issue(payload.username) if rec else None
+    email = (rec or {}).get("email")
+    emailed = False
+    if token and email and smtp_configured():
+        try:
+            await asyncio.to_thread(send_reset_email, email, token)
+            emailed = True
+        except Exception as exc:  # e-posta hatası akışı bozmasın
+            _logger.warning("[forgot] reset e-postası gönderilemedi: %s", exc)
     await record_event(
         "forgot_password", username=payload.username, endpoint="/auth/forgot-password",
-        method="POST", status=200, ip=ip, detail=("issued" if exists else "unknown_user"),
+        method="POST", status=200, ip=ip,
+        detail=("emailed" if emailed else "issued" if token else "unknown_user"),
     )
+    # SMTP ile e-posta gittiyse token'ı yanıtta DÖNDÜRME (güvenlik).
+    # E-posta gönderilemediyse (SMTP yok) ve dev-mode ise, akış çalışsın diye token'ı döndür.
     return ForgotPasswordResponse(
-        message="Eğer bu kullanıcı varsa, parola sıfırlama talimatları gönderildi.",
-        reset_token=(token if (token and is_dev_mode()) else None),
+        message="Eğer bu hesap varsa, parola sıfırlama talimatları e-postayla gönderildi.",
+        reset_token=(token if (token and not emailed and is_dev_mode()) else None),
     )
 
 
