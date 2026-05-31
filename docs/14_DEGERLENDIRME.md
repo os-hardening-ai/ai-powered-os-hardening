@@ -26,7 +26,7 @@ fonksiyonlarıyla ölçülür. Sağlayıcı: Novita (kotasız). Komut:
 | **İP-6 Görev Planlayıcı** | ≥%80 doğru sıralama | **%100** (seçim isabeti %100) | %80 | ✅ |
 | **İP-7 Multi-step ajan** | ≥%75 success + self-verify | **%100** (verify-gate %100, adım-tamlık %100) | %75 | ✅ |
 | **İP-8 ZT Açıklayıcı** | ≥%80 doğru ZT eşleşme | **%100** (geçerli prensip + standart referans) | %80 | ✅ |
-| **İP-5 Groundedness** | halüsinasyon <%10 | **0.59** (önce 0.41 — ölçüm hatası düzeltildi) | 0.90 | ⚠️ |
+| **İP-5 Groundedness** | halüsinasyon <%10 | **0.81** (Cerebras prod) · 0.59 (novita harness) · H1 somut Q/A **0.89** | 0.90 | ⚠️ |
 
 ### Dürüst Yorum
 
@@ -56,7 +56,51 @@ fonksiyonlarıyla ölçülür. Sağlayıcı: Novita (kotasız). Komut:
 
 ---
 
-## H1 Hipotezi
+## İP Modül Akış Diyagramları (Mermaid)
+
+Her iş paketinin modül akışı + form başarı ölçütü:
+
+### İP-6 — Görev Planlayıcı (TaskPlanner)  ·  ölçüt ≥%80 sıralama → **%100**
+
+```mermaid
+flowchart LR
+    G([Hedef + OS + güvenlik seviyesi]) --> SEL[RuleEngine<br/>hedefe uygun kuralları SEÇ]
+    SEL --> ORD[resolve_order<br/>CIS bölüm no + bağımlılık sırası]
+    ORD --> CON[detect_conflicts<br/>config_file / kernel_module çakışması]
+    CON --> PLAN([HardeningPlan<br/>sıralı PlanItem listesi])
+```
+
+### İP-7 — Multi-step Ajan (HardeningAgent)  ·  ölçüt ≥%75 + self-verify → **%100**
+
+```mermaid
+flowchart LR
+    G([Hedef]) --> P[PLAN<br/>İP-6] --> C[COLLECT<br/>kural+remediation] --> GEN[GENERATE<br/>ArtifactGenerator]
+    GEN --> V{VERIFY self-verify<br/>tehlikeli komut?}
+    V -->|tehlikeli → REFINE ≤1x| GEN
+    V -->|temiz| OUT([AgentResult<br/>script + steps + verify ok])
+```
+
+### İP-8 — Zero-Trust Açıklayıcı (ZeroTrustEnricher)  ·  ölçüt ≥%80 + CIS-NIST-ZTA → **%100**
+
+```mermaid
+flowchart LR
+    R([Kural / öneri + bağlam]) --> ZT[ZT prensip eşle<br/>least_privilege · continuous_verification<br/>micro_segmentation · strong_identity]
+    ZT --> STD[Standart referans<br/>CIS + NIST 800-207 + ISO 27001]
+    STD --> OUT([ZTEnrichment<br/>prensip + üçlü referans + rollback])
+```
+
+### İP-5 — Groundedness (ClaimVerifier + Refinement)  ·  ölçüt halüsinasyon <%10 → **0.81 / somut 0.89** ⚠️
+
+```mermaid
+flowchart LR
+    A([Üretilen cevap + RAG chunk'ları]) --> EX[Claim extraction<br/>atomik iddialar]
+    EX --> CK[Her iddiayı chunk'lara karşı<br/>LLM ile denetle self-check]
+    CK --> CONF{groundedness<br/>≥ eşik?}
+    CONF -->|düşük → sorguyu genişlet<br/>yeniden retrieve + üret 1x| EX
+    CONF -->|yeterli| OUT([VerificationResult<br/>confidence + unsupported claims])
+```
+
+---
 
 ## H1 Hipotezi
 
