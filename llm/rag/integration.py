@@ -6,7 +6,10 @@ CIS benchmark dokümanlarından ilgili bilgileri getirip LLM'e context olarak su
 
 from __future__ import annotations
 import logging
+import time
 from typing import List, Dict, Any, Tuple
+
+from prometheus_metrics import record_rag_retrieval
 
 try:
     from rag.embeddings import get_embedding_client
@@ -287,17 +290,25 @@ class RAGContextBuilder:
 
     def retrieve_all(self, query: str) -> Tuple[str, List[Dict[str, Any]]]:
         """Single-query retrieval — returns (context_str, raw_results)."""
+        t0 = time.perf_counter()
         try:
             print(f"[RAG.retrieve_all] START — query='{query[:60]}'")
             filtered = self._search(query)
             if not filtered:
                 print("[RAG.retrieve_all] No results passed score threshold → fallback")
+                record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
                 return self._get_fallback_message(), []
             context = self._format_context(filtered)
             print(f"[RAG.retrieve_all] OK — {len(filtered)} sources, context_len={len(context)}")
+            record_rag_retrieval(
+                duration_s=time.perf_counter() - t0,
+                results_count=len(filtered),
+                top_score=filtered[0].get("score", 0.0) if filtered else 0.0,
+            )
             return context, filtered
         except Exception as e:
             print(f"[RAG.retrieve_all] ERROR: {e}")
+            record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
             return self._get_fallback_message(), []
 
     def retrieve_context(self, query: str) -> str:
@@ -329,6 +340,7 @@ class RAGContextBuilder:
         yaml_k = yaml_k if yaml_k is not None else self.top_k
         pdf_k = pdf_k if pdf_k is not None else self.top_k
 
+        t0 = time.perf_counter()
         try:
             print(f"[RAG.retrieve_balanced] START — query='{query[:60]}' yaml_k={yaml_k} pdf_k={pdf_k}")
             query_emb = self._embed_client.embed_query(query)
@@ -346,12 +358,14 @@ class RAGContextBuilder:
 
             if not combined:
                 print("[RAG.retrieve_balanced] No results → fallback")
+                record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
                 return self._get_fallback_message(), []
 
             # Refinement loop: düşük skor → otomatik yeniden retrieval
             combined = self._refinement_retrieve(query, combined)
 
             if not combined:
+                record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
                 return self._get_fallback_message(), []
 
             # Enhanced: hybrid + MMR
@@ -360,10 +374,16 @@ class RAGContextBuilder:
 
             context = self._format_context(combined)
             print(f"[RAG.retrieve_balanced] OK — {len(combined)} total sources, context_len={len(context)}")
+            record_rag_retrieval(
+                duration_s=time.perf_counter() - t0,
+                results_count=len(combined),
+                top_score=combined[0].get("score", 0.0) if combined else 0.0,
+            )
             return context, combined
 
         except Exception as e:
             print(f"[RAG.retrieve_balanced] ERROR: {e}")
+            record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
             return self._get_fallback_message(), []
 
     def retrieve_multi(
@@ -401,6 +421,7 @@ class RAGContextBuilder:
                 + self._search_with_emb(q_emb, top_k=pdf_k, doc_type="cis_benchmark")
             )
 
+        t0 = time.perf_counter()
         try:
             print(f"[RAG.retrieve_multi] START — {len(queries)} queries parallel, original='{original_query[:50]}'")
 
@@ -423,12 +444,14 @@ class RAGContextBuilder:
 
             if not combined:
                 print("[RAG.retrieve_multi] No results → fallback")
+                record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
                 return self._get_fallback_message(), []
 
             # Refinement loop
             combined = self._refinement_retrieve(original_query, combined)
 
             if not combined:
+                record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
                 return self._get_fallback_message(), []
 
             # Enhanced: hybrid + MMR (scored against the ORIGINAL query)
@@ -437,10 +460,16 @@ class RAGContextBuilder:
 
             context = self._format_context(combined)
             print(f"[RAG.retrieve_multi] OK — {len(combined)} final chunks, context_len={len(context)}")
+            record_rag_retrieval(
+                duration_s=time.perf_counter() - t0,
+                results_count=len(combined),
+                top_score=combined[0].get("score", 0.0) if combined else 0.0,
+            )
             return context, combined
 
         except Exception as exc:
             print(f"[RAG.retrieve_multi] ERROR: {exc}")
+            record_rag_retrieval(duration_s=time.perf_counter() - t0, results_count=0)
             return self._get_fallback_message(), []
 
     def _get_fallback_message(self) -> str:
