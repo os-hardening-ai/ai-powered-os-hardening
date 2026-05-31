@@ -68,3 +68,7 @@ opentelemetry-instrumentation-httpx==0.61b0
 # Auth (login/JWT + parola hash) — Docker imajı bunu kuruyor, eksikti
 PyJWT>=2.8.0
 bcrypt>=4.1.0
+
+# ML intent sınıflandırıcı (joblib modeli sklearn 1.5.0 ile eğitildi) — eksikti → "ML models not available"
+scikit-learn==1.5.0
+joblib>=1.3.0
