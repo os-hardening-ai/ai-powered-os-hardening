@@ -65,3 +65,6 @@ opentelemetry-sdk==1.40.0
 opentelemetry-exporter-otlp-proto-grpc==1.40.0
 opentelemetry-instrumentation-fastapi==0.61b0
 opentelemetry-instrumentation-httpx==0.61b0
+# Auth (login/JWT + parola hash) — Docker imajı bunu kuruyor, eksikti
+PyJWT>=2.8.0
+bcrypt>=4.1.0
