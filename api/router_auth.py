@@ -12,12 +12,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
+from api import auth_reset
 from api.audit import record_event
-from api.auth import create_access_token, get_current_user
+from api.auth import create_access_token, get_current_user, is_dev_mode
 from api.auth_blacklist import block_token
 from api.auth_models import (
     AuthenticatedUser,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    Role,
     TokenResponse,
     UserOut,
 )
@@ -72,6 +78,74 @@ async def login(payload: LoginRequest, request: Request) -> TokenResponse:
         role=role.value,
         expires_in=expires_in,
     )
+
+
+@router.post("/auth/register", response_model=TokenResponse, tags=["auth"])
+async def register(payload: RegisterRequest, request: Request) -> TokenResponse:
+    """Yeni kullanıcı kaydı (varsayılan rol: end_user) + otomatik giriş (token döner)."""
+    ip = _client_ip(request)
+    try:
+        user_store.create(payload.username, payload.password, Role.END_USER)
+    except ValueError:
+        await record_event(
+            "register_failure", username=payload.username, endpoint="/auth/register",
+            method="POST", status=409, ip=ip, detail="username exists",
+        )
+        raise APIError(
+            status_code=409, error_code=ErrorCode.VALIDATION_ERROR,
+            message="Bu kullanıcı adı zaten alınmış.", error_type=ErrorType.VALIDATION_ERROR,
+        )
+    user = AuthenticatedUser(username=payload.username, role=Role.END_USER)
+    token, expires_in = create_access_token(user)
+    await record_event(
+        "register_success", username=payload.username, role="end_user",
+        endpoint="/auth/register", method="POST", status=200, ip=ip,
+    )
+    return TokenResponse(access_token=token, token_type="bearer", role="end_user", expires_in=expires_in)
+
+
+@router.post("/auth/forgot-password", response_model=ForgotPasswordResponse, tags=["auth"])
+async def forgot_password(payload: ForgotPasswordRequest, request: Request) -> ForgotPasswordResponse:
+    """Parola sıfırlama token'ı üretir. Kullanıcı enumeration'a karşı her durumda aynı mesaj döner;
+    token yalnız kullanıcı VARSA üretilir ve DEV-mode'da yanıtta döner (prod'da e-posta — SMTP gerekir)."""
+    ip = _client_ip(request)
+    exists = user_store.exists(payload.username)
+    token = auth_reset.issue(payload.username) if exists else None
+    await record_event(
+        "forgot_password", username=payload.username, endpoint="/auth/forgot-password",
+        method="POST", status=200, ip=ip, detail=("issued" if exists else "unknown_user"),
+    )
+    return ForgotPasswordResponse(
+        message="Eğer bu kullanıcı varsa, parola sıfırlama talimatları gönderildi.",
+        reset_token=(token if (token and is_dev_mode()) else None),
+    )
+
+
+@router.post("/auth/reset-password", tags=["auth"])
+async def reset_password(payload: ResetPasswordRequest, request: Request) -> dict:
+    """Reset token + yeni parola ile parolayı sıfırlar (token tek kullanımlık)."""
+    ip = _client_ip(request)
+    username = auth_reset.consume(payload.token)
+    if not username:
+        await record_event(
+            "reset_password_failure", endpoint="/auth/reset-password",
+            method="POST", status=400, ip=ip, detail="invalid/expired token",
+        )
+        raise APIError(
+            status_code=400, error_code=ErrorCode.VALIDATION_ERROR,
+            message="Geçersiz veya süresi dolmuş sıfırlama token'ı.",
+            error_type=ErrorType.VALIDATION_ERROR,
+        )
+    if not user_store.update_password(username, payload.new_password):
+        raise APIError(
+            status_code=404, error_code=ErrorCode.NOT_FOUND,
+            message="Kullanıcı bulunamadı.", error_type=ErrorType.VALIDATION_ERROR,
+        )
+    await record_event(
+        "reset_password_success", username=username, endpoint="/auth/reset-password",
+        method="POST", status=200, ip=ip,
+    )
+    return {"message": "Parola güncellendi. Yeni parolayla giriş yapabilirsiniz."}
 
 
 @router.post("/auth/logout", tags=["auth"])

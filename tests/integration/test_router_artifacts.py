@@ -79,6 +79,38 @@ class TestRulesPlan:
     def test_empty_rule_ids_rejected_422(self, client):
         assert client.post("/api/rules/plan", json={"rule_ids": []}).status_code == 422
 
+    def test_os_target_passed_to_engine(self, tmp_path, monkeypatch):
+        # os_target gövdeden _get_rule_engine'e geçmeli (artık hardcode 'ubuntu_24_04' değil).
+        p = tmp_path / "rules.yaml"
+        p.write_text(RULES_YAML, encoding="utf-8")
+        captured: list[str] = []
+
+        def _capture(os_target, *a, **k):
+            captured.append(os_target)
+            return RuleEngine(p)
+
+        monkeypatch.setattr(ra, "_get_rule_engine", _capture)
+        app = FastAPI()
+        app.add_exception_handler(APIError, api_error_handler)
+        app.include_router(router, prefix="/api")
+        c = TestClient(app, raise_server_exceptions=False)
+        r = c.post("/api/rules/plan", json={"rule_ids": ["1.1.1"], "os_target": "windows_11"})
+        assert r.status_code == 200
+        assert captured == ["windows_11"]
+
+    def test_os_target_defaults_to_ubuntu(self, tmp_path, monkeypatch):
+        p = tmp_path / "rules.yaml"
+        p.write_text(RULES_YAML, encoding="utf-8")
+        captured: list[str] = []
+        monkeypatch.setattr(ra, "_get_rule_engine", lambda os_target, *a, **k: (captured.append(os_target), RuleEngine(p))[1])
+        app = FastAPI()
+        app.add_exception_handler(APIError, api_error_handler)
+        app.include_router(router, prefix="/api")
+        c = TestClient(app, raise_server_exceptions=False)
+        r = c.post("/api/rules/plan", json={"rule_ids": ["1.1.1"]})
+        assert r.status_code == 200
+        assert captured == ["ubuntu_24_04"]  # body'de yoksa varsayılan
+
 
 class TestConflicts:
     def test_conflicts_endpoint(self, client):

@@ -91,6 +91,20 @@ class UserStore:
             _logger.warning("Geçersiz rol DB'de: username=%s role=%s", username, rec["role"])
             return None
 
+    def update_password(self, username: str, new_password: str) -> bool:
+        """Kullanıcının parolasını günceller (bcrypt). Kullanıcı yoksa False."""
+        with write_lock():
+            conn = get_conn()
+            if not conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+                return False
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE username = ?",
+                (hash_password(new_password), username),
+            )
+            conn.commit()
+        _logger.info("password updated username=%s", username)
+        return True
+
     def list_users(self) -> List[dict]:
         rows = get_conn().execute(
             "SELECT username, role, created_at FROM users ORDER BY username"

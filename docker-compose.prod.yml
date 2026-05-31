@@ -1,0 +1,36 @@
+# Production override — birleşik VPS deploy (paylaşılan hardening_net + öne Caddy).
+#
+# Kullanım (backend repo kökünde):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#   (dev override'ı (docker-compose.override.yml) OTOMATİK YÜKLENMEZ çünkü -f verildi.)
+#
+# Gerektirir: Docker Compose >= 2.24 ( ports: !reset için ).
+# Önce çalıştır:  docker network create hardening_net
+#
+# Bu dosya yalnızca DEPLOY topolojisini değiştirir; secret'lar .env'den gelir.
+# .env içine şunları EKLE (uygulama os.environ'dan okur):
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+#   OTEL_SERVICE_NAME=hardening-api
+#   ALLOWED_HOSTS=app.<DOMAIN>,api,localhost,127.0.0.1
+#   CORS_ALLOW_ORIGINS=https://app.<DOMAIN>
+
+services:
+  api:
+    # Host'a sadece localhost'tan aç (debug/SSH-tunnel). Dış trafik Caddy→frontend→api.
+    ports: !reset
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # SQLite auth.db (kullanıcılar) + audit_log KALICI olsun — yoksa her redeploy'da silinir.
+      # Host ./data git clone'dan gelir (CIS PDF + rules zaten içinde); auth.db burada oluşur ve kalır.
+      - ./data:/app/data
+    networks:
+      - default        # redis ile aynı (proje) ağ
+      - hardening_net   # frontend + prometheus + jaeger erişimi (paylaşılan)
+
+  redis:
+    # Redis'i host'a hiç açma — yalnız api erişir (proje default ağı).
+    ports: !reset []
+
+networks:
+  hardening_net:
+    external: true

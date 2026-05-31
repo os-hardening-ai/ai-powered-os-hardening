@@ -53,6 +53,11 @@ class RulePlanRequest(BaseModel):
         description="CIS rule IDs (e.g. ['1.1.1.1', '5.2.1'])",
         examples=[["1.1.1.1", "1.1.1.2", "5.2.1"]],
     )
+    os_target: str = Field(
+        "ubuntu_24_04",
+        description="Hedef OS — kural seti bunun için yüklenir (ubuntu_24_04, windows_11, ...)",
+        examples=["ubuntu_24_04"],
+    )
 
 
 class ConflictResponse(BaseModel):
@@ -114,7 +119,7 @@ async def get_execution_plan(body: RulePlanRequest):
     are reported with warnings.
     """
     try:
-        engine = _get_rule_engine("ubuntu_24_04")
+        engine = _get_rule_engine(body.os_target)
         plan = engine.get_execution_plan(body.rule_ids)
         return ExecutionPlanResponse(
             ordered_rules=plan.ordered_rules,
@@ -135,7 +140,7 @@ async def detect_conflicts(body: RulePlanRequest):
     A conflict exists when two rules write to the same config file or manage the same kernel module.
     """
     try:
-        engine = _get_rule_engine("ubuntu_24_04")
+        engine = _get_rule_engine(body.os_target)
         conflicts = engine.detect_conflicts(body.rule_ids)
         return [ConflictResponse(**vars(c)) for c in conflicts]
     except APIError:
