@@ -156,8 +156,13 @@ class InfoPipeline:
         _logger.debug("[InfoPipeline] use_rag=%s, rag_builder=%s", use_rag, "SET" if self.rag_builder else "NONE")
         if use_rag and self.rag_builder:
             try:
-                # Query planning: expand query before retrieval
-                if self.query_planner is not None and complexity != "simple":
+                # Query planning: expand query before retrieval.
+                # QUOTA: QueryPlanner 3 PARALEL LLM call yapar (decompose+hyde+stepback).
+                # Cerebras 5 istek/dk limitinde, bir info isteğinin safety+gen+verify dışında
+                # +3 call'ı tek başına limiti patlatıyordu. Bu yüzden YALNIZCA "complex"te
+                # koşulur; "medium" doğrudan retrieve_balanced kullanır (LLM planner yok →
+                # info isteği 6 call yerine ~3 call). Recall'da küçük kayıp, quota'da büyük kazanç.
+                if self.query_planner is not None and complexity == "complex":
                     try:
                         _t0 = datetime.now()
                         plan = self.query_planner.plan(ctx.user_question)
