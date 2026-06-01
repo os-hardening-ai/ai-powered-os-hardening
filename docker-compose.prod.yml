@@ -28,8 +28,14 @@ services:
       - hardening_net   # frontend + prometheus + jaeger erişimi (paylaşılan)
 
   redis:
-    # Redis'i host'a hiç açma — yalnız api erişir (proje default ağı).
+    # Redis'i host'a hiç açma — yalnız api + redis-exporter erişir.
     ports: !reset []
+    # redis-exporter (monitoring repo) redis'i paylaşılan ağdan 'redis:6379' olarak
+    # çözebilsin diye hardening_net'e de katılır. Böylece Problem 1 (exporter redis'e
+    # ulaşamıyor) KALICI çözülür — manuel `docker network connect` gerekmez.
+    networks:
+      - default
+      - hardening_net
 
 networks:
   hardening_net:

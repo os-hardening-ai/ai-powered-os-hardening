@@ -126,8 +126,10 @@ const es = new EventSource(`/api/chat/stream?access_token=${token}`);
 
 | Method | Endpoint | Açıklama |
 |--------|----------|----------|
-| POST | `/api/chat` | Ana chat endpoint (RAG + LLM + 4-layer pipeline) |
-| POST | `/api/chat/stream` | Streaming SSE chat |
+| POST | `/api/chat` | Ana chat endpoint (RAG + LLM + 4-layer **SecurePipelineV2**) |
+| POST | `/api/chat/stream` | `/api/chat` ile **BİREBİR aynı** pipeline, SSE ile kelime-kelime akıtılır |
+| POST | `/api/chat/fast` | **Hızlı RAG** (non-stream) — intent routing YOK, doğrudan RAG-grounded üretim |
+| POST | `/api/chat/stream/fast` | **Hızlı RAG** (SSE, gerçek token-token) — intent routing YOK |
 | POST | `/v1/chat/completions` | OpenAI-uyumlu chat (herhangi bir OpenAI istemcisi ile kullanılabilir) |
 | GET | `/v1/models` | OpenAI-uyumlu model listesi |
 | POST | `/rag/search` | Sadece RAG araması (LLM yok) |
@@ -217,6 +219,42 @@ Content-Type: application/json
 - `low` - Temel ZT prensipleri (least privilege, logging)
 - `medium` - Orta seviye ZT (+ MFA, network segmentation)
 - `high` - İleri seviye ZT (+ continuous validation, micro-segmentation)
+
+---
+
+### Chat Modları ve Streaming (4 uç)
+
+İki ekseni var: **(a) yönlendirme modu** (Tam vs Hızlı RAG) ve **(b) streaming** (açık/kapalı).
+Toplam 4 kombinasyon, 4 ayrı uca düşer:
+
+| Streaming | Mod | Endpoint | Davranış |
+|-----------|-----|----------|----------|
+| ❌ kapalı | Tam (akıllı) | `POST /api/chat` | 4-katman SecurePipelineV2, tek-parça yanıt |
+| ✅ açık | Tam (akıllı) | `POST /api/chat/stream` | **Aynı** SecurePipelineV2, cevap kelime-kelime SSE |
+| ❌ kapalı | Hızlı RAG | `POST /api/chat/fast` | Intent routing YOK, doğrudan RAG-grounded, tek-parça |
+| ✅ açık | Hızlı RAG | `POST /api/chat/stream/fast` | Intent routing YOK, **gerçek token-token** SSE |
+
+**ÖNEMLİ — her iki mod da RAG kullanır.** Fark RAG'de değil:
+
+- **Tam (akıllı)** → Layer 2 (intent) + Layer 3 (routing) çalışır:
+  - `selam`/`naber`/`teşekkürler` → smalltalk yanıtı (RAG'a gitmez, $0).
+  - Güvenlik sorusu → RAG + complexity'ye göre model + iddia doğrulaması.
+  - Kapsam dışı (`hava durumu`) → kibar red.
+- **Hızlı RAG** → intent/routing/complexity/doğrulama **atlanır**; her girdi bir güvenlik
+  sorusu kabul edilip doğrudan RAG-grounded üretime gider. Daha az LLM call, en düşük
+  ilk-token gecikmesi. Smalltalk için UYGUN DEĞİLDİR (`selam` da RAG cevabı alır) — bu
+  yüzden "uzman/konsol" akışları içindir.
+
+> **Düzeltme notu (bu sürüm):** Önceden `/api/chat/stream` kendi mini-pipeline'ını koşuyor,
+> Layer 2/3'ü atlıyordu → `selam` gibi smalltalk girdileri RAG'a gidip uzun güvenlik cevabı
+> dönüyordu. Artık `/api/chat/stream`, `/api/chat` ile **birebir aynı** SecurePipelineV2'yi
+> koşar; eski "her girdiyi RAG'la cevapla" davranışı **bilinçli ve ayrı** bir uç olarak
+> `/api/chat/[stream/]fast` adı altında korunmuştur.
+
+**SSE event sırası** (`/api/chat/stream` ve `/api/chat/stream/fast`):
+`metadata` → `sources` (RAG varsa) → `message` (her token) → `done`.
+`metadata.intent`, `metadata.layer_path`, `metadata.rag_used` alanlarıyla hangi yola
+gidildiği gözlenebilir (`1→2→3A` smalltalk, `1→2→3B` info, `1→RAG→GEN(fast)` hızlı RAG).
 
 ---
 
