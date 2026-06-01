@@ -137,3 +137,6 @@ site/
 
 # Generated evaluation artifacts (run outputs/logs)
 evaluation/results/
+
+# Embedding router cache (CSV+model hash ile otomatik kurulur; ilk çalışmada Novita)
+llm/ml/models/intent_embeddings.npz
