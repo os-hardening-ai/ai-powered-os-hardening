@@ -5,7 +5,24 @@ import inspect
 import logging
 import os
 import threading
+import time
 from typing import Callable, Dict, List, Optional, Tuple
+
+
+def _record_latency(stats: dict, label: str, elapsed_ms: float) -> None:
+    """Lane/provider başına kümülatif gecikme (toplam_ms, adet) → ortalama hesaplanabilir.
+    Yavaş lane tespiti için: hangi model sürekli uzun sürüyor görünür → havuzdan çıkarılır."""
+    lat = stats.setdefault("latency_ms_by_provider", {})
+    acc = lat.setdefault(label, [0.0, 0])
+    acc[0] += elapsed_ms
+    acc[1] += 1
+
+
+def _record_failure(stats: dict, label: str) -> None:
+    """Lane/provider başına başarısız (429/timeout/5xx) call sayısı → ÖLÜ/zayıf lane tespiti.
+    (örn. codestral=0 başarı + N başarısızlık → model erişilemez/rate-limited.)"""
+    f = stats.setdefault("failures_by_provider", {})
+    f[label] = f.get(label, 0) + 1
 
 # Import from core.config
 from llm.core.config import LLM_PROVIDER
@@ -216,7 +233,9 @@ class FallbackLLM:
                 continue
             attempted.append(provider)
             try:
+                _t0 = time.perf_counter()
                 result = client(prompt, system=system) if (system and _accepts_system(client)) else client(prompt)
+                _record_latency(self.stats, provider, (time.perf_counter() - _t0) * 1000.0)
                 self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
                 if idx > 0:  # birincil değil → fallback gerçekleşti
                     self.stats["fallback_count"] += 1
@@ -225,6 +244,7 @@ class FallbackLLM:
                 return result
             except Exception as exc:
                 last_exc = classify_error(exc, provider)
+                _record_failure(self.stats, provider)
                 logger.warning(
                     "[FallbackLLM] '%s' başarısız (%s), sıradakine geçiliyor: %s",
                     provider, type(last_exc).__name__, last_exc,
@@ -293,7 +313,9 @@ class FallbackLLM:
     def get_stats(self) -> dict:
         total = self.stats["total_calls"]
         rate = (self.stats["fallback_count"] / total) if total else 0.0
-        return {**self.stats, "fallback_rate": round(rate, 4)}
+        _lat = self.stats.get("latency_ms_by_provider", {})
+        avg_lat = {k: round(v[0] / v[1]) for k, v in _lat.items() if v[1] > 0}
+        return {**self.stats, "fallback_rate": round(rate, 4), "avg_latency_ms_by_provider": avg_lat}
 
 
 class LaneLoadBalancer:
@@ -334,7 +356,9 @@ class LaneLoadBalancer:
         for idx, (label, client) in enumerate(self._order()):
             attempted.append(label)
             try:
+                _t0 = time.perf_counter()
                 result = client(prompt, system=system) if (system and _accepts_system(client)) else client(prompt)
+                _record_latency(self.stats, label, (time.perf_counter() - _t0) * 1000.0)
                 self.stats["by_provider"][label] = self.stats["by_provider"].get(label, 0) + 1
                 if idx > 0:
                     self.stats["fallback_count"] += 1
@@ -342,6 +366,7 @@ class LaneLoadBalancer:
                 return result
             except Exception as exc:
                 last_exc = classify_error(exc, label)
+                _record_failure(self.stats, label)
                 logger.warning("[LaneLB:%s] '%s' başarısız (%s), sıradakine: %s",
                                self.role, label, type(last_exc).__name__, last_exc)
         self.stats["failures"] += 1
@@ -391,7 +416,9 @@ class LaneLoadBalancer:
     def get_stats(self) -> dict:
         total = self.stats["total_calls"]
         rate = (self.stats["fallback_count"] / total) if total else 0.0
-        return {**self.stats, "fallback_rate": round(rate, 4)}
+        _lat = self.stats.get("latency_ms_by_provider", {})
+        avg_lat = {k: round(v[0] / v[1]) for k, v in _lat.items() if v[1] > 0}
+        return {**self.stats, "fallback_rate": round(rate, 4), "avg_latency_ms_by_provider": avg_lat}
 
 
 def _build_lane_balancer(role: str, lanes_env: str, stats: dict) -> Optional["LaneLoadBalancer"]:

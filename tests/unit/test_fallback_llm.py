@@ -246,3 +246,18 @@ class TestRoundRobinLoadBalancing:
         lb = LaneLoadBalancer("small", [("p1:m", bad), ("p2:m", bad)])
         with pytest.raises(RuntimeError, match="Tüm LLM lane"):
             lb("p")
+
+    def test_lane_stats_track_latency_and_failures(self):
+        from llm.clients import LaneLoadBalancer
+
+        def good(p, system=None):
+            return "ok"
+
+        def bad(p, system=None):
+            raise RuntimeError("429 rate limit")
+
+        lb = LaneLoadBalancer("small", [("ok:m", good), ("bad:m", bad)])
+        lb("x"); lb("y")   # call2 start1 → bad fail (fallback) → good
+        s = lb.get_stats()
+        assert "ok:m" in s["avg_latency_ms_by_provider"]        # ort. gecikme kaydedildi
+        assert s["failures_by_provider"].get("bad:m", 0) >= 1   # ölü lane fail sayısı kaydedildi

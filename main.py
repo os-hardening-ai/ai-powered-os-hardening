@@ -216,6 +216,14 @@ def create_app() -> FastAPI:
         except Exception:
             return {}
 
+    def _lane_diag() -> dict:
+        """Lane başına ort. gecikme (ms) + başarısızlık sayısı (yavaş/ölü lane tespiti)."""
+        try:
+            from api.router_chat import get_llm_client_lane_diagnostics
+            return get_llm_client_lane_diagnostics()
+        except Exception:
+            return {"avg_latency_ms": {}, "failures": {}}
+
     @app.get("/metrics", tags=["monitoring"], dependencies=_role_sec)
     async def get_metrics(
         endpoint: str = None,
@@ -260,6 +268,14 @@ def create_app() -> FastAPI:
             # Balancer henüz hiç çağrı yapmadıysa (boş) eski per-request aggregation'a düş.
             "llm_providers": _real_provider_stats() or agg_metrics.provider_stats,
             "llm_models": agg_metrics.model_stats,
+            # Lane başına ort. gecikme (ms) + başarısızlık → yavaş/ölü lane tespiti
+            # (ör. codestral=0 başarı + N fail = erişilemez; llama-1b avg yüksek = yavaş).
+            "llm_lane_latency_ms": _lane_diag().get("avg_latency_ms", {}),
+            "llm_lane_failures": _lane_diag().get("failures", {}),
+            # Endpoint-grubu (chat / agent / rules / rag / diğer) bazlı gecikme.
+            "latency_by_endpoint": metrics_collector.get_endpoint_breakdown(
+                time_window_minutes=window_minutes
+            ),
         }
 
     @app.get("/metrics/errors", tags=["monitoring"], dependencies=_role_sec)
