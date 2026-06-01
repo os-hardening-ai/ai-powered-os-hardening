@@ -7,18 +7,20 @@ Yeni prompt denemek için Python kodu yerine .md dosyalarını düzenleyin.
 """
 
 from __future__ import annotations
+
 from llm.core.context import RequestContext
 from .loader import render_template
 
 
 # Bağlam-bağlılığı (groundedness) direktifi — halüsinasyonu azaltmanın ANA kaldıracı.
-# RAG ile CIS bağlamı geldiğinde modeli bağlama bağlar: bağlamda olmayan değer/komut
-# uydurmaz, eksikse açıkça söyler. (İP-5 ölçümü de aynı direktifi kullanır → tutarlı.)
+# KÖK FIX: Bu bir TALİMAT'tır → user prompt'una GÖMÜLMEZ; info_pipeline tarafından
+# LLM'e ayrı bir SYSTEM mesajı olarak geçilir. Böylece model talimatı yanıtına ECHO
+# ETMEZ (eski sızıntı buradandı). (İP-5 ölçümü de aynı direktifi system olarak kullanır.)
 GROUNDING_DIRECTIVE = (
-    " ÖNEMLİ — KANITA DAYAN: Yanıtındaki spesifik değer, parametre, dosya yolu ve "
-    "direktifleri YALNIZCA yukarıdaki CIS BENCHMARK REFERANSLARI'ndan al. Referanslarda "
-    "geçmeyen bir değeri/komutu UYDURMA. İstenen ayrıntı bağlamda yoksa bunu açıkça belirt "
-    "('CIS bağlamında bu ayrıntı yer almıyor'), tahmin yürütme."
+    "Sen bir CIS Benchmark / OS sıkılaştırma uzmanısın. KANITA DAYAN: Yanıtındaki spesifik "
+    "değer, parametre, dosya yolu ve direktifleri YALNIZCA sana verilen CIS BENCHMARK "
+    "REFERANSLARI'ndan al. Referanslarda geçmeyen bir değeri/komutu UYDURMA. İstenen ayrıntı "
+    "bağlamda yoksa bunu açıkça belirt ('CIS bağlamında bu ayrıntı yer almıyor'), tahmin yürütme."
 )
 
 
@@ -44,7 +46,7 @@ def build_simple_prompt(ctx: RequestContext) -> str:
         os=ctx.os or "genel",
         role=ctx.role or "sysadmin",
         rag_section=rag_section,
-        rag_instruction=GROUNDING_DIRECTIVE if ctx.retrieved_context else "",
+        rag_instruction="",  # direktif artık SYSTEM mesajı olarak geçer (info_pipeline); user prompt'una GÖMÜLMEZ → echo yok
         history_section=history_section,
     )
 
@@ -63,7 +65,7 @@ def build_medium_prompt(ctx: RequestContext) -> str:
         role=ctx.role or "sysadmin",
         security_level=ctx.security_level,
         rag_section=rag_section,
-        rag_instruction=GROUNDING_DIRECTIVE if ctx.retrieved_context else "",
+        rag_instruction="",  # direktif artık SYSTEM mesajı olarak geçer (info_pipeline); user prompt'una GÖMÜLMEZ → echo yok
         history_section=history_section,
     )
 

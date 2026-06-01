@@ -196,8 +196,11 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             history = [{"role": t.role, "content": t.content} for t in turns]
 
         # Context-aware query rewriting (follow-up → standalone)
+        # ÖNEMLİ: Ham soru smalltalk ise (selam/naber/teşekkür...) YENİDEN YAZMA — aksi halde
+        # QueryRewriter geçmiş bağlamıyla "naber"i güvenlik sorusuna çevirip yanlış yönlendiriyordu.
+        from llm.pipelines.layers.hybrid_intent_detector import is_smalltalk
         effective_question = payload.question
-        if history:
+        if history and not is_smalltalk(payload.question):
             try:
                 from rag.query.query_rewriter import QueryRewriter
                 _rewriter = QueryRewriter(llm_fn=llm_small)

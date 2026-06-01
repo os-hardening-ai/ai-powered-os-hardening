@@ -29,6 +29,16 @@ from llm.core.config import MAX_TOKENS, MAX_RETRIES, REQUEST_TIMEOUT
 logger = logging.getLogger(__name__)
 
 
+def _messages(prompt: str, system: Optional[str] = None) -> list:
+    """Chat mesajları kur. system verilirse ayrı 'system' rolü olarak eklenir —
+    böylece talimat (ör. grounding direktifi) modelin YANITINA echo edilmez."""
+    msgs = []
+    if system:
+        msgs.append({"role": "system", "content": system})
+    msgs.append({"role": "user", "content": prompt})
+    return msgs
+
+
 class OpenAICompatibleClient:
     """Herhangi bir OpenAI-uyumlu sağlayıcı için çağrılabilir LLM: ``client(prompt) -> str``."""
 
@@ -67,11 +77,11 @@ class OpenAICompatibleClient:
             provider, model_name, base_url, self.timeout, self.max_retries,
         )
 
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, prompt: str, system: Optional[str] = None) -> str:
         try:
             resp = self._client.chat.completions.create(
                 model=self.model_name,
-                messages=[{"role": "user", "content": prompt}],
+                messages=_messages(prompt, system),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
@@ -84,7 +94,7 @@ class OpenAICompatibleClient:
         except Exception as exc:  # ham SDK hatasını ortak taksonomiye çevir
             raise classify_error(exc, self.provider)
 
-    def stream(self, prompt: str):
+    def stream(self, prompt: str, system: Optional[str] = None):
         """GERÇEK token streaming — SDK stream=True ile token delta'larını yield eder.
 
         İlk token'dan ÖNCE hata olursa (429/auth) sınıflandırıp yükseltir → çağıran
@@ -93,7 +103,7 @@ class OpenAICompatibleClient:
         try:
             stream = self._client.chat.completions.create(
                 model=self.model_name,
-                messages=[{"role": "user", "content": prompt}],
+                messages=_messages(prompt, system),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 stream=True,

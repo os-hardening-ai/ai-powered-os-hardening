@@ -1,6 +1,7 @@
 # models/__init__.py
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -9,7 +10,16 @@ from llm.core.config import LLM_PROVIDER
 
 logger = logging.getLogger(__name__)
 
-LLMCallable = Callable[[str], str]
+LLMCallable = Callable[..., str]
+
+
+def _accepts_system(fn) -> bool:
+    """fn (client.__call__ / .stream) opsiyonel 'system' parametresi kabul ediyor mu?
+    Eski/deprecated client'lar system desteklemiyor → onlara prompt-only çağrı yapılır."""
+    try:
+        return "system" in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 def _get_openai_clients() -> Tuple[LLMCallable, LLMCallable]:
@@ -147,7 +157,7 @@ class FallbackLLM:
             return None
         return built[0] if self.role == "small" else built[1]
 
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, prompt: str, system: Optional[str] = None) -> str:
         from llm.clients.base import classify_error
 
         self.stats["total_calls"] += 1
@@ -159,7 +169,7 @@ class FallbackLLM:
                 continue
             attempted.append(provider)
             try:
-                result = client(prompt)
+                result = client(prompt, system=system) if (system and _accepts_system(client)) else client(prompt)
                 self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
                 if idx > 0:  # birincil değil → fallback gerçekleşti
                     self.stats["fallback_count"] += 1
@@ -177,7 +187,7 @@ class FallbackLLM:
             f"Son hata: {last_exc}"
         )
 
-    def stream(self, prompt: str):
+    def stream(self, prompt: str, system: Optional[str] = None):
         """GERÇEK token streaming + fallback. İlk token'ı veren sağlayıcıdan akıtır;
         bir sağlayıcı ilk token'dan ÖNCE hata verirse sonrakine geçer (commit-on-first-token).
         `stream()` desteklemeyen sağlayıcı (örn. Novita-net) → tam cevabı tek parça yield eder.
@@ -194,7 +204,9 @@ class FallbackLLM:
             attempted.append(provider)
             try:
                 if hasattr(client, "stream"):
-                    gen = client.stream(prompt)
+                    gen = (client.stream(prompt, system=system)
+                           if (system and _accepts_system(client.stream))
+                           else client.stream(prompt))
                     first = next(gen)                 # ilk token → hata burada sağlayıcıyı atlatır
                     self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
                     if idx > 0:
@@ -204,7 +216,9 @@ class FallbackLLM:
                     yield from gen
                     return
                 else:  # stream'siz sağlayıcı → tam cevabı tek parça akıt (graceful degrade)
-                    result = client(prompt)
+                    result = (client(prompt, system=system)
+                              if (system and _accepts_system(client))
+                              else client(prompt))
                     self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
                     if idx > 0:
                         self.stats["fallback_count"] += 1
