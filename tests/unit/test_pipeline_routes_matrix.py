@@ -26,10 +26,11 @@ pytestmark = pytest.mark.unit
 SAFE = '{"category": "safe_defensive", "confidence": 0.95, "reason": "hardening"}'
 UNSAFE = '{"category": "unsafe_offensive", "confidence": 0.93, "reason": "exploit/attack"}'
 AMBIGUOUS = '{"category": "ambiguous", "confidence": 0.55, "reason": "unclear/non-security"}'
+OFF_TOPIC = '{"category": "off_topic", "confidence": 0.9, "reason": "alan-dışı genel soru"}'
 
 # Gerçek Layer-1 LLM gibi davranan fake: net güvenlik-DIŞI konular (hava/math/eğlence) →
-# 'ambiguous'; diğer her şey → safe_defensive. (Canlıda "6x7?" → ambiguous, "rdp" →
-# safe_defensive gözlemlendi.) Böylece semantik kapsam-override'ı gerçekçi test edilir.
+# 'off_topic'; diğer her şey → safe_defensive. (Eval bulgusu: bunlar 'safe_educational'a
+# düşüp 3B'ye sızıyordu; off_topic kategorisi + secure_v2 kapısı bunu kapatır.)
 _OOS_MARKERS = (
     "hava durumu", "hava nasıl", "2+2", "kaç eder", "film", "masal", "şiir",
     "resim çiz", "hikaye", "müzik", "yemek", "tatil", "futbol",
@@ -53,9 +54,12 @@ def fake_ultra(verdict):
 
 
 def smart_ultra(_prompt, **_kw):
-    """Gerçekçi safety fake: güvenlik-dışı işaretçi varsa ambiguous, yoksa safe_defensive."""
-    p = _prompt.lower()
-    return AMBIGUOUS if any(m in p for m in _OOS_MARKERS) else SAFE
+    """Gerçekçi safety fake: alan-dışı işaretçi varsa off_topic, yoksa safe_defensive.
+    Yalnız <USER_INPUT> bloğundaki SORUYA bakar (prompt şablonundaki örnek kelimelere değil)."""
+    import re
+    m = re.search(r"<USER_INPUT>(.*?)</USER_INPUT>", _prompt, re.DOTALL)
+    q = (m.group(1) if m else _prompt).lower()
+    return OFF_TOPIC if any(mk in q for mk in _OOS_MARKERS) else SAFE
 
 
 def fake_small(_prompt, **_kw):
@@ -87,7 +91,8 @@ class FakeVR:
     def __init__(self, conf):
         self.confidence = conf
         self.is_valid = conf >= 0.6
-        self.unsupported = [] if conf >= 0.6 else ["doğrulanamayan ifade"]
+        # Düşük güvende ≥2 desteksiz iddia → info_pipeline disclaimer eşiğini (>=2) karşılar.
+        self.unsupported = [] if conf >= 0.6 else ["doğrulanamayan ifade 1", "doğrulanamayan ifade 2"]
 
 
 class FakeVerifier:
@@ -207,9 +212,10 @@ class TestRouteFidelity:
         assert "OUT_OF_SCOPE" not in res.layer_path, f"{q!r} → {res.layer_path}"
         assert res.success
 
-    def test_non_security_still_out_of_scope_despite_override(self, safe_pipeline):
-        # Override yalnız safe_defensive/educational'da çalışır; 'ambiguous' (math/hava)
-        # KORUNUR → out_of_scope. (smart_ultra "kaç eder" → ambiguous döner.)
+    def test_non_security_forced_out_of_scope_by_off_topic(self, safe_pipeline):
+        # safety=off_topic → intent ML yanlışlıkla info_request dese bile secure_v2
+        # OUT_OF_SCOPE'a zorlar. (Eval'de "2+2 kaç eder" safe_educational alıp 3B'ye
+        # sızıyordu; off_topic kapısı bunu kapatır.)
         res = safe_pipeline.run(RequestContext(user_question="2+2 kaç eder"))
         assert "OUT_OF_SCOPE" in res.layer_path, f"→ {res.layer_path}"
 
@@ -313,11 +319,12 @@ class TestInfoRefinement:
         assert r.verification_confidence == pytest.approx(0.90)
 
     def test_low_confidence_adds_disclaimer_when_still_unsupported(self):
-        # Refine sonrası hâlâ düşük (0.30 → 0.40, ikisi de <0.6, is_valid False) → uyarı eklenir
+        # Refine sonrası hâlâ düşük (0.30 → 0.40, <0.6) + ≥2 desteksiz iddia → not eklenir.
+        # (Yeni: korkutucu "%0 güven" yerine niteliksel "teyit edin" notu; yalnız ≥2 desteksizde.)
         v = FakeVerifier([0.30, 0.40])
         ip = self._ip(v)
         r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır"))
-        assert "Güven skoru" in r.answer  # groundedness uyarısı eklendi
+        assert "teyit edin" in r.answer  # groundedness notu eklendi (yüzde basılmaz)
 
 
 # ════════════════════════════════════════════════════════════════════════════
