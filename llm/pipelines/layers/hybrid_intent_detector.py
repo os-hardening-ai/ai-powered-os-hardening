@@ -18,6 +18,7 @@ Benefits:
 from __future__ import annotations
 from typing import Literal, Optional
 from dataclasses import dataclass
+import os
 import re
 
 # Import ML detector
@@ -175,7 +176,8 @@ class HybridIntentDetector:
         self,
         ml_detector: Optional[MLIntentDetector] = None,
         use_ml: bool = True,
-        debug: bool = False
+        debug: bool = False,
+        use_embedding_router: Optional[bool] = None,
     ):
         """
         Initialize hybrid intent detector
@@ -188,18 +190,38 @@ class HybridIntentDetector:
         self.debug = debug
         self.use_ml = use_ml and ML_AVAILABLE
         self.ml_detector = ml_detector
+        self.classifier_backend = "tfidf"
 
-        # Try to load ML models if not provided
+        # Embedding router tercihi: param > env (INTENT_ROUTER=embedding|tfidf) > varsayılan embedding.
+        # Embedding router TF-IDF'ten sağlam (argo/typo/beklenmedik ifade) → varsayılan AÇIK;
+        # embedding sağlayıcısı (Novita) kurulamazsa otomatik TF-IDF'e düşer (graceful degrade).
+        if use_embedding_router is None:
+            use_embedding_router = os.environ.get("INTENT_ROUTER", "embedding").lower() == "embedding"
+
+        if self.use_ml and self.ml_detector is None and use_embedding_router:
+            try:
+                from llm.ml.embedding_router import EmbeddingIntentRouter
+                self.ml_detector = EmbeddingIntentRouter(debug=debug)
+                self.classifier_backend = "embedding"
+                if self.debug:
+                    print("[HybridIntentDetector] Embedding router aktif (semantic similarity)")
+            except Exception as e:
+                if self.debug:
+                    print(f"[HybridIntentDetector] Embedding router kurulamadı, TF-IDF'e düşülüyor: {e}")
+
+        # Embedding router yoksa eski TF-IDF ML'i yükle (fallback / INTENT_ROUTER=tfidf)
         if self.use_ml and self.ml_detector is None:
             try:
                 self.ml_detector = MLIntentDetector(debug=False)
                 self.ml_detector.load_models()
+                self.classifier_backend = "tfidf"
                 if self.debug:
-                    print("[HybridIntentDetector] ML models loaded successfully")
+                    print("[HybridIntentDetector] TF-IDF ML models loaded successfully")
             except Exception as e:
                 print(f"[HybridIntentDetector] Warning: Could not load ML models: {e}")
                 print("[HybridIntentDetector] Falling back to pattern-only mode")
                 self.use_ml = False
+                self.classifier_backend = "none"
 
         self.stats = {
             "total": 0,

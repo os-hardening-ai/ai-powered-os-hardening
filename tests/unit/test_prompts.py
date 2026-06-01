@@ -36,12 +36,16 @@ class TestSimplePrompts:
         assert "PermitRootLogin" in p
 
     def test_grounding_directive_present_with_rag(self):
-        """RAG bağlamı varken bağlam-bağlılığı (groundedness) direktifi prompt'a girmeli."""
+        """KÖK FIX: grounding direktifi user prompt'una GÖMÜLMEZ → LLM'e SYSTEM mesajı olarak
+        geçer (info_pipeline._call_llm). Böylece model talimatı yanıtına ECHO etmez.
+        User prompt'ta yalnız RAG bağlamı bulunur; direktif sabiti system için mevcuttur."""
         from llm.prompts.simple_prompts import GROUNDING_DIRECTIVE
         c = ctx(retrieved_context="CIS 5.2: PermitRootLogin no")
+        assert "UYDURMA" in GROUNDING_DIRECTIVE           # direktif sabiti (system için) mevcut
         for p in (build_simple_prompt(c), build_medium_prompt(c)):
-            assert "UYDURMA" in p                       # anti-halüsinasyon kısıtı
-            assert GROUNDING_DIRECTIVE.strip() in p
+            assert "UYDURMA" not in p                      # direktif user prompt'ta DEĞİL
+            assert GROUNDING_DIRECTIVE.strip() not in p
+            assert "CIS BENCHMARK REFERANSLARI" in p       # RAG bağlamı user prompt'ta
 
     def test_grounding_directive_absent_without_rag(self):
         """Bağlam yokken direktif eklenmemeli (uydurmayı yasaklayacak bağlam da yok)."""

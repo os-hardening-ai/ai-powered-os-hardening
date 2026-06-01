@@ -34,11 +34,24 @@ SECURITY = [
 ]
 OUT_OF_SCOPE = ["hava durumu nasıl", "2+2 kaç eder", "film öner", "yemek tarifi ver"]
 
+# Zorlu smalltalk varyantları (ekli/çok-kelimeli) — modül düzeyinde (parametrize için)
+HARD_SMALLTALK = [
+    "merhabalar", "baybay", "günaydınlar", "bb", "selam dostum", "naber kanka",
+    "iyi geceler", "eyvallah görüşürüz", "selamün aleyküm", "merhaba arkadaşlar",
+    "çok teşekkür ederim", "kendine iyi bak", "selamlar", "naptınız",
+]
+# Greeting KELİMESİ içeren ama GÜVENLİK sorusu olanlar → smalltalk OLMAMALI
+GREETING_PREFIX_SECURITY = [
+    "merhaba ssh nasıl sıkılaştırılır", "selam ufw firewall yapılandır",
+    "iyi bir firewall kuralı yaz",
+]
+
 
 @pytest.fixture(scope="module")
 def detector():
-    # ML modelini bir kez yükle (güçlendirilmiş/retrain edilmiş model)
-    return HybridIntentDetector(use_ml=True, debug=False)
+    # Pattern+lexicon+guard katmanlarını test ederiz; ML backend'i TF-IDF'e sabitle
+    # (deterministik + AĞSIZ). Embedding router'ın kendi ağsız testi: test_embedding_router.py
+    return HybridIntentDetector(use_ml=True, debug=False, use_embedding_router=False)
 
 
 class TestIsSmalltalkDeterministic:
@@ -81,18 +94,7 @@ class TestOutOfScopeRouting:
 class TestRobustSmalltalk:
     """ML'siz deterministik smalltalk: ekli/çok-kelimeli selamlamalar + yanlış-pozitif yok."""
 
-    HARD = [
-        "merhabalar", "baybay", "günaydınlar", "bb", "selam dostum", "naber kanka",
-        "iyi geceler", "eyvallah görüşürüz", "selamün aleyküm", "merhaba arkadaşlar",
-        "çok teşekkür ederim", "kendine iyi bak", "selamlar", "naptınız",
-    ]
-    # Greeting KELİMESİ içeren ama GÜVENLİK sorusu olanlar → smalltalk OLMAMALI
-    GREETING_PREFIX_SECURITY = [
-        "merhaba ssh nasıl sıkılaştırılır", "selam ufw firewall yapılandır",
-        "iyi bir firewall kuralı yaz",
-    ]
-
-    @pytest.mark.parametrize("q", HARD)
+    @pytest.mark.parametrize("q", HARD_SMALLTALK)
     def test_hard_variants_are_smalltalk(self, detector, q):
         assert is_smalltalk(q) is True, f"{q!r} smalltalk olmalı"
         assert detector.detect(q).type == "smalltalk", f"{q!r} → {detector.detect(q).type}"
