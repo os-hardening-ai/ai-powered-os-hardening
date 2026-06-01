@@ -188,6 +188,31 @@ def _get_llm_clients():
     return _llm_small, _llm_large
 
 
+def _set_llm_request_metrics(request: Request, result) -> None:
+    """Pipeline sonucundaki provider/model/token'ı MetricsMiddleware için request.state'e yaz
+    → /metrics 'llm_providers'/'llm_models'/'tokens' panelleri dolar. HEM /chat HEM /chat/stream
+    çağırır: stream de tam SecurePipelineV2 koştuğundan token sayısı yanıt akmadan ÖNCE bilinir.
+    (Önceden yalnız non-stream /chat set ediyordu → streaming trafikte bu metrikler boş kalıyordu.)"""
+    try:
+        meta = result.metadata or {}
+        model_tier = str(meta.get("model") or "").strip()    # "small"/"large"/"large+CoT"
+        if not model_tier:
+            # LLM ÜRETİMİ yok (smalltalk 3A / out-of-scope / reject) → provider/token kaydetme,
+            # aksi halde "LLM sağlayıcı dağılımı" gerçekte çağrılmayan provider'ı sayar.
+            return
+        from config.config_loader import get_config as _gcfg
+        cfg = _gcfg()
+        provider = cfg.llm.default_provider
+        provider_models = cfg.llm.providers.get(provider, {}).get("models", {})
+        base_tier = model_tier.split("+")[0]                 # "large+CoT" → "large"
+        model_name = provider_models.get(base_tier, {}).get("name") or model_tier
+        request.state.llm_provider = provider
+        request.state.llm_model = model_name
+        request.state.llm_tokens = meta.get("tokens_used", 0)
+    except Exception:
+        pass
+
+
 async def _run_pipeline(
     payload: "ChatRequest", timeout_seconds: int
 ) -> tuple["PipelineResult", str, Optional[str], List[Dict[str, str]]]:
@@ -347,18 +372,9 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         _conv_logger.info(f"Q: {payload.question}")
         _conv_logger.info(f"A: {sanitized_answer}")
 
-        # Pipeline LLM bilgisini middleware için request.state'e yaz
+        # Pipeline LLM bilgisini middleware için request.state'e yaz (provider/model/token)
         _meta = result.metadata or {}
-        from config.config_loader import get_config as _gcfg
-        _cfg = _gcfg()
-        _provider = _cfg.llm.default_provider
-        _model_tier = _meta.get("model", "unknown")  # "small", "large", "large+CoT" etc.
-        _provider_models = _cfg.llm.providers.get(_provider, {}).get("models", {})
-        _base_tier = _model_tier.split("+")[0]  # "large+CoT" → "large"
-        _model_name = _provider_models.get(_base_tier, {}).get("name") or _model_tier
-        request.state.llm_provider = _provider
-        request.state.llm_model = _model_name
-        request.state.llm_tokens = _meta.get("tokens_used", 0)
+        _set_llm_request_metrics(request, result)
 
         return ChatResponse(
             answer=sanitized_answer,
@@ -391,7 +407,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
 
 @router.post("/chat/stream")
-async def chat_stream(payload: ChatRequest):
+async def chat_stream(payload: ChatRequest, request: Request):
     """
     Streaming version of /chat endpoint using Server-Sent Events (SSE).
 
@@ -411,6 +427,10 @@ async def chat_stream(payload: ChatRequest):
         result, effective_question, inferred_os, history = await _run_pipeline(
             payload, timeout_seconds
         )
+
+        # /metrics (llm_providers/tokens) STREAMING trafikte de dolsun — token sayısı
+        # tam pipeline koştuğundan yanıt akmadan önce biliniyor.
+        _set_llm_request_metrics(request, result)
 
         session_id = payload.session_id or ""
         sanitized_answer = sanitize_output(result.answer or "Cevap üretilemedi.")
