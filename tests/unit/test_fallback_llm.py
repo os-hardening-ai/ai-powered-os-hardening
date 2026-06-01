@@ -195,3 +195,54 @@ class TestFallbackStream:
             fb = FallbackLLM("large", ["cerebras", "sambanova"], cache)
             with pytest.raises(RuntimeError, match="stream"):
                 list(fb.stream("p"))
+
+
+class TestRoundRobinLoadBalancing:
+    """FallbackLLM (provider) + LaneLoadBalancer (provider:model) round-robin dağılımı."""
+
+    def test_fallback_round_robin_distributes_primary(self):
+        cache = {}
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(clients, "_PROVIDER_BUILDERS",
+                       {"a": _provider("a"), "b": _provider("b"), "c": _provider("c")})
+            fb = FallbackLLM("small", ["a", "b", "c"], cache)
+            outs = [fb("x") for _ in range(6)]
+            # her çağrı farklı birincil ile başlar → yük 3'e bölünür (~2'şer)
+            assert fb.stats["by_provider"] == {"a": 2, "b": 2, "c": 2}
+            assert outs == ["a-small", "b-small", "c-small", "a-small", "b-small", "c-small"]
+
+    def test_lane_balancer_round_robin(self):
+        from llm.clients import LaneLoadBalancer
+
+        def lane(name):
+            return lambda p, system=None: f"{name}-out"
+
+        lb = LaneLoadBalancer("small", [("p1:m1", lane("m1")), ("p2:m2", lane("m2")), ("p3:m3", lane("m3"))])
+        outs = [lb("x") for _ in range(6)]
+        assert lb.stats["by_provider"] == {"p1:m1": 2, "p2:m2": 2, "p3:m3": 2}
+        assert outs[0] == "m1-out" and outs[1] == "m2-out" and outs[2] == "m3-out"
+
+    def test_lane_balancer_falls_through_on_error(self):
+        from llm.clients import LaneLoadBalancer
+
+        def bad(p, system=None):
+            raise RuntimeError("429 rate limit")
+
+        def good(p, system=None):
+            return "good-out"
+
+        lb = LaneLoadBalancer("large", [("bad:x", bad), ("good:y", good)])
+        # call1 start0 → bad 429 → good; call2 start1 → good direkt → her hâlükârda good
+        assert lb("p") == "good-out"
+        assert lb("p") == "good-out"
+        assert lb.stats["by_provider"].get("good:y") == 2
+
+    def test_lane_balancer_raises_when_all_fail(self):
+        from llm.clients import LaneLoadBalancer
+
+        def bad(p, system=None):
+            raise RuntimeError("429")
+
+        lb = LaneLoadBalancer("small", [("p1:m", bad), ("p2:m", bad)])
+        with pytest.raises(RuntimeError, match="Tüm LLM lane"):
+            lb("p")

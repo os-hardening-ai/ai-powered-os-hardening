@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
+import threading
 from typing import Callable, Dict, List, Optional, Tuple
 
 # Import from core.config
@@ -161,6 +163,33 @@ class FallbackLLM:
         self.stats = stats if stats is not None else {
             "total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {},
         }
+        # ── YÜK DENGELEME (round-robin) ──────────────────────────────────────
+        # Saf fallback HER ZAMAN birincil(cerebras)'ı önce dener → tüm yük tek
+        # sağlayıcıya biner, onun 5/dk limiti darboğaz olur. Bunun yerine ilk
+        # `balance_n` sağlayıcıyı (hızlı free tier: cerebras/sambanova/openrouter)
+        # HER ÇAĞRIDA round-robin döndürürüz → yük ~eşit bölünür, agregat istek/dk
+        # ~N katına çıkar. Kuyruğun geri kalanı (novita/ollama...) yine FALLBACK olarak
+        # kalır. LLM_BALANCE_TOP_N=1 → rotasyon kapalı (eski saf-fallback davranışı).
+        self._rr = 0
+        self._rr_lock = threading.Lock()
+        try:
+            _bn = int(os.environ.get("LLM_BALANCE_TOP_N", "3"))
+        except ValueError:
+            _bn = 3
+        self._balance_n = max(1, min(_bn, len(providers)))
+
+    def _attempt_order(self) -> List[str]:
+        """Bu çağrı için denenecek sağlayıcı sırası. İlk `balance_n` round-robin
+        döndürülür (yük dengeleme), kalan kısım sabit kuyruk (fallback) olarak eklenir."""
+        n = len(self.providers)
+        bn = self._balance_n
+        if bn <= 1 or n <= 1:
+            return list(self.providers)
+        with self._rr_lock:
+            start = self._rr % bn
+            self._rr += 1
+        head = self.providers[:bn]
+        return head[start:] + head[:start] + self.providers[bn:]
 
     def _client(self, provider: str) -> Optional[LLMCallable]:
         if provider not in self._cache:
@@ -181,7 +210,7 @@ class FallbackLLM:
         self.stats["total_calls"] += 1
         last_exc: Optional[Exception] = None
         attempted: List[str] = []
-        for idx, provider in enumerate(self.providers):
+        for idx, provider in enumerate(self._attempt_order()):
             client = self._client(provider)
             if client is None:
                 continue
@@ -217,7 +246,7 @@ class FallbackLLM:
         self.stats["total_calls"] += 1
         last_exc: Optional[Exception] = None
         attempted: List[str] = []
-        for idx, provider in enumerate(self.providers):
+        for idx, provider in enumerate(self._attempt_order()):
             client = self._client(provider)
             if client is None:
                 continue
@@ -267,6 +296,139 @@ class FallbackLLM:
         return {**self.stats, "fallback_rate": round(rate, 4)}
 
 
+class LaneLoadBalancer:
+    """Açık (label, client) LANE'leri üzerinde round-robin + fallback Callable.
+
+    Her lane = bir (provider, model) `OpenAICompatibleClient`. FallbackLLM hep aynı
+    birincili dener (tek sağlayıcının rate-limit'i darboğaz); LaneLoadBalancer ise her
+    çağrıda farklı lane ile BAŞLAR → yük lane'lere (her birinin AYRI istek/dk limiti)
+    bölünür, agregat throughput ~N katına çıkar. Seçilen lane 429/timeout verirse
+    sıradaki lane'e düşer (fallback korunur). small/large havuzları AYRIDIR: küçük
+    helper çağrıları (safety/queryplanner/verify burst) ucuz-hızlı modellere, üretim
+    güçlü modellere gider.
+    """
+
+    def __init__(self, role: str, lanes: List[Tuple[str, LLMCallable]], stats: Optional[dict] = None) -> None:
+        self.role = role
+        self.lanes = lanes  # [(label="provider:model", client), ...]
+        self._rr = 0
+        self._rr_lock = threading.Lock()
+        self.stats = stats if stats is not None else {
+            "total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {},
+        }
+
+    def _order(self) -> List[Tuple[str, LLMCallable]]:
+        n = len(self.lanes)
+        if n <= 1:
+            return list(self.lanes)
+        with self._rr_lock:
+            start = self._rr % n
+            self._rr += 1
+        return self.lanes[start:] + self.lanes[:start]
+
+    def __call__(self, prompt: str, system: Optional[str] = None) -> str:
+        from llm.clients.base import classify_error
+        self.stats["total_calls"] += 1
+        last_exc: Optional[Exception] = None
+        attempted: List[str] = []
+        for idx, (label, client) in enumerate(self._order()):
+            attempted.append(label)
+            try:
+                result = client(prompt, system=system) if (system and _accepts_system(client)) else client(prompt)
+                self.stats["by_provider"][label] = self.stats["by_provider"].get(label, 0) + 1
+                if idx > 0:
+                    self.stats["fallback_count"] += 1
+                _metric_provider_call(self.role, label.split(":")[0], idx > 0)
+                return result
+            except Exception as exc:
+                last_exc = classify_error(exc, label)
+                logger.warning("[LaneLB:%s] '%s' başarısız (%s), sıradakine: %s",
+                               self.role, label, type(last_exc).__name__, last_exc)
+        self.stats["failures"] += 1
+        _metric_chain_failure(self.role)
+        raise RuntimeError(f"Tüm LLM lane'leri başarısız (denenen: {attempted}). Son hata: {last_exc}")
+
+    def stream(self, prompt: str, system: Optional[str] = None):
+        from llm.clients.base import classify_error, ModelUnavailableError
+        self.stats["total_calls"] += 1
+        last_exc: Optional[Exception] = None
+        attempted: List[str] = []
+        for idx, (label, client) in enumerate(self._order()):
+            attempted.append(label)
+            try:
+                if hasattr(client, "stream"):
+                    gen = (client.stream(prompt, system=system)
+                           if (system and _accepts_system(client.stream)) else client.stream(prompt))
+                    first = next(gen)
+                    self.stats["by_provider"][label] = self.stats["by_provider"].get(label, 0) + 1
+                    if idx > 0:
+                        self.stats["fallback_count"] += 1
+                    _metric_provider_call(self.role, label.split(":")[0], idx > 0)
+                    yield first
+                    yield from gen
+                    return
+                else:
+                    result = (client(prompt, system=system)
+                              if (system and _accepts_system(client)) else client(prompt))
+                    self.stats["by_provider"][label] = self.stats["by_provider"].get(label, 0) + 1
+                    if idx > 0:
+                        self.stats["fallback_count"] += 1
+                    _metric_provider_call(self.role, label.split(":")[0], idx > 0)
+                    yield result
+                    return
+            except StopIteration:
+                last_exc = ModelUnavailableError(f"{label}: boş stream", label)
+                continue
+            except Exception as exc:
+                last_exc = classify_error(exc, label)
+                logger.warning("[LaneLB.stream:%s] '%s' başarısız (%s), sıradakine: %s",
+                               self.role, label, type(last_exc).__name__, last_exc)
+                continue
+        self.stats["failures"] += 1
+        _metric_chain_failure(self.role)
+        raise RuntimeError(f"Tüm LLM lane'leri (stream) başarısız (denenen: {attempted}). Son hata: {last_exc}")
+
+    def get_stats(self) -> dict:
+        total = self.stats["total_calls"]
+        rate = (self.stats["fallback_count"] / total) if total else 0.0
+        return {**self.stats, "fallback_rate": round(rate, 4)}
+
+
+def _build_lane_balancer(role: str, lanes_env: str, stats: dict) -> Optional["LaneLoadBalancer"]:
+    """ "openrouter:model-a,sambanova:model-b" → LaneLoadBalancer. Key'i olmayan veya
+    kurulamayan lane atlanır. Hiç lane kalmazsa None (çağıran varsayılana düşer)."""
+    from llm.clients.openai_compatible_client import (
+        build_from_preset, preset_api_key, PROVIDER_PRESETS, _CHAIN_TIMEOUT, _CHAIN_RETRIES,
+    )
+    from llm.core.config import SMALL_MODEL_TEMPERATURE, LARGE_MODEL_TEMPERATURE
+    temperature = SMALL_MODEL_TEMPERATURE if role == "small" else LARGE_MODEL_TEMPERATURE
+    lanes: List[Tuple[str, LLMCallable]] = []
+    for part in lanes_env.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        provider, _, model = part.partition(":")
+        provider, model = provider.strip(), model.strip()
+        if provider not in PROVIDER_PRESETS:
+            logger.warning("[LaneLB:%s] bilinmeyen provider '%s' (lane atlandı)", role, provider)
+            continue
+        if not preset_api_key(provider):
+            logger.warning("[LaneLB:%s] %s key yok (.env) → lane atlandı: %s", role, provider, model or "(default)")
+            continue
+        try:
+            client = build_from_preset(
+                provider, model=model or None, temperature=temperature,
+                timeout=_CHAIN_TIMEOUT, max_retries=_CHAIN_RETRIES,
+            )
+            lanes.append((f"{provider}:{model or PROVIDER_PRESETS[provider]['model']}", client))
+        except Exception as exc:
+            logger.warning("[LaneLB:%s] lane kurulamadı %s:%s → %s", role, provider, model, exc)
+    if not lanes:
+        return None
+    logger.info("[LaneLB:%s] %d lane aktif: %s", role, len(lanes), [l for l, _ in lanes])
+    return LaneLoadBalancer(role, lanes, stats)
+
+
 def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCallable]:
     """
     LLM_PROVIDER birincil; başarısız olursa diğer sağlayıcılara düşen (small, large) döndürür.
@@ -290,6 +452,23 @@ def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCalla
 
     if not enable_fallback:
         return _PROVIDER_BUILDERS[provider]()
+
+    # ── LANE-TABANLI YÜK DENGELEME (opsiyonel) ───────────────────────────────
+    # LLM_SMALL_LANES / LLM_LARGE_LANES verilirse, sağlayıcı-zinciri yerine açık
+    # (provider:model) lane'leri üzerinde round-robin + fallback kullanılır. small/large
+    # havuzları AYRI → helper burst'ü ucuz/hızlı modellere, üretim güçlü modellere dağılır.
+    # Örn: LLM_SMALL_LANES="openrouter:meta-llama/llama-3.2-1b-instruct,sambanova:gemma-3-12b-it"
+    _small_lanes = os.environ.get("LLM_SMALL_LANES", "").strip()
+    _large_lanes = os.environ.get("LLM_LARGE_LANES", "").strip()
+    if _small_lanes or _large_lanes:
+        shared_stats = {"total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {}}
+        small_lb = _build_lane_balancer("small", _small_lanes, shared_stats) if _small_lanes else None
+        large_lb = _build_lane_balancer("large", _large_lanes, shared_stats) if _large_lanes else None
+        if small_lb and large_lb:
+            logger.info("[get_llm_clients] LANE load-balancing aktif (small=%d lane, large=%d lane)",
+                        len(small_lb.lanes), len(large_lb.lanes))
+            return small_lb, large_lb
+        logger.warning("[get_llm_clients] Lane env verildi ama lane kurulamadı (key/format?) → varsayılan zincire düşülüyor")
 
     # Fallback sırası (free_priority'ye göre): groq(10) → huggingface(20) → novita(25) → ollama(30)
     # Novita varsayılan olarak dahil (include_cheap=True): Groq 429'u için güvenilir ağ köprüsü.
