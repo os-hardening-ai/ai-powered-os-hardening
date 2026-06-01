@@ -93,14 +93,17 @@ class TestDeterministicPlan:
 
 
 class TestConflict:
-    def test_conflict_detected_for_same_config_file(self, engine):
+    def test_same_file_different_directive_is_order_note(self, engine):
         planner = TaskPlanner(rule_engine=engine, llm_fn=None)
         plan = planner.plan("ssh", security_level="balanced")
-        # 1.1.1 and 1.1.3 both write /etc/ssh/sshd_config
-        assert any(
+        # 1.1.1 (PermitRootLogin) ve 1.1.3 (MaxAuthTries) ikisi de /etc/ssh/sshd_config'e
+        # yazar ama FARKLI direktif → çakışma DEĞİL, sıra notu (eski davranış yanlış-pozitifti)
+        assert not any(
             {c.rule_a, c.rule_b} == {"1.1.1", "1.1.3"} for c in plan.conflicts
         )
-        assert plan.warnings
+        ids = {i.rule_id for i in plan.items}
+        if {"1.1.1", "1.1.3"} <= ids:
+            assert any("Sıra notu" in w and "sshd_config" in w for w in plan.warnings)
 
 
 class TestLLMSelection:
