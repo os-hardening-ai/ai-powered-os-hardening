@@ -55,6 +55,17 @@ class ArtifactGenerator:
     _RELOAD_RE = re.compile(r"^(sudo\s+)?(systemctl\s+(reload|restart)\b|service\s+\S+\s+(reload|restart)\b)")
 
     @staticmethod
+    def _clean_text(s: str) -> str:
+        """Geçersiz karakterleri temizle: lone surrogate (U+D800–DFFF) + kontrol karakterleri
+        (\\t,\\n hariç). Bozuk YAML/UTF-8'i önler (ör. ansible'da #xDC90 parse hatası)."""
+        if not s:
+            return s
+        return "".join(
+            ch for ch in s
+            if ch in "\t\n" or (0x20 <= ord(ch) < 0xD800) or (0xE000 <= ord(ch) <= 0x10FFFF)
+        )
+
+    @staticmethod
     def _sanitize_remediation(script: str) -> Tuple[str, List[str]]:
         """Ham kural remediation gövdesini BİRLEŞTİRMEYE hazırla (production-grade artifact için):
           • gömülü shebang (`#!/...`) satırlarını SİL — tek dosyada yalnız 1 shebang olmalı.
@@ -78,7 +89,7 @@ class ArtifactGenerator:
             body.pop(0)
         while body and not body[-1].strip():
             body.pop()
-        return "\n".join(body), reloads
+        return ArtifactGenerator._clean_text("\n".join(body)), reloads
 
     def _bash(self, rules: List[dict], os_target: str, security_level: str) -> Artifact:
         header = [
@@ -181,38 +192,40 @@ class ArtifactGenerator:
         )
 
     def _ansible(self, rules: List[dict], os_target: str, security_level: str) -> Artifact:
-        tasks: List[str] = []
+        # Elle YAML string kurmak kırılgandı (özel/surrogate karakter → parse hatası).
+        # Yapıyı Python dict/list olarak kur → yaml.safe_dump ile GARANTİLİ geçerli YAML üret.
+        import yaml
+
+        tasks: List[dict] = []
         warnings: List[str] = []
         count = 0
         for rule in rules:
             rid = rule.get("id", "?")
-            title = rule.get("title", "")
-            script = rule.get("remediation_script_content", "")
-            cmd = rule.get("remediation_command", "")
-            source = script or cmd
+            title = self._clean_text(rule.get("title", ""))
+            source = self._clean_text(rule.get("remediation_script_content", "")
+                                      or rule.get("remediation_command", "")).strip()
             if source:
-                indented = "\n".join(f"        {ln}" for ln in source.strip().splitlines())
-                tasks.append(
-                    f"    - name: \"CIS {rid} - {title}\"\n"
-                    f"      shell: |\n{indented}\n"
-                    f"      ignore_errors: yes"
-                )
+                tasks.append({
+                    "name": f"CIS {rid} - {title}",
+                    "ansible.builtin.shell": source,
+                    "ignore_errors": True,
+                })
                 count += 1
             else:
                 warnings.append(f"Rule {rid}: no command — skipped")
 
-        playbook = (
-            f"---\n"
-            f"- name: CIS Hardening — {os_target}\n"
-            f"  hosts: all\n"
-            f"  become: yes\n"
-            f"  vars:\n"
-            f"    security_level: {security_level}\n"
-            f"  tasks:\n"
-            + "\n\n".join(tasks)
+        playbook = [{
+            "name": f"CIS Hardening — {os_target}",
+            "hosts": "all",
+            "become": True,
+            "vars": {"security_level": security_level},
+            "tasks": tasks,
+        }]
+        content = "---\n" + yaml.safe_dump(
+            playbook, allow_unicode=True, default_flow_style=False, sort_keys=False, width=4096
         )
         return Artifact(
-            format="ansible", content=playbook,
+            format="ansible", content=content,
             rule_count=count, os_target=os_target, warnings=warnings,
         )
 

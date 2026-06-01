@@ -95,11 +95,23 @@ class TestPowerShell:
 
 class TestAnsible:
     def test_ansible_is_valid_playbook_shape(self, gen, linux_rules):
+        import yaml
         art = gen.generate(linux_rules, "ansible")
         assert art.content.startswith("---")
-        assert "hosts: all" in art.content
-        assert "become: yes" in art.content
+        play = yaml.safe_load(art.content)[0]
+        assert play["hosts"] == "all"
+        assert play["become"] is True   # safe_dump → 'become: true'
         assert art.rule_count == 2
+
+    def test_ansible_handles_invalid_surrogate_chars(self, gen):
+        # REGRESYON: rule içeriğinde lone surrogate (#xDC90) → eskiden YAML parse PATLIYORDU.
+        import yaml
+        bad = [{"id": "5.1.4", "title": "ssh\udc90 access",
+                "remediation_command": "echo bad\udc90char >> /etc/ssh/sshd_config"}]
+        art = gen.generate(bad, "ansible")
+        parsed = yaml.safe_load(art.content)   # patlamamalı
+        assert parsed[0]["tasks"][0]["ansible.builtin.shell"]  # temizlenmiş içerik var
+        assert "\udc90" not in art.content     # surrogate çıkarıldı
 
     def test_ansible_is_yaml_parseable_with_two_tasks(self, gen, linux_rules):
         import yaml
