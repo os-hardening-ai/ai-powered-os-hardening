@@ -572,8 +572,12 @@ async def _prepare_fast(payload: "ChatRequest") -> dict:
     return {**base, "safe": True, "prompt": prompt, "rag_sources_data": rag_sources_data}
 
 
-@router.post("/chat/fast", response_model=ChatResponse)
-async def chat_fast(payload: ChatRequest) -> ChatResponse:
+# DEVRE DIŞI ("Hızlı RAG" yolu): kod korundu ama route KAYIT EDİLMİYOR. Retrieval Explorer
+# (/rag/search — ham RAG inceleme) + akıllı sohbet (/api/chat[/stream] — grounded cevap)
+# bu ihtiyacı zaten karşılıyor; fast yol smalltalk'ı bozuyordu (naber→RAG) ve UI'ı
+# karmaşıklaştırıyordu. Re-enable için aşağıdaki @router.post satırının yorumunu kaldır.
+# @router.post("/chat/fast", response_model=ChatResponse)
+async def chat_fast(payload: ChatRequest) -> ChatResponse:  # noqa: F811 (devre dışı — kayıtsız)
     """
     HIZLI RAG yanıtı (non-stream) — intent routing YOK.
 
@@ -628,8 +632,9 @@ async def chat_fast(payload: ChatRequest) -> ChatResponse:
         raise_internal_error("chat_fast", e, error_code=ErrorCode.PIPELINE_ERROR)
 
 
-@router.post("/chat/stream/fast")
-async def chat_stream_fast(payload: ChatRequest):
+# DEVRE DIŞI ("Hızlı RAG" stream): kod korundu, route KAYIT EDİLMİYOR (bkz. chat_fast notu).
+# @router.post("/chat/stream/fast")
+async def chat_stream_fast(payload: ChatRequest):  # noqa: F811 (devre dışı — kayıtsız)
     """
     HIZLI RAG gerçek-token streaming (RAG-grounded / konsol modu).
 
