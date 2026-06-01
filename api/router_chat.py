@@ -188,6 +188,23 @@ def _get_llm_clients():
     return _llm_small, _llm_large
 
 
+def get_llm_client_provider_stats() -> dict:
+    """Cached singleton LLM balancer'ın GERÇEK kümülatif provider/lane dağılımı.
+
+    `_set_llm_request_metrics` /metrics'e statik `cfg.llm.default_provider` yazıyordu →
+    lane'ler aktifken bile dashboard yalnız 'cerebras' gösteriyordu. Bu, FallbackLLM/
+    LaneLoadBalancer'ın `by_provider` sayaçlarından (small+large paylaşımlı stats) GERÇEK
+    dağılımı verir → cerebras dışı lane'lerin (deepseek/sambanova/openrouter...) gerçekten
+    servis edip etmediği görülür. /metrics bunu 'llm_providers' olarak kullanır.
+    """
+    try:
+        if _llm_small is not None and hasattr(_llm_small, "get_stats"):
+            return dict(_llm_small.get_stats().get("by_provider", {}))
+    except Exception:
+        pass
+    return {}
+
+
 def _set_llm_request_metrics(request: Request, result) -> None:
     """Pipeline sonucundaki provider/model/token'ı MetricsMiddleware için request.state'e yaz
     → /metrics 'llm_providers'/'llm_models'/'tokens' panelleri dolar. HEM /chat HEM /chat/stream

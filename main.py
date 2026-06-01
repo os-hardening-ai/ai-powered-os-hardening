@@ -208,6 +208,14 @@ def create_app() -> FastAPI:
     app.include_router(agent_router, prefix="/api", tags=["agents"], dependencies=_role_dev)
 
     # ── Metrics Endpoint ── (sysadmin/security)
+    def _real_provider_stats() -> dict:
+        """Balancer'ın gerçek kümülatif provider/lane dağılımı (boşsa {})."""
+        try:
+            from api.router_chat import get_llm_client_provider_stats
+            return get_llm_client_provider_stats()
+        except Exception:
+            return {}
+
     @app.get("/metrics", tags=["monitoring"], dependencies=_role_sec)
     async def get_metrics(
         endpoint: str = None,
@@ -247,7 +255,10 @@ def create_app() -> FastAPI:
                 "total": agg_metrics.total_tokens,
                 "avg_per_request": round(agg_metrics.avg_tokens_per_request, 0),
             },
-            "llm_providers": agg_metrics.provider_stats,
+            # llm_providers: GERÇEK lane/provider dağılımı (balancer by_provider) — statik
+            # cfg.default_provider değil. Lane'ler aktifken cerebras DIŞI sağlayıcılar da görünür.
+            # Balancer henüz hiç çağrı yapmadıysa (boş) eski per-request aggregation'a düş.
+            "llm_providers": _real_provider_stats() or agg_metrics.provider_stats,
             "llm_models": agg_metrics.model_stats,
         }
 
