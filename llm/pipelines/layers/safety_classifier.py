@@ -48,6 +48,67 @@ class SafetyResult:
         self.is_safe = self.category in ["safe_defensive", "safe_educational", "ambiguous", "off_topic"]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# YEREL HIZLI-YOL SAFETY (LLM'siz)  —  best-practice: ucuz/yerel guardrail + LLM fallback
+# ─────────────────────────────────────────────────────────────────────────────
+# Amaç: KESİN durumları (net güvenlik-savunma sorusu, net alan-dışı) LLM çağrısı olmadan
+# sınıflamak → 5/dk quota'da kritik-yoldan 1 call düşür. GÜVENLİK-KRİTİK: en ufak
+# saldırgan/yıkıcı/dual-use sinyalde VEYA uzun/karmaşık girdide YEREL KARAR VERME → None
+# döndür → çağıran LLM safety'ye düşer. Yani yerel yol yalnız "açıkça zararsız"ı kısa devre yapar.
+
+# Saldırgan / yıkıcı / dual-use → ASLA yerel-safe deme (LLM'e bırak). EN + TR.
+_OFFENSIVE_MARKERS = (
+    "exploit", "hack", "crack", "bypass", "ddos", "dos attack", "malware", "ransomware",
+    "keylogger", "reverse shell", "payload", "backdoor", "rootkit", "trojan", "botnet",
+    "phish", "sql injection", "privilege escalation", "exfiltrat", "steal", "brute force",
+    "disable firewall", "turn off firewall", "stop firewall", "open all ports",
+    "pentest", "penetration test", "sızma test", "zafiyet sömür", "sömürmek", "ele geçir",
+    "saldırı", "zararlı yazılım", "şifre kır", "parola kır", "firewall kapat",
+    "tüm portları aç", "güvenliği kapat", "atlat",
+)
+# Net alan-dışı (güvenlik/IT değil) → off_topic (LLM atla). Dar tutuldu.
+_OFFTOPIC_MARKERS = (
+    "hava durumu", "hava nasıl", "weather", "kaç eder", "kaç yapar", "çarpı", "bölü",
+    "film öner", "movie", "şiir yaz", "masal", "hikaye anlat", "pizza", "yemek tarif",
+    "tatil", "futbol", "maç kaçta", "nüfus", "başkenti", "restoran", "şarkı",
+)
+# Net güvenlik-savunma alan terimleri → (risk sinyali yoksa) safe_defensive (LLM atla).
+_SECURITY_TERMS = (
+    "hardening", "harden", "sıkılaştır", "firewall", "ufw", "iptables", "nftables",
+    "ssh", "sshd", "rdp", "remote desktop", "uzak masaüstü", "selinux", "apparmor",
+    "fail2ban", "auditd", "cis benchmark", "nist", "zero trust", "least privilege",
+    "permitrootlogin", "sudo", "umask", "pam", "tls", "ssl cipher", "kernel sıkıla",
+    "güvenlik", "güvenli hale", "bitlocker", "applocker", "gpo", "vulnerability",
+)
+
+
+def fast_local_safety(question: str) -> Optional["SafetyResult"]:
+    """LLM'siz hızlı safety. KESİN durumda SafetyResult, belirsizde None (→ LLM safety).
+
+    Sıra önemli: önce saldırgan/dual-use eler (asla yerel-safe), sonra uzun girdi eler,
+    sonra net alan-dışı, en son net güvenlik-savunma. Hiçbiri tutmazsa None.
+    """
+    if not question or not question.strip():
+        return None
+    q = question.lower()
+    # 1) Saldırgan/yıkıcı/dual-use sinyal → yerel karar verme, LLM'e bırak
+    if any(m in q for m in _OFFENSIVE_MARKERS):
+        return None
+    # 2) Uzun/karmaşık girdi → yerel kurala güvenme
+    if len(q) > 180:
+        return None
+    # 3) Net alan-dışı → off_topic (routing out_of_scope'a alır)
+    if any(m in q for m in _OFFTOPIC_MARKERS):
+        return SafetyResult(category="off_topic", confidence=0.85,
+                            reason="yerel hızlı-yol: alan-dışı (math/hava/genel kültür)")
+    # 4) Net güvenlik-savunma + risk sinyali yok → safe_defensive
+    if any(k in q for k in _SECURITY_TERMS):
+        return SafetyResult(category="safe_defensive", confidence=0.9,
+                            reason="yerel hızlı-yol: güvenlik-savunma konusu, risk sinyali yok")
+    # 5) Belirsiz → LLM safety
+    return None
+
+
 class SafetyClassifier:
     """
     Layer 1: Ultra-fast safety classification using LLM

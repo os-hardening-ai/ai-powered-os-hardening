@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from llm.core.context import RequestContext
-from llm.pipelines.layers.safety_classifier import SafetyClassifier, SafetyResult
+from llm.pipelines.layers.safety_classifier import SafetyClassifier, SafetyResult, fast_local_safety
 from llm.pipelines.layers.hybrid_intent_detector import HybridIntentDetector, HybridIntent, is_smalltalk
 from llm.pipelines.layers.pattern_responder import PatternResponderHandler, PatternResponse
 from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
@@ -209,8 +209,16 @@ class SecurePipelineV2:
                 )
                 safety_cost = 0.0
             else:
-                safety_result = self.safety_classifier.classify(ctx.user_question)
-                safety_cost = 0.0001
+                # YEREL HIZLI-YOL (best-practice): net güvenlik-savunma / net alan-dışı
+                # girdiyi LLM'siz sınıfla → kritik-yoldan 1 call düş (5/dk quota). Saldırgan/
+                # dual-use/uzun girdide fast_local_safety None döner → LLM safety'ye düşülür.
+                local_safety = fast_local_safety(ctx.user_question)
+                if local_safety is not None:
+                    safety_result = local_safety
+                    safety_cost = 0.0   # yerel → safety LLM çağrısı yok
+                else:
+                    safety_result = self.safety_classifier.classify(ctx.user_question)
+                    safety_cost = 0.0001
         layer1_time_s = (datetime.now() - layer1_start).total_seconds()
 
         if self.debug:

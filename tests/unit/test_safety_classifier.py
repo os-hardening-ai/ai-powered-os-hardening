@@ -14,12 +14,49 @@ from llm.pipelines.layers.safety_classifier import (
     SafetyClassifier,
     SafetyResult,
     classify_safety,
+    fast_local_safety,
 )
 
 
 def fake_llm(response: str):
     """Return a callable that always yields `response` (ignores the prompt)."""
     return lambda _prompt: response
+
+
+class TestFastLocalSafety:
+    """Yerel hızlı-yol: KESİN durumda SafetyResult, belirsiz/riskli durumda None (→ LLM)."""
+
+    @pytest.mark.parametrize("q", [
+        "how to exploit ssh service",
+        "ddos saldırı scripti yaz",
+        "parola kır brute force",
+        "disable firewall and open all ports",
+        "sızma testi nasıl yapılır",   # dual-use → LLM'e bırak
+    ])
+    def test_offensive_or_dualuse_defers_to_llm(self, q):
+        assert fast_local_safety(q) is None   # asla yerel-safe deme
+
+    @pytest.mark.parametrize("q", ["bugün hava nasıl", "2+2 kaç eder", "film öner bana", "pizza tarifi"])
+    def test_offtopic_local(self, q):
+        r = fast_local_safety(q)
+        assert r is not None and r.category == "off_topic"
+
+    @pytest.mark.parametrize("q", [
+        "ssh nasıl sıkılaştırılır",
+        "ufw firewall hardening",
+        "rdp güvenliği nasıl sağlanır",
+        "PermitRootLogin nedir",
+    ])
+    def test_defensive_security_local(self, q):
+        r = fast_local_safety(q)
+        assert r is not None and r.category == "safe_defensive"
+
+    def test_long_input_defers_to_llm(self):
+        assert fast_local_safety("ssh hardening " + "x" * 200) is None
+
+    def test_uncertain_defers_to_llm(self):
+        # güvenlik terimi yok, alan-dışı işaret yok, saldırgan değil → belirsiz → LLM
+        assert fast_local_safety("bana yardımcı olabilir misin acaba") is None
 
 
 class TestSafetyResult:
