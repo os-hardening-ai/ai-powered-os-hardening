@@ -28,7 +28,7 @@ from datetime import datetime
 
 from llm.core.context import RequestContext
 from llm.pipelines.layers.safety_classifier import SafetyClassifier, SafetyResult
-from llm.pipelines.layers.hybrid_intent_detector import HybridIntentDetector, HybridIntent
+from llm.pipelines.layers.hybrid_intent_detector import HybridIntentDetector, HybridIntent, is_smalltalk
 from llm.pipelines.layers.pattern_responder import PatternResponderHandler, PatternResponse
 from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
 from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResult
@@ -198,7 +198,19 @@ class SecurePipelineV2:
 
         layer1_start = datetime.now()
         with layer_timer("1"):
-            safety_result = self.safety_classifier.classify(ctx.user_question)
+            # OPTİMİZASYON: deterministik smalltalk (selam/naber/teşekkür — regex, ML'siz)
+            # doğası gereği güvenli → Layer-1 safety LLM çağrısını ATLA. Kazanç: ~200ms +
+            # $0.0001 + boşa giden 1 LLM call (Groq TPM limitine yardımcı). Güvenlik riski yok:
+            # smalltalk pattern'leri çok dar (^selam$, ^naber$...) ve zaten 3A canned'e gider.
+            if is_smalltalk(ctx.user_question):
+                safety_result = SafetyResult(
+                    category="safe_defensive", confidence=1.0,
+                    reason="smalltalk (deterministik, safety LLM atlandı)",
+                )
+                safety_cost = 0.0
+            else:
+                safety_result = self.safety_classifier.classify(ctx.user_question)
+                safety_cost = 0.0001
         layer1_time_s = (datetime.now() - layer1_start).total_seconds()
 
         if self.debug:
@@ -291,6 +303,10 @@ class SecurePipelineV2:
                 self.stats["info_responses"] += 1
 
         layer3_time_s = (datetime.now() - layer3_start).total_seconds()
+
+        # Smalltalk'ta safety LLM atlandıysa: handler'ların hardcoded 0.0001 "safety" tahminini
+        # düş (gerçek maliyet $0). Diğer yollarda safety_cost=0.0001 → estimated_cost değişmez.
+        result.estimated_cost = max(0.0, result.estimated_cost + (safety_cost - 0.0001))
 
         # Update global stats
         self.stats["total_queries"] += 1

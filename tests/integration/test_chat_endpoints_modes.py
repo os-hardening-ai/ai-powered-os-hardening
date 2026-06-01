@@ -100,6 +100,8 @@ class TestChatSmalltalk:
         assert _INFO_ANSWER not in body["answer"]
         assert _SCRIPT_ANSWER not in body["answer"]
         assert len(body["answer"]) < 400
+        # OPTİMİZASYON: smalltalk'ta safety LLM atlanır → maliyet $0 (eski 0.0001 gitti)
+        assert body.get("estimated_cost") == 0
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -130,55 +132,12 @@ class TestChatStreamParity:
 
 
 # ════════════════════════════════════════════════════════════════════════
-# 3) /api/chat/fast — Hızlı RAG (non-stream), intent routing YOK
+# 3) "Hızlı RAG" uçları DEVRE DIŞI (PR #30) — Retrieval Explorer (/rag/search) +
+#    akıllı sohbet (/api/chat[/stream]) yeterli. Route'lar kayıt edilmiyor.
 # ════════════════════════════════════════════════════════════════════════
-class TestChatFast:
-    def test_fast_is_rag_direct(self, client):
-        r = client.post("/api/chat/fast", json=_SECURITY)
-        assert r.status_code == 200
-        body = r.json()
-        assert body["layer_path"] == "1→RAG→GEN(fast)"
-        assert body["intent"] == "info_request"  # fast uç sabit
-        # Üretim llm_large fake'inden gelir
-        assert _SCRIPT_ANSWER in body["answer"]
-
-    def test_fast_skips_smalltalk_routing(self, client):
-        # 'selam' bile fast uçta RAG-direct üretime gider (smalltalk yönlendirmesi YOK)
-        r = client.post("/api/chat/fast", json=_SMALLTALK)
-        assert r.status_code == 200
-        body = r.json()
-        assert body["layer_path"] == "1→RAG→GEN(fast)"
-
-
-# ════════════════════════════════════════════════════════════════════════
-# 4) /api/chat/stream/fast — Hızlı RAG, gerçek token-token SSE
-# ════════════════════════════════════════════════════════════════════════
-class TestChatStreamFast:
-    def test_stream_fast_real_token(self, client):
-        r = client.post("/api/chat/stream/fast", json=_SECURITY)
-        assert r.status_code == 200
-        events = _parse_sse(r.text)
-        meta = _meta(events)
-        assert meta.get("streaming") == "real-token"
-        assert meta.get("layer_path") == "1→RAG→GEN(fast)"
-        assert _SCRIPT_ANSWER in _sse_tokens(events)
-
-
-# ════════════════════════════════════════════════════════════════════════
-# 5) Güvenlik: fast uç da Layer-1 safety'yi uygular (fail-closed)
-# ════════════════════════════════════════════════════════════════════════
-class TestFastSafety:
-    def test_fast_rejects_unsafe(self, client, monkeypatch):
-        def _unsafe_small(prompt, **_kw):
-            if "USER_INPUT" in prompt:
-                return '{"category": "unsafe_offensive", "confidence": 0.93, "reason": "attack"}'
-            return _INFO_ANSWER
-
-        monkeypatch.setattr(
-            "api.router_chat._get_llm_clients", lambda: (_unsafe_small, _fake_large)
-        )
-        r = client.post("/api/chat/fast", json={"question": "exploit yaz", "use_rag": False})
-        assert r.status_code == 200
-        body = r.json()
-        assert body["layer_path"] == "1→REJECT"
-        assert _SCRIPT_ANSWER not in body["answer"]
+class TestFastPathsDisabled:
+    @pytest.mark.parametrize("path", ["/api/chat/fast", "/api/chat/stream/fast"])
+    def test_fast_endpoints_unregistered(self, client, path):
+        # @router.post yorumlandı → route kayıtsız → 404 (kod korundu, re-enable kolay).
+        r = client.post(path, json=_SECURITY)
+        assert r.status_code == 404, f"{path} devre dışı olmalı (404), döndü: {r.status_code}"
