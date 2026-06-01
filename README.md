@@ -17,8 +17,8 @@ denetlenebilir bilgi sunar.
 
 - **4-Katmanlı Güvenlik Pipeline'ı**: Safety Classification → Intent Detection → Routing → Generation
 - **JWT Auth + RBAC + Audit**: JWT (HS256) kimlik doğrulama, 4 rol (sysadmin/security/developer/end_user), SQLite audit log, kullanıcı-bazlı rate limit
-- **Çok-sağlayıcılı LLM**: **Cerebras** `gpt-oss-120b` (primary, ücretsiz) → SambaNova → Gemini 3.1 Flash Lite (OpenRouter) → Novita; **fail-fast fallback** (`max_retries=0`)
-- **Gelişmiş RAG**: Hybrid BM25+Dense (RRF), MMR reranking, QueryPlanner (HyDE + subquery + stepback paralel), FilterAgent (OS/rol çıkarımı), **çift refinement loop** (retrieval-skoru + cevap-groundedness)
+- **Çok-sağlayıcılı LLM + lane yük dengeleme**: **Cerebras** `gpt-oss-120b` + SambaNova + OpenRouter (deepseek/codestral/llama/nova/lfm) + Gemini + Novita. **Round-robin lane load-balancer** (`LLM_SMALL_LANES`/`LLM_LARGE_LANES`) → her lane'in ayrı rate-limit'i, agregat throughput katlanır; **fail-fast fallback** (`max_retries=0`) + per-call timeout. → [docs/18](docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md)
+- **Gelişmiş RAG**: Hybrid BM25+Dense (RRF), MMR reranking, QueryPlanner (HyDE + subquery + stepback — yalnız `complex`'te), FilterAgent (OS/rol çıkarımı), **hafif refinement** (mevcut kaynaklara tek küçük-model düzeltme), **answer cache** (tekrar eden soru → 0 LLM call)
 - **Embedding**: Novita `qwen/qwen3-embedding-8b` (4096 dim)
 - **ML Intent Detection**: 1.677 örnek, %90.48 accuracy, <10ms, yerel inference ($0)
 - **Rule Engine + Artifact Generator**: Ubuntu 24.04 (312 kural) + Windows 11 (516 kural); bash/PowerShell/Ansible/REG/GPO üretimi
@@ -36,7 +36,9 @@ denetlenebilir bilgi sunar.
 | **RAG retrieval** | ~1-2.5s | Qdrant embed + hybrid + MMR |
 | **İP-5 groundedness** | 0.81 (somut Q/A 0.89) | ClaimVerifier |
 | **Maliyet** | ~$0 | Cerebras ücretsiz tier (1M token/gün) |
-| **Birim test** | 516 geçiyor | + service-free integration |
+| **Quota optimizasyonu** | **~4× hız, 0 timeout** | Eval v1→v3: ort 21.7s→**7.0s**, p95 75s→**23s**, %73→**%100** başarı ([docs/18](docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md)) |
+| **Hot-path LLM call** | **6 → ~1** | Yerel safety + verify-off + QueryPlanner-complex-only + answer cache |
+| **Birim test** | **726 geçiyor** | + service-free integration |
 
 > H1/H3 ölçüm detayları: [docs/14_DEGERLENDIRME.md](docs/14_DEGERLENDIRME.md)
 
