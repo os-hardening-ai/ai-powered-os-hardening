@@ -34,7 +34,7 @@ from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
 from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResult
 from llm.core.config import CONFIG
 from log_manager import get_logger
-from prometheus_metrics import layer_timer, record_query, record_rejection
+from prometheus_metrics import layer_timer, record_query, record_rejection, record_query_outcome
 from llm.clients import token_tracker
 
 _pipeline_logger = get_logger("pipeline_metrics")
@@ -309,6 +309,15 @@ class SecurePipelineV2:
             rag_used=result.metadata.get("rag_used", False),
             input_tokens=total_tokens,
             output_tokens=0,
+        )
+
+        # Per-query end-to-end sinyalleri (gecikme + maliyet + RAG groundedness).
+        # Hepsi metadata'da zaten hesaplanmış → ek hesaplama yok, sadece observe/inc.
+        record_query_outcome(
+            intent=intent.type,
+            total_time_s=result.total_time_s,
+            estimated_cost=result.estimated_cost,
+            verification_confidence=result.metadata.get("verification_confidence"),
         )
 
         # Log pipeline metrics

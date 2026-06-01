@@ -22,6 +22,24 @@ def _accepts_system(fn) -> bool:
         return False
 
 
+def _metric_provider_call(role: str, provider: str, was_fallback: bool) -> None:
+    """Prometheus'a sağlayıcı çağrısını kaydet — best-effort (metrik yoksa sessiz geç).
+    Gözlemlenebilirlik asla LLM akışını bozmamalı."""
+    try:
+        from prometheus_metrics import record_llm_provider_call
+        record_llm_provider_call(role, provider, was_fallback=was_fallback)
+    except Exception:
+        pass
+
+
+def _metric_chain_failure(role: str) -> None:
+    try:
+        from prometheus_metrics import record_llm_chain_failure
+        record_llm_chain_failure(role)
+    except Exception:
+        pass
+
+
 def _get_openai_clients() -> Tuple[LLMCallable, LLMCallable]:
     """OpenAI client'larını local import ile al."""
     from .openai_client import get_small_openai_llm, get_large_openai_llm
@@ -174,6 +192,7 @@ class FallbackLLM:
                 if idx > 0:  # birincil değil → fallback gerçekleşti
                     self.stats["fallback_count"] += 1
                     logger.info("[FallbackLLM] '%s' ile kurtarıldı (fallback)", provider)
+                _metric_provider_call(self.role, provider, idx > 0)
                 return result
             except Exception as exc:
                 last_exc = classify_error(exc, provider)
@@ -182,6 +201,7 @@ class FallbackLLM:
                     provider, type(last_exc).__name__, last_exc,
                 )
         self.stats["failures"] += 1
+        _metric_chain_failure(self.role)
         raise RuntimeError(
             f"Tüm LLM sağlayıcıları başarısız oldu (denenen: {attempted or self.providers}). "
             f"Son hata: {last_exc}"
@@ -212,6 +232,7 @@ class FallbackLLM:
                     if idx > 0:
                         self.stats["fallback_count"] += 1
                         logger.info("[FallbackLLM.stream] '%s' ile kurtarıldı", provider)
+                    _metric_provider_call(self.role, provider, idx > 0)
                     yield first
                     yield from gen
                     return
@@ -222,6 +243,7 @@ class FallbackLLM:
                     self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
                     if idx > 0:
                         self.stats["fallback_count"] += 1
+                    _metric_provider_call(self.role, provider, idx > 0)
                     yield result
                     return
             except StopIteration:
@@ -233,6 +255,7 @@ class FallbackLLM:
                                provider, type(last_exc).__name__, last_exc)
                 continue
         self.stats["failures"] += 1
+        _metric_chain_failure(self.role)
         raise RuntimeError(
             f"Tüm LLM sağlayıcıları (stream) başarısız (denenen: {attempted or self.providers}). "
             f"Son hata: {last_exc}"

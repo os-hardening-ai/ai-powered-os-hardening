@@ -89,6 +89,56 @@ rag_results_count = Histogram(
     buckets=[0, 1, 2, 3, 5, 8, 10],
 )
 
+# RAG cevap-groundedness (ClaimVerifier güven skoru). RAG cevap KALİTESİNİN en doğrudan
+# göstergesi — bitirme için "cevaplar kaynaklara dayanıyor mu" kanıtı. 0-1 arası.
+rag_verification_confidence = Histogram(
+    "hardening_rag_verification_confidence",
+    "Answer groundedness confidence from ClaimVerifier (0-1)",
+    buckets=[0.0, 0.3, 0.45, 0.55, 0.6, 0.7, 0.8, 0.9, 1.0],
+)
+
+
+# ── End-to-end & cost ────────────────────────────────────────────────────────
+
+# Uçtan uca istek süresi (tüm katmanlar dahil). layer_duration katman-bazlı; bu
+# kullanıcının gerçekte beklediği toplam süredir → SLO/p95 için kritik.
+query_total_duration = Histogram(
+    "hardening_query_duration_seconds",
+    "End-to-end pipeline duration per query (all layers)",
+    ["intent"],
+    buckets=[0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 15.0],
+)
+
+# Tahmini LLM maliyeti (USD). Ücretsiz/düşük-maliyet hedefinin kanıtı + bütçe izleme.
+query_estimated_cost_total = Counter(
+    "hardening_query_estimated_cost_usd_total",
+    "Cumulative estimated LLM cost in USD",
+    ["intent"],
+)
+
+
+# ── LLM fallback chain health ────────────────────────────────────────────────
+
+# Çoklu-sağlayıcı (Cerebras→SambaNova→Gemini→Novita) zincirinin sağlığı. Hangi
+# sağlayıcının kaç kez servis ettiği + fallback/başarısızlık → dayanıklılık kanıtı.
+llm_provider_calls_total = Counter(
+    "hardening_llm_provider_calls_total",
+    "LLM calls served, by role and provider",
+    ["role", "provider"],  # role: small|large
+)
+
+llm_fallback_total = Counter(
+    "hardening_llm_fallback_total",
+    "LLM calls that fell back to a non-primary provider",
+    ["role"],
+)
+
+llm_chain_failure_total = Counter(
+    "hardening_llm_chain_failure_total",
+    "LLM calls where the ENTIRE provider chain failed",
+    ["role"],
+)
+
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 
@@ -229,3 +279,33 @@ def record_rag_retrieval(
     rag_results_count.observe(results_count)
     if top_score > 0:
         rag_top_similarity_score.observe(top_score)
+
+
+def record_query_outcome(
+    *,
+    intent: str = "unknown",
+    total_time_s: float = 0.0,
+    estimated_cost: float = 0.0,
+    verification_confidence: float | None = None,
+) -> None:
+    """Record per-query end-to-end signals (latency, cost, groundedness).
+
+    Hepsi in-process observe/inc — I/O yok, ihmal edilebilir maliyet. secure_v2.run()
+    sonunda mevcut record_query çağrısının yanında çağrılır."""
+    query_total_duration.labels(intent=intent).observe(max(total_time_s, 0.0))
+    if estimated_cost and estimated_cost > 0:
+        query_estimated_cost_total.labels(intent=intent).inc(estimated_cost)
+    if verification_confidence is not None:
+        rag_verification_confidence.observe(verification_confidence)
+
+
+def record_llm_provider_call(role: str, provider: str, *, was_fallback: bool) -> None:
+    """Record a successful LLM call served by `provider` for `role` (small|large)."""
+    llm_provider_calls_total.labels(role=role, provider=provider).inc()
+    if was_fallback:
+        llm_fallback_total.labels(role=role).inc()
+
+
+def record_llm_chain_failure(role: str) -> None:
+    """Record that the entire provider chain failed for a role."""
+    llm_chain_failure_total.labels(role=role).inc()
