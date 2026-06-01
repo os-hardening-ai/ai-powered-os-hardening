@@ -263,6 +263,49 @@ sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd
 
 ## Entegrasyon Testleri
 
+### Chat Uç Modları + Stream Paritesi (yeni)
+
+**Test Dosyası:** `tests/integration/test_chat_endpoints_modes.py` (7 test, AĞSIZ — fake LLM)
+
+4 chat ucunu HTTP seviyesinde doğrular ve smalltalk regresyonunu kilitler:
+
+| Test | Doğrulanan |
+|------|-----------|
+| `/api/chat` smalltalk | `selam` → intent=smalltalk, layer_path `…3A`, RAG yok |
+| `/api/chat/stream` paritesi | `selam` akışta da smalltalk (RAG cevabı DEĞİL) — **regresyon** |
+| `/api/chat/fast` | layer_path `1→RAG→GEN(fast)`, intent sabit `info_request` |
+| `/api/chat/stream/fast` | `streaming=real-token`, gerçek token-token |
+| fast safety | unsafe girdi → `1→REJECT` (fail-closed) |
+
+> LLM'ler fake (safety prompt'u `<USER_INPUT>` → SAFE), RAG kapalı → Qdrant'a gidilmez.
+> Çalıştırma: `python -m pytest tests/integration/test_chat_endpoints_modes.py`
+
+### E2E — Uçtan Uca Yolculuk (yeni)
+
+**Test Dosyası:** `tests/e2e/test_chat_journey_e2e.py` (5 test, AĞSIZ — gerçek JWT)
+
+`create_app` yerine `main.app` üzerinde GERÇEK auth ile: login → JWT → 4 chat ucu →
+RBAC → logout/blacklist. **RBAC testi** frontend Pano role-gate'inin backend karşılığıdır:
+`/metrics` → 401 (token yok) / 403 (`end_user`) / 200 (`sysadmin`).
+
+> Çalıştırma: `python -m pytest tests/e2e/test_chat_journey_e2e.py`
+
+### Newman (Postman) — Canlı API Doğrulaması (yeni)
+
+**Collection:** `tests/postman/chat_api.postman_collection.json` (12 istek, 24 assertion)
+
+Çalışan API'ye karşı **post-response (test) script** assertion'ları: health, auth (login/me),
+RBAC `/metrics` (401/403/200), şema doğrulama (422) ve 4 chat ucu (smalltalk→3A, fast,
+stream, stream/fast). Token, login'in test script'inde `pm.collectionVariables.set` ile
+sonraki isteklere taşınır.
+
+```bash
+# 1) API'yi başlat
+python -m uvicorn main:app --port 8000
+# 2) Newman ile koş (global kurulum gerekmez)
+npx newman run tests/postman/chat_api.postman_collection.json
+```
+
 ### API Integration Tests
 
 **Test Dosyası:** `llm/tests/integration/test_api_integration.py`

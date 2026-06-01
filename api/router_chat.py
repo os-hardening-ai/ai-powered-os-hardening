@@ -22,11 +22,34 @@ from api.errors import APIError, ErrorCode, raise_internal_error
 # Import streaming support
 from api.streaming import stream_chat_response
 
+# Intent detection + smalltalk handling (streaming path da Layer 2/3A kullansın diye)
+from llm.pipelines.layers.hybrid_intent_detector import HybridIntentDetector, is_smalltalk
+from llm.pipelines.layers.pattern_responder import PatternResponderHandler
+
 from log_manager import get_logger
 
 _conv_logger = get_logger("conversations")
 
 router = APIRouter()
+
+# Module-level singletons — ML modelleri (joblib) request başına yeniden yüklenmesin diye.
+# Streaming endpoint bunları Layer 2 (intent) + Layer 3A (smalltalk) için kullanır.
+_intent_detector = HybridIntentDetector(use_ml=True, debug=False)
+_pattern_handler = PatternResponderHandler(debug=False)
+
+# Layer 3 "out-of-scope" red mesajı — SecurePipelineV2._handle_out_of_scope ile aynı metin.
+_OUT_OF_SCOPE_MESSAGE = (
+    "KAPSAM DIŞI SORU\n\n"
+    "Ben sadece siber güvenlik ve işletim sistemi sıkılaştırma (OS hardening) "
+    "konularında yardımcı olabiliyorum.\n\n"
+    "Size yardımcı olabileceğim konular:\n"
+    "- SSH, RDP, Firewall hardening\n"
+    "- CIS Benchmarks ve NIST 800-207 uygulamaları\n"
+    "- Zero Trust Architecture\n"
+    "- Güvenlik yapılandırmaları ve scriptleri\n"
+    "- Vulnerability assessment ve risk azaltma\n\n"
+    "Lütfen güvenlik veya sistem sıkılaştırma ile ilgili bir soru sorun."
+)
 
 def _init_session_store():
     """Use Redis session store when available; fall back to in-memory."""
@@ -165,6 +188,119 @@ def _get_llm_clients():
     return _llm_small, _llm_large
 
 
+async def _run_pipeline(
+    payload: "ChatRequest", timeout_seconds: int
+) -> tuple["PipelineResult", str, Optional[str], List[Dict[str, str]]]:
+    """
+    /chat ve /chat/stream için ORTAK yol — tek bir SecurePipelineV2 koşumu.
+
+    Yapılan işler (sırayla):
+      1. Session history yükle (varsa)
+      2. Context-aware query rewrite — smalltalk ise ATLA (is_smalltalk guard)
+      3. RequestContext oluştur
+      4. FilterAgent ile os/role çıkar (verilmemişse)
+      5. RAGContextBuilder kur (use_rag ise)
+      6. SecurePipelineV2.run() — timeout ile
+
+    Returns:
+        (result, effective_question, inferred_os, history)
+    """
+    llm_small, llm_large = _get_llm_clients()
+
+    # 1) Session history
+    session_id = payload.session_id or ""
+    history: List[Dict[str, str]] = []
+    if session_id:
+        turns = _session_store.get_history(session_id)
+        history = [{"role": t.role, "content": t.content} for t in turns]
+
+    # 2) Query rewrite (follow-up → standalone). Smalltalk ASLA yeniden yazılmaz —
+    #    aksi halde QueryRewriter geçmiş bağlamıyla "naber"i güvenlik sorusuna çevirir.
+    effective_question = payload.question
+    if history and not is_smalltalk(payload.question):
+        try:
+            from rag.query.query_rewriter import QueryRewriter
+            _rewriter = QueryRewriter(llm_fn=llm_small)
+            rewritten = _rewriter.rewrite(payload.question, history)
+            if rewritten != payload.question:
+                _conv_logger.info(
+                    "[QueryRewriter] '%s' → '%s'", payload.question[:60], rewritten[:60]
+                )
+                effective_question = rewritten
+        except Exception as _re:
+            _conv_logger.warning("[QueryRewriter] failed (non-fatal): %s", _re)
+
+    # 3) RequestContext
+    ctx = RequestContext(
+        user_question=effective_question,
+        os=payload.os,
+        role=payload.role,
+        security_level=payload.security_level,  # type: ignore
+        zt_maturity=payload.zt_maturity,  # type: ignore
+        conversation_history=history,
+    )
+
+    # 4) FilterAgent — os/role çıkarımı
+    inferred_os: Optional[str] = None
+    if ctx.os is None or ctx.role is None:
+        try:
+            from rag.query.filter_agent import FilterAgent
+            _fa = FilterAgent(llm_fn=llm_small)
+            _filters = _fa.infer(payload.question)
+            if _filters.os_type and ctx.os is None:
+                ctx.os = _filters.os_type
+                inferred_os = _filters.os_type
+            if _filters.role and ctx.role is None:
+                ctx.role = _filters.role
+            _conv_logger.debug(
+                "[FilterAgent] os=%s role=%s confidence=%.2f source=%s",
+                _filters.os_type, _filters.role, _filters.confidence, _filters.source,
+            )
+        except Exception as _fe:
+            _conv_logger.warning("[FilterAgent] failed (non-fatal): %s", _fe)
+
+    # 5) RAG builder
+    rag_builder = None
+    if payload.use_rag:
+        try:
+            _os_for_rag = payload.os or inferred_os or None
+            rag_builder = RAGContextBuilder(
+                top_k=payload.rag_top_k,
+                min_score=payload.rag_min_score,
+                os_version=_os_for_rag,
+            )
+        except Exception as e:
+            _conv_logger.warning("[RAG] Builder FAILED: %s", e)
+    else:
+        _conv_logger.debug("[RAG] use_rag=False skipped")
+
+    # 6) SecurePipelineV2 — timeout ile
+    pipeline = SecurePipelineV2(
+        llm_ultra_fast=llm_small,
+        llm_small=llm_small,
+        llm_large=llm_large,
+        rag_builder=rag_builder,
+        debug=False,
+    )
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(pipeline.run, ctx), timeout=timeout_seconds
+        )
+    except asyncio.TimeoutError:
+        raise APIError(
+            status_code=504,
+            error_code=ErrorCode.TIMEOUT,
+            message=f"Request timeout after {timeout_seconds} seconds. Try a simpler query or increase timeout.",
+            details={"timeout": timeout_seconds, "suggestion": "increase_timeout_or_simplify_query"},
+        )
+
+    # request_id'yi metadata'ya koy (stream done_extra için)
+    if result.metadata is not None:
+        result.metadata.setdefault("request_id", ctx.request_id)
+
+    return result, effective_question, inferred_os, history
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     """
@@ -185,109 +321,11 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     timeout_seconds = payload.timeout or 60
 
     try:
-        # LLM clients
-        llm_small, llm_large = _get_llm_clients()
-
-        # Session history yükle
+        # /chat ve /chat/stream ORTAK yol — tek SecurePipelineV2 koşumu
+        result, effective_question, _inferred_os, history = await _run_pipeline(
+            payload, timeout_seconds
+        )
         session_id = payload.session_id or ""
-        history: List[Dict[str, str]] = []
-        if session_id:
-            turns = _session_store.get_history(session_id)
-            history = [{"role": t.role, "content": t.content} for t in turns]
-
-        # Context-aware query rewriting (follow-up → standalone)
-        # ÖNEMLİ: Ham soru smalltalk ise (selam/naber/teşekkür...) YENİDEN YAZMA — aksi halde
-        # QueryRewriter geçmiş bağlamıyla "naber"i güvenlik sorusuna çevirip yanlış yönlendiriyordu.
-        from llm.pipelines.layers.hybrid_intent_detector import is_smalltalk
-        effective_question = payload.question
-        if history and not is_smalltalk(payload.question):
-            try:
-                from rag.query.query_rewriter import QueryRewriter
-                _rewriter = QueryRewriter(llm_fn=llm_small)
-                rewritten = _rewriter.rewrite(payload.question, history)
-                if rewritten != payload.question:
-                    _conv_logger.info(
-                        "[QueryRewriter] '%s' → '%s'",
-                        payload.question[:60],
-                        rewritten[:60],
-                    )
-                    effective_question = rewritten
-            except Exception as _re:
-                _conv_logger.warning("[QueryRewriter] failed (non-fatal): %s", _re)
-
-        # Request context olustur
-        ctx = RequestContext(
-            user_question=effective_question,
-            os=payload.os,
-            role=payload.role,
-            security_level=payload.security_level,  # type: ignore
-            zt_maturity=payload.zt_maturity,  # type: ignore
-            conversation_history=history,
-        )
-
-        # Filter agent: os/role verilmemişse sorgudan çıkar
-        _inferred_os: str | None = None
-        if ctx.os is None or ctx.role is None:
-            try:
-                from rag.query.filter_agent import FilterAgent
-                _fa = FilterAgent(llm_fn=llm_small)
-                _filters = _fa.infer(payload.question)
-                if _filters.os_type and ctx.os is None:
-                    ctx.os = _filters.os_type
-                    _inferred_os = _filters.os_type
-                if _filters.role and ctx.role is None:
-                    ctx.role = _filters.role
-                _conv_logger.debug(
-                    "[FilterAgent] os=%s role=%s confidence=%.2f source=%s",
-                    _filters.os_type, _filters.role, _filters.confidence, _filters.source,
-                )
-            except Exception as _fe:
-                _conv_logger.warning("[FilterAgent] failed (non-fatal): %s", _fe)
-
-        # RAG builder — sadece use_rag=True ise baslat
-        rag_builder = None
-        if payload.use_rag:
-            try:
-                # OS version: explicit > inferred > None
-                _os_for_rag = payload.os or _inferred_os or None
-                rag_builder = RAGContextBuilder(
-                    top_k=payload.rag_top_k,
-                    min_score=payload.rag_min_score,
-                    os_version=_os_for_rag,
-                )
-                _conv_logger.debug(
-                    "[RAG] Builder OK top_k=%d min_score=%.2f os_version=%s",
-                    payload.rag_top_k,
-                    payload.rag_min_score,
-                    _os_for_rag,
-                )
-            except Exception as e:
-                _conv_logger.warning(f"[RAG] Builder FAILED: {e}")
-        else:
-            _conv_logger.debug("[RAG] use_rag=False skipped")
-
-        # Pipeline'i calistir (4-layer security pipeline)
-        pipeline = SecurePipelineV2(
-            llm_ultra_fast=llm_small,
-            llm_small=llm_small,
-            llm_large=llm_large,
-            rag_builder=rag_builder,
-            debug=False,
-        )
-
-        # Run with timeout
-        try:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(pipeline.run, ctx),
-                timeout=timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            raise APIError(
-                status_code=504,
-                error_code=ErrorCode.TIMEOUT,
-                message=f"Request timeout after {timeout_seconds} seconds. Try a simpler query or increase timeout.",
-                details={"timeout": timeout_seconds, "suggestion": "increase_timeout_or_simplify_query"}
-            )
 
         # RAG kaynaklarini parse et (eger varsa - metadata'dan)
         rag_sources = _parse_rag_sources(result.metadata or {})
@@ -301,8 +339,9 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             _session_store.add_turn(session_id, "assistant", sanitized_answer[:500])
 
         # Log conversation (question + answer)
+        _request_id = (result.metadata or {}).get("request_id")
         _conv_logger.info(
-            f"--- [{ctx.request_id}] intent={result.intent.type if result.intent else 'unknown'} "
+            f"--- [{_request_id}] intent={result.intent.type if result.intent else 'unknown'} "
             f"path={result.layer_path} total={result.total_time_s:.3f}s ---"
         )
         _conv_logger.info(f"Q: {payload.question}")
@@ -339,7 +378,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
                 "history_turns": len(history) // 2,
                 "query_rewritten": effective_question != payload.question,
             },
-            request_id=ctx.request_id,
+            request_id=_request_id,
             estimated_cost=result.estimated_cost,
             verification_confidence=_meta.get("verification_confidence"),
             unsupported_claims=_meta.get("unsupported_claims", []) or [],
@@ -365,108 +404,267 @@ async def chat_stream(payload: ChatRequest):
     timeout_seconds = payload.timeout or 60
 
     try:
-        llm_small, llm_large = _get_llm_clients()
+        # /chat (non-stream) ile BİREBİR AYNI yol: tam SecurePipelineV2.run() koşulur,
+        # üretilen cevap SSE üzerinden kelime kelime akıtılır. Böylece safety + intent +
+        # 3A/3B/3C routing, complexity, RAG sources, cost ve verification tek kaynaktan
+        # (SecurePipelineV2) gelir — streaming kendi mini-pipeline'ını ARTIK kurmaz.
+        result, effective_question, inferred_os, history = await _run_pipeline(
+            payload, timeout_seconds
+        )
 
-        # Session history (P0-2)
         session_id = payload.session_id or ""
-        history: List[Dict[str, str]] = []
+        sanitized_answer = sanitize_output(result.answer or "Cevap üretilemedi.")
+        _meta = result.metadata or {}
+
+        # Oturum geçmişine kaydet (P0-2) — /chat ile aynı
         if session_id:
-            turns = _session_store.get_history(session_id)
-            history = [{"role": t.role, "content": t.content} for t in turns]
-
-        # Context-aware query rewrite (P0-2)
-        effective_question = payload.question
-        if history:
             try:
-                from rag.query.query_rewriter import QueryRewriter
-                _rewriter = QueryRewriter(llm_fn=llm_small)
-                rewritten = _rewriter.rewrite(payload.question, history)
-                if rewritten != payload.question:
-                    _conv_logger.info(
-                        "[QueryRewriter][stream] '%s' → '%s'",
-                        payload.question[:60], rewritten[:60],
-                    )
-                    effective_question = rewritten
-            except Exception as _re:
-                _conv_logger.warning("[QueryRewriter][stream] failed (non-fatal): %s", _re)
+                _session_store.add_turn(session_id, "user", effective_question)
+                _session_store.add_turn(session_id, "assistant", sanitized_answer[:500])
+            except Exception:
+                pass
 
-        ctx = RequestContext(
-            user_question=effective_question,
-            os=payload.os,
-            role=payload.role,
-            security_level=payload.security_level,  # type: ignore
-            zt_maturity=payload.zt_maturity,  # type: ignore
-            conversation_history=history,
+        # RAG kaynakları (P0-1) — /chat ile aynı, result.metadata'dan
+        _srcs = _parse_rag_sources(_meta)
+        rag_sources_data = [s.model_dump() for s in _srcs] if _srcs else None
+
+        async def answer_stream(text: str = sanitized_answer):
+            # SecurePipelineV2 cevabı tek parça üretir → SSE'de kelime kelime akıtılır
+            # (token-token "yazılıyor" hissi, $0 ek maliyet).
+            words = text.split(" ")
+            for i, word in enumerate(words):
+                yield word if i == 0 else " " + word
+
+        metadata = {
+            "safety": result.safety.category if result.safety else None,
+            "intent": result.intent.type if result.intent else None,
+            "intent_subtype": getattr(result.intent, "subtype", None) if result.intent else None,
+            "layer_path": result.layer_path,
+            "rag_used": _meta.get("rag_used", False),
+            "rag_chunks": _meta.get("rag_chunks", 0),
+            "model": _meta.get("model"),
+            "complexity": _meta.get("complexity"),
+            "inferred_os": inferred_os,
+            "session_id": session_id or None,
+            "history_turns": len(history) // 2,
+            "query_rewritten": effective_question != payload.question,
+            "streaming": "pipeline",
+        }
+        done_extra = {
+            "total_time_s": result.total_time_s,
+            "estimated_cost": result.estimated_cost,
+            "verification_confidence": _meta.get("verification_confidence"),
+            "request_id": result.metadata.get("request_id"),
+        }
+        return await stream_chat_response(
+            answer_stream(), metadata=metadata, sources=rag_sources_data,
+            done_extra=done_extra,
         )
 
-        # FilterAgent (P0-2: uses effective_question via ctx)
-        _inferred_os: str | None = None
-        if ctx.os is None or ctx.role is None:
+    except APIError:
+        raise
+    except Exception as e:
+        raise_internal_error("streaming", e, error_code=ErrorCode.PIPELINE_ERROR)
+
+
+_FAST_REFUSAL = (
+    "Bu istek savunma-amaçlı güvenlik kapsamı dışında görünüyor; bu konuda yardımcı olamıyorum."
+)
+
+
+async def _prepare_fast(payload: "ChatRequest") -> dict:
+    """
+    RAG-direct (intent routing YOK) ORTAK hazırlık — hem /chat/fast (non-stream)
+    hem /chat/stream/fast kullanır.
+
+    Yapılan: session/rewrite → ctx → FilterAgent → RAG builder → Layer-1 safety →
+    (güvenliyse) RAG retrieve + grounded prompt. Intent/routing/complexity YOK;
+    her girdi bir güvenlik/bilgi sorusu kabul edilir.
+
+    Returns dict: safe, safety, prompt, llm_large, ctx, rag_sources_data,
+                  effective_question, history, session_id.
+    """
+    llm_small, llm_large = _get_llm_clients()
+
+    session_id = payload.session_id or ""
+    history: List[Dict[str, str]] = []
+    if session_id:
+        turns = _session_store.get_history(session_id)
+        history = [{"role": t.role, "content": t.content} for t in turns]
+
+    effective_question = payload.question
+    if history and not is_smalltalk(payload.question):
+        try:
+            from rag.query.query_rewriter import QueryRewriter
+            rewritten = QueryRewriter(llm_fn=llm_small).rewrite(payload.question, history)
+            if rewritten != payload.question:
+                effective_question = rewritten
+        except Exception as _re:
+            _conv_logger.warning("[QueryRewriter][fast] failed (non-fatal): %s", _re)
+
+    ctx = RequestContext(
+        user_question=effective_question,
+        os=payload.os,
+        role=payload.role,
+        security_level=payload.security_level,  # type: ignore
+        zt_maturity=payload.zt_maturity,  # type: ignore
+        conversation_history=history,
+    )
+
+    # FilterAgent — os/role çıkarımı (RAG soft-filter için)
+    inferred_os: Optional[str] = None
+    if ctx.os is None or ctx.role is None:
+        try:
+            from rag.query.filter_agent import FilterAgent
+            _filters = FilterAgent(llm_fn=llm_small).infer(payload.question)
+            if _filters.os_type and ctx.os is None:
+                ctx.os = _filters.os_type
+                inferred_os = _filters.os_type
+            if _filters.role and ctx.role is None:
+                ctx.role = _filters.role
+        except Exception as _fe:
+            _conv_logger.warning("[FilterAgent][fast] failed (non-fatal): %s", _fe)
+
+    rag_builder = None
+    if payload.use_rag:
+        try:
+            rag_builder = RAGContextBuilder(
+                top_k=payload.rag_top_k,
+                min_score=payload.rag_min_score,
+                os_version=payload.os or inferred_os or None,
+            )
+        except Exception as e:
+            _conv_logger.warning("[ChatAPI][fast] RAG init failed: %s", e)
+
+    # ── Layer 1: Safety (fail-closed) ──
+    from llm.pipelines.layers.safety_classifier import SafetyClassifier
+    from llm.prompts.simple_prompts import get_prompt_for_complexity
+
+    safety = await asyncio.to_thread(
+        SafetyClassifier(llm_ultra_fast=llm_small).classify, payload.question
+    )
+    base = dict(
+        safety=safety, llm_large=llm_large, ctx=ctx,
+        effective_question=effective_question, history=history, session_id=session_id,
+    )
+    if not safety.is_safe:
+        return {**base, "safe": False, "prompt": None, "rag_sources_data": None}
+
+    # ── RAG bağlamı + kaynaklar → grounded üretim ──
+    rag_sources_data = None
+    if rag_builder is not None:
+        try:
+            _ctx_txt, _chunks = await asyncio.to_thread(
+                rag_builder.retrieve_balanced, effective_question
+            )
+            if _ctx_txt:
+                ctx.retrieved_context = _ctx_txt
+            _srcs = _parse_rag_sources({"rag_sources": [
+                {"score": c.get("score", 0.0), "source": c.get("source"),
+                 "section": c.get("section", "N/A"), "text": (c.get("text") or "")[:500]}
+                for c in (_chunks or [])
+            ]})
+            rag_sources_data = [s.model_dump() for s in _srcs] if _srcs else None
+        except Exception as _re:
+            _conv_logger.warning("[ChatAPI][fast] RAG retrieve başarısız (non-fatal): %s", _re)
+
+    prompt = get_prompt_for_complexity(ctx, "medium")
+    return {**base, "safe": True, "prompt": prompt, "rag_sources_data": rag_sources_data}
+
+
+@router.post("/chat/fast", response_model=ChatResponse)
+async def chat_fast(payload: ChatRequest) -> ChatResponse:
+    """
+    HIZLI RAG yanıtı (non-stream) — intent routing YOK.
+
+    NOT: RAG burada da, tam pipeline (/api/chat) yolunda da kullanılır — fark RAG'de
+    DEĞİL. Bu uç intent routing/smalltalk/complexity/doğrulama katmanlarını ATLAR ve
+    doğrudan RAG-grounded üretime gider (daha hızlı, daha az LLM call).
+
+    /api/chat/stream/fast'in akıtmayan ikizi: tek seferde tam ChatResponse döner.
+    "Hızlı RAG" modu streaming KAPALIyken bu uca düşer (frontend `expertMode && !stream`).
+    """
+    try:
+        prep = await _prepare_fast(payload)
+        safety = prep["safety"]
+        session_id = prep["session_id"]
+
+        if not prep["safe"]:
+            answer = sanitize_output(_FAST_REFUSAL)
+            return ChatResponse(
+                answer=answer, intent="info_request", safety_category=safety.category,
+                layer_path="1→REJECT", rag_sources=[], stats={"rag_used": False},
+            )
+
+        llm_large = prep["llm_large"]
+        ctx = prep["ctx"]
+        answer = sanitize_output(await asyncio.to_thread(llm_large, prep["prompt"]))
+
+        if session_id:
             try:
-                from rag.query.filter_agent import FilterAgent
-                _fa = FilterAgent(llm_fn=llm_small)
-                _filters = _fa.infer(payload.question)
-                if _filters.os_type and ctx.os is None:
-                    ctx.os = _filters.os_type
-                    _inferred_os = _filters.os_type
-                if _filters.role and ctx.role is None:
-                    ctx.role = _filters.role
-            except Exception as _fe:
-                _conv_logger.warning("[FilterAgent][stream] failed (non-fatal): %s", _fe)
+                _session_store.add_turn(session_id, "user", prep["effective_question"])
+                _session_store.add_turn(session_id, "assistant", answer[:500])
+            except Exception:
+                pass
 
-        rag_builder = None
-        if payload.use_rag:
-            try:
-                _os_for_rag = payload.os or _inferred_os or None
-                rag_builder = RAGContextBuilder(
-                    top_k=payload.rag_top_k,
-                    min_score=payload.rag_min_score,
-                    os_version=_os_for_rag,
-                )
-            except Exception as e:
-                _conv_logger.warning("[ChatAPI][stream] RAG init failed, devam ediliyor: %s", e)
-
-        # ── Güvenlik (fail-closed) — tam pipeline'ı koşmadan hızlı sınıflandırma ──
-        # GERÇEK streaming: cevabı ÖNCE üretip .split() ile bölmek yerine üretimi token-token
-        # akıtırız. Güvenlik korunur (safety), RAG bağlamı + grounded prompt enjekte edilir,
-        # akış bitince oturum geçmişine kaydedilir (WGR P0-2: session history + P0-1: sources).
-        from llm.pipelines.layers.safety_classifier import SafetyClassifier
-        from llm.prompts.simple_prompts import get_prompt_for_complexity
-
-        safety = await asyncio.to_thread(
-            SafetyClassifier(llm_ultra_fast=llm_small).classify, payload.question
+        rag_srcs = [RAGSource(**s) for s in (prep["rag_sources_data"] or [])]
+        return ChatResponse(
+            answer=answer,
+            intent="info_request",
+            safety_category=safety.category,
+            layer_path="1→RAG→GEN(fast)",
+            rag_sources=rag_srcs,
+            stats={
+                "rag_used": ctx.retrieved_context is not None,
+                "rag_chunks": len(rag_srcs),
+                "model": "large",
+                "session_id": session_id or None,
+                "history_turns": len(prep["history"]) // 2,
+            },
         )
-        if not safety.is_safe:
+    except APIError:
+        raise
+    except Exception as e:
+        raise_internal_error("chat_fast", e, error_code=ErrorCode.PIPELINE_ERROR)
+
+
+@router.post("/chat/stream/fast")
+async def chat_stream_fast(payload: ChatRequest):
+    """
+    HIZLI RAG gerçek-token streaming (RAG-grounded / konsol modu).
+
+    NOT: RAG bu uçta da, /api/chat/stream tam pipeline'ında da kullanılır — fark RAG'de
+    DEĞİL, yönlendirme + hızda.
+
+    /api/chat/stream'den FARKI:
+      • Intent routing (Layer 2/3) ATLANIR — girdi her zaman bir güvenlik/bilgi
+        sorusu kabul edilir (smalltalk yönlendirmesi yok). Her sorunun güvenlik
+        sorusu olduğu "uzman konsolu" akışları için.
+      • llm_large.stream() ile GERÇEK token-token üretim → en düşük ilk-token gecikmesi.
+        /chat/stream ise tam pipeline'ı koşup cevabı sonradan kelime kelime akıtır.
+      • Korunanlar: Layer-1 safety (fail-closed), RAG grounding + kaynaklar, oturum geçmişi.
+
+    Smalltalk (selam/naber) için UYGUN DEĞİLDİR — onları /api/chat/stream ele alır.
+
+    SSE event order: metadata → sources → message(token) → done
+    """
+    try:
+        prep = await _prepare_fast(payload)
+        safety = prep["safety"]
+        session_id = prep["session_id"]
+
+        if not prep["safe"]:
             async def _refusal():
-                yield ("Bu istek savunma-amaçlı güvenlik kapsamı dışında görünüyor; "
-                       "bu konuda yardımcı olamıyorum.")
+                yield _FAST_REFUSAL
             return await stream_chat_response(
                 _refusal(),
                 metadata={"safety": safety.category, "rag_used": False, "blocked": True},
             )
 
-        # ── RAG bağlamı + kaynaklar (P0-1) → prompt'a enjekte (grounded üretim) ──
-        rag_sources_data = None
-        if rag_builder is not None:
-            try:
-                _ctx_txt, _chunks = await asyncio.to_thread(
-                    rag_builder.retrieve_balanced, effective_question
-                )
-                if _ctx_txt:
-                    ctx.retrieved_context = _ctx_txt
-                _srcs = _parse_rag_sources({"rag_sources": [
-                    {"score": c.get("score", 0.0), "source": c.get("source"),
-                     "section": c.get("section", "N/A"), "text": (c.get("text") or "")[:500]}
-                    for c in (_chunks or [])
-                ]})
-                rag_sources_data = [s.model_dump() for s in _srcs] if _srcs else None
-            except Exception as _re:
-                _conv_logger.warning("[ChatAPI.stream] RAG retrieve başarısız (non-fatal): %s", _re)
-
-        prompt = get_prompt_for_complexity(ctx, "medium")
-
-        # ── GERÇEK token streaming: llm_large.stream() (senkron üretici) → asyncio kuyruğu ──
-        # (sync ağ akışını event loop'u bloklamadan async SSE'ye köprüler)
+        llm_large = prep["llm_large"]
+        ctx = prep["ctx"]
+        prompt = prep["prompt"]
+        effective_question = prep["effective_question"]
         _collected: List[str] = []
 
         async def token_generator():
@@ -478,11 +676,11 @@ async def chat_stream(payload: ChatRequest):
                 try:
                     streamer = getattr(llm_large, "stream", None)
                     if streamer is not None:
-                        for tok in streamer(prompt):              # GERÇEK token delta'ları
+                        for tok in streamer(prompt):
                             loop.call_soon_threadsafe(queue.put_nowait, tok)
-                    else:                                          # stream yoksa tek parça
+                    else:
                         loop.call_soon_threadsafe(queue.put_nowait, llm_large(prompt))
-                except Exception as exc:  # noqa: BLE001 - hatayı SSE'ye ilet
+                except Exception as exc:  # noqa: BLE001 — hatayı SSE'ye ilet
                     loop.call_soon_threadsafe(queue.put_nowait, f"\n[stream hatası: {exc}]")
                 finally:
                     loop.call_soon_threadsafe(queue.put_nowait, sentinel)
@@ -494,7 +692,6 @@ async def chat_stream(payload: ChatRequest):
                     break
                 _collected.append(tok)
                 yield tok
-            # Akış bitti → oturum geçmişine kaydet (P0-2)
             if session_id:
                 try:
                     _session_store.add_turn(session_id, "user", effective_question)
@@ -505,18 +702,20 @@ async def chat_stream(payload: ChatRequest):
 
         metadata = {
             "safety": safety.category,
+            "intent": "info_request",  # bu endpoint intent routing yapmaz — sabit
+            "layer_path": "1→RAG→GEN(fast)",
             "rag_used": ctx.retrieved_context is not None,
             "streaming": "real-token",
             "session_id": session_id or None,
-            "history_turns": len(history) // 2,
+            "history_turns": len(prep["history"]) // 2,
         }
         return await stream_chat_response(
-            token_generator(), metadata=metadata, sources=rag_sources_data,
+            token_generator(), metadata=metadata, sources=prep["rag_sources_data"],
         )
 
     except APIError:
         raise
     except Exception as e:
-        raise_internal_error("streaming", e, error_code=ErrorCode.PIPELINE_ERROR)
+        raise_internal_error("streaming_fast", e, error_code=ErrorCode.PIPELINE_ERROR)
 
 

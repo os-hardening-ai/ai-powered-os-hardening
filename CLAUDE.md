@@ -312,8 +312,18 @@ python scripts/build_index.py
 ### Chat
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/chat` | Main chat: RAG + LLM + 4-layer pipeline (session_id destekli) |
-| `POST` | `/api/chat/stream` | Streaming version (SSE) |
+| `POST` | `/api/chat` | Main chat: RAG + LLM + 4-layer SecurePipelineV2 (session_id destekli) |
+| `POST` | `/api/chat/stream` | `/api/chat` ile **aynı** pipeline, SSE ile kelime-kelime akıtılır |
+| `POST` | `/api/chat/fast` | **Hızlı RAG** (non-stream): intent routing YOK, doğrudan RAG-grounded |
+| `POST` | `/api/chat/stream/fast` | **Hızlı RAG** (SSE, gerçek token-token): intent routing YOK |
+
+> **Chat modları** — iki mod da RAG kullanır; fark RAG'de değil, *yönlendirmede*.
+> **Tam (akıllı)** (`/api/chat[/stream]`) Layer 2/3'ü koşar: smalltalk→pattern responder
+> ($0, RAG yok), info→RAG, kapsam-dışı→red. **Hızlı RAG** (`/api/chat/fast`,
+> `/api/chat/stream/fast`) intent/routing/complexity/doğrulamayı atlar, her girdiyi doğrudan
+> RAG-grounded üretir ("uzman/konsol"; smalltalk için uygun değildir). `/api/chat/stream` ⟂
+> `/api/chat` davranış paritesi ortak `_run_pipeline()` helper'ı ile garanti edilir
+> (`api/router_chat.py`). **Streaming kapalıyken Hızlı RAG yine çalışır** → `/api/chat/fast`.
 
 ### Domain — Rule Engine & Artifact Generator
 | Method | Path | Description |

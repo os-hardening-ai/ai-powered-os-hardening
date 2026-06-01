@@ -55,6 +55,20 @@ const headers = {
 **RBAC**: the token carries a `role` (sysadmin / security / developer / end_user). Some
 endpoints require specific roles (e.g. `/api/agent/harden` → security+); insufficient role → `403`.
 
+**Role-gated navigation (frontend mirror)**: the UI hides pages a role cannot use so the
+user never triggers a backend `403`/`401` (which would otherwise clear the token and bounce
+them to `/login` — the "Pano keeps asking for a password" bug). The mapping mirrors the
+backend gates and lives in `src/lib/permissions.ts`:
+
+| Route | Allowed roles | Backend gate |
+|-------|---------------|--------------|
+| `/dashboard` (Pano) | sysadmin, security | `/metrics` (`_role_sec`) |
+| `/rules`, `/agent`   | sysadmin, security, developer | `/api/artifacts`, `/api/agent` (`_role_dev`) |
+| `/chat`, `/retrieval`| any authenticated | `/api/chat`, `/rag/search` (`_any`) |
+
+The nav list is filtered with `canAccess(path, role)` (`AppShell`), and each restricted route
+is wrapped in `<RoleRoute>` so even a typed-in URL redirects an unauthorized user to `/chat`.
+
 **SSE note**: `EventSource` cannot set headers — for `/api/chat/stream` pass the token as a
 query param: `/api/chat/stream?access_token=<token>` (or use `fetch` streaming with the header).
 
@@ -93,25 +107,55 @@ query param: `/api/chat/stream?access_token=<token>` (or use `fetch` streaming w
 
 ### 2. POST `/api/chat/stream` - Streaming Chat (SSE)
 
+`/api/chat/stream` runs the **exact same** `SecurePipelineV2` as `/api/chat` (full intent
+routing + smalltalk handling + complexity selection + claim verification). The only
+difference is transport: the answer is streamed word-by-word over SSE. So `selam`/`naber`
+get the instant smalltalk reply on the stream too — **not** a long RAG answer.
+
 **Event Types**:
-- `metadata`: Initial metadata about the request
+- `metadata`: intent, safety, `layer_path`, `rag_used`, session info
+- `sources`: RAG sources (only when RAG returned results)
 - `message`: Token-by-token response
-- `done`: Completion event with statistics
+- `done`: Completion event with statistics (`total_time_s`, `estimated_cost`, …)
 
 **Response Format**:
 ```
 event: metadata
-data: {"intent": "info_request", "rag_used": true}
+data: {"intent": "info_request", "layer_path": "1→2→3B", "rag_used": true}
+
+event: sources
+data: {"rag_sources": [{"id": "source_1", "score": 0.85, "source": "CIS Ubuntu 24.04", "section": "5.2.4"}]}
 
 event: message
 data: {"token": "SSH "}
 
-event: message
-data: {"token": "güvenliği "}
-
 event: done
 data: {"total_tokens": 150, "total_time_s": 3.2}
 ```
+
+### 2b. "Hızlı RAG" mode — POST `/api/chat/fast` & POST `/api/chat/stream/fast`
+
+Both chat modes use RAG; the difference is **routing**, not RAG. The fast endpoints skip
+Layer 2/3 (intent routing, smalltalk, complexity, verification) and go straight to
+RAG-grounded generation — fewer LLM calls, lowest first-token latency, **real** token-by-token
+streaming. Intended for "expert/console" flows where every input is a security question
+(`selam` would get a RAG answer, so it is **not** suitable for smalltalk).
+
+| Streaming | Mode | Endpoint |
+|-----------|------|----------|
+| off | Full (smart) | `POST /api/chat` |
+| on  | Full (smart) | `POST /api/chat/stream` |
+| off | Fast RAG     | `POST /api/chat/fast` |
+| on  | Fast RAG     | `POST /api/chat/stream/fast` |
+
+Request body is identical to `/api/chat` (the same `ChatRequest`). The frontend picks the
+endpoint from two UI controls: the **"Yanıt modu"** selector (Tam/Hızlı RAG → `expertMode`)
+and the **Streaming (SSE)** toggle (`stream`). See `src/hooks/useChat.ts`.
+
+**Role-based default**: the initial "Yanıt modu" is chosen from the logged-in user's role
+(`defaultExpertModeForRole` in `src/lib/permissions.ts`) — IT/expert roles (sysadmin,
+security, developer) start in **Hızlı RAG**, `end_user` starts in **Tam (akıllı)** (handles
+smalltalk gracefully). It is only the initial value; the user can switch with the selector.
 
 ### 3. POST `/rag/search` - RAG Only
 

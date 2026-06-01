@@ -1,0 +1,184 @@
+{
+  "info": {
+    "name": "AI-Powered OS Hardening — Chat API",
+    "description": "Auth + RBAC + validation + chat uçları (newman ile CI/manuel doğrulama). RBAC kısmı frontend Pano role-gate'inin backend karşılığını doğrular: /metrics yalnız sysadmin/security.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base", "value": "http://localhost:8000" },
+    { "key": "demo_pw", "value": "changeme123" },
+    { "key": "admin_token", "value": "" },
+    { "key": "user_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health — 200 ok",
+      "request": { "method": "GET", "url": "{{base}}/health" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+      ]}}]
+    },
+    {
+      "name": "Login admin (sysadmin) — token al",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/auth/login",
+        "body": { "mode": "raw", "raw": "{\"username\":\"admin\",\"password\":\"{{demo_pw}}\"}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('role sysadmin', () => pm.expect(b.role).to.eql('sysadmin'));",
+        "pm.collectionVariables.set('admin_token', b.access_token);"
+      ]}}]
+    },
+    {
+      "name": "Login user (end_user) — token al",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/auth/login",
+        "body": { "mode": "raw", "raw": "{\"username\":\"user\",\"password\":\"{{demo_pw}}\"}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('role end_user', () => pm.expect(b.role).to.eql('end_user'));",
+        "pm.collectionVariables.set('user_token', b.access_token);"
+      ]}}]
+    },
+    {
+      "name": "auth/me (admin) — 200 + kimlik",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+        "url": "{{base}}/auth/me"
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('role sysadmin', () => pm.expect(pm.response.json().role).to.eql('sysadmin'));"
+      ]}}]
+    },
+    {
+      "name": "RBAC — /metrics token YOK → 401",
+      "request": { "method": "GET", "url": "{{base}}/metrics" },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('401 (kimlik gerekli)', () => pm.response.to.have.status(401));"
+      ]}}]
+    },
+    {
+      "name": "RBAC — /metrics end_user → 403 (Pano gate)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{user_token}}" }],
+        "url": "{{base}}/metrics"
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('403 (yetkisiz — Pano yalniz sysadmin/security)', () => pm.response.to.have.status(403));"
+      ]}}]
+    },
+    {
+      "name": "RBAC — /metrics sysadmin → 200",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+        "url": "{{base}}/metrics"
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('requests alani var', () => pm.expect(pm.response.json()).to.have.property('requests'));"
+      ]}}]
+    },
+    {
+      "name": "Validation — /api/chat bos soru → 422",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+        ],
+        "url": "{{base}}/api/chat",
+        "body": { "mode": "raw", "raw": "{\"question\":\"\"}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('422 (sema dogrulama — LLM cagrilmadan)', () => pm.response.to.have.status(422));"
+      ]}}]
+    },
+    {
+      "name": "Chat smalltalk (tolerant — LLM gerekebilir)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+        ],
+        "url": "{{base}}/api/chat",
+        "body": { "mode": "raw", "raw": "{\"question\":\"selam\",\"os\":\"ubuntu_24_04\",\"role\":\"sysadmin\",\"use_rag\":false}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "// LLM erisilebilirse 200 + smalltalk; erisilemezse fail-closed yine 200 (kibar red).",
+        "pm.test('200 (uc auth ile yanit veriyor)', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "if (b.intent === 'smalltalk') { pm.test('smalltalk → 3A', () => pm.expect(b.layer_path).to.include('3A')); }"
+      ]}}]
+    },
+    {
+      "name": "Chat FAST (non-stream) — Hizli RAG, routing yok",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+        ],
+        "url": "{{base}}/api/chat/fast",
+        "body": { "mode": "raw", "raw": "{\"question\":\"SSH nasil sikilastirilir\",\"os\":\"ubuntu_24_04\",\"role\":\"sysadmin\",\"use_rag\":false}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('layer_path = 1→RAG→GEN(fast)', () => pm.expect(b.layer_path).to.eql('1→RAG→GEN(fast)'));",
+        "pm.test('intent info_request (fast sabit)', () => pm.expect(b.intent).to.eql('info_request'));"
+      ]}}]
+    },
+    {
+      "name": "Chat STREAM (tam pipeline, SSE)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "text/event-stream" },
+          { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+        ],
+        "url": "{{base}}/api/chat/stream",
+        "body": { "mode": "raw", "raw": "{\"question\":\"selam\",\"os\":\"ubuntu_24_04\",\"role\":\"sysadmin\",\"use_rag\":false}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const t = pm.response.text();",
+        "pm.test('SSE metadata event var', () => pm.expect(t).to.include('event: metadata'));",
+        "pm.test('smalltalk akista da yonlendirildi', () => pm.expect(t).to.include('\\\"intent\\\": \\\"smalltalk\\\"'));"
+      ]}}]
+    },
+    {
+      "name": "Chat STREAM FAST (Hizli RAG, gercek token SSE)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "text/event-stream" },
+          { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+        ],
+        "url": "{{base}}/api/chat/stream/fast",
+        "body": { "mode": "raw", "raw": "{\"question\":\"SSH nasil sikilastirilir\",\"os\":\"ubuntu_24_04\",\"role\":\"sysadmin\",\"use_rag\":false}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const t = pm.response.text();",
+        "pm.test('gercek-token streaming isareti', () => pm.expect(t).to.include('real-token'));",
+        "pm.test('SSE message event var', () => pm.expect(t).to.include('event: message'));"
+      ]}}]
+    }
+  ]
+}
