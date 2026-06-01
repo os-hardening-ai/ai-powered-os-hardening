@@ -267,6 +267,26 @@ class SecurePipelineV2:
             print(f"  Subtype: {intent.subtype}")
             print(f"  Confidence: {intent.confidence:.2f}")
 
+        # ─── SEMANTİK KAPSAM DÜZELTMESİ ──────────────────────────────────────────
+        # Intent detector düşük güvende KÖR keyword listesiyle out_of_scope diyebilir
+        # (örn. "rdp kuralları" → SECURITY_KEYWORDS'te yok diye reddediliyordu). Ama
+        # Layer-1 LLM safety bunu safe_defensive/safe_educational (= meşru güvenlik konusu)
+        # işaretlediyse, SEMANTİK sinyale güven → info_request'e çevir. Böylece listeye
+        # sonsuza dek keyword eklemek (whack-a-mole) gerekmez. math/weather → 'ambiguous'
+        # → out_of_scope korunur; yalnız net güvenlik konuları kurtarılır.
+        if intent.type == "out_of_scope" and safety_result.category in (
+            "safe_defensive", "safe_educational"
+        ):
+            if self.debug:
+                print(
+                    f"  [SCOPE OVERRIDE] out_of_scope → info_request "
+                    f"(safety={safety_result.category} semantik domain sinyali)"
+                )
+            intent.type = "info_request"
+            if intent.metadata is None:
+                intent.metadata = {}
+            intent.metadata["scope_override"] = "safety_semantic"
+
         # ─────────────────────────────────────────────
         # LAYER 3: ROUTING
         # ─────────────────────────────────────────────

@@ -25,6 +25,15 @@ pytestmark = pytest.mark.unit
 
 SAFE = '{"category": "safe_defensive", "confidence": 0.95, "reason": "hardening"}'
 UNSAFE = '{"category": "unsafe_offensive", "confidence": 0.93, "reason": "exploit/attack"}'
+AMBIGUOUS = '{"category": "ambiguous", "confidence": 0.55, "reason": "unclear/non-security"}'
+
+# Gerçek Layer-1 LLM gibi davranan fake: net güvenlik-DIŞI konular (hava/math/eğlence) →
+# 'ambiguous'; diğer her şey → safe_defensive. (Canlıda "6x7?" → ambiguous, "rdp" →
+# safe_defensive gözlemlendi.) Böylece semantik kapsam-override'ı gerçekçi test edilir.
+_OOS_MARKERS = (
+    "hava durumu", "hava nasıl", "2+2", "kaç eder", "film", "masal", "şiir",
+    "resim çiz", "hikaye", "müzik", "yemek", "tatil", "futbol",
+)
 
 INFO_ANSWER = (
     "SSH güvenliği için PermitRootLogin no ayarlanır, anahtar tabanlı kimlik doğrulama "
@@ -41,6 +50,12 @@ def fake_ultra(verdict):
     def _f(_prompt, **_kw):
         return verdict
     return _f
+
+
+def smart_ultra(_prompt, **_kw):
+    """Gerçekçi safety fake: güvenlik-dışı işaretçi varsa ambiguous, yoksa safe_defensive."""
+    p = _prompt.lower()
+    return AMBIGUOUS if any(m in p for m in _OOS_MARKERS) else SAFE
 
 
 def fake_small(_prompt, **_kw):
@@ -89,9 +104,9 @@ class FakeVerifier:
 
 @pytest.fixture(scope="module")
 def safe_pipeline():
-    """Gerçek intent detector + güvenli safety + RAG yok."""
+    """Gerçek intent detector + gerçekçi safety (smart_ultra) + RAG yok."""
     return SecurePipelineV2(
-        llm_ultra_fast=fake_ultra(SAFE), llm_small=fake_small,
+        llm_ultra_fast=smart_ultra, llm_small=fake_small,
         llm_large=fake_large, rag_builder=None, debug=False,
     )
 
@@ -178,6 +193,25 @@ class TestRouteFidelity:
             assert "3B" in res.layer_path
         finally:
             safe_pipeline.intent_detector = orig
+
+    @pytest.mark.parametrize("q", [
+        "rdp kuralları",
+        "remote desktop protokol soruları",
+        "rdp nla nasıl zorunlu kılınır",
+    ])
+    def test_security_topic_rescued_from_out_of_scope(self, safe_pipeline, q):
+        # KEYWORD WHACK-A-MOLE DEĞİL: intent detector "rdp"yi tanımayıp out_of_scope
+        # diyebilir, ama Layer-1 safety safe_defensive dediği için SEMANTİK override bunu
+        # kurtarır → 3B (info). RDP ilan edilen kapsamda ("SSH, RDP, Firewall hardening").
+        res = safe_pipeline.run(RequestContext(user_question=q))
+        assert "OUT_OF_SCOPE" not in res.layer_path, f"{q!r} → {res.layer_path}"
+        assert res.success
+
+    def test_non_security_still_out_of_scope_despite_override(self, safe_pipeline):
+        # Override yalnız safe_defensive/educational'da çalışır; 'ambiguous' (math/hava)
+        # KORUNUR → out_of_scope. (smart_ultra "kaç eder" → ambiguous döner.)
+        res = safe_pipeline.run(RequestContext(user_question="2+2 kaç eder"))
+        assert "OUT_OF_SCOPE" in res.layer_path, f"→ {res.layer_path}"
 
 
 # ════════════════════════════════════════════════════════════════════════════

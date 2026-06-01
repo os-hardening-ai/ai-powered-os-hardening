@@ -153,6 +153,11 @@ class HybridIntentDetector:
     # SECURITY KEYWORDS (güvenlik sinyali — düşük-güven emniyet ağında kullanılır)
     # ═════════════════════════════════════════════
 
+    # NOT: Bu liste yalnızca HIZLI bir buluşsaldır (ML'siz, ekstra LLM call'sız). Eksik
+    # terimler (örn. "rdp") burada AÇIK DEĞİL — kapsam kararının TEK dayanağı bu değildir.
+    # Asıl emniyet/domain sinyali Layer-1 LLM safety kategorisidir (safe_defensive/
+    # safe_educational); secure_v2 düşük-güvenli out_of_scope'u o semantik sinyalle ezer.
+    # Bu sayede listeye sonsuza dek keyword eklemek (whack-a-mole) gerekmez.
     SECURITY_KEYWORDS = [
         "güvenlik", "security", "hardening", "sıkılaştır", "firewall", "ufw", "ssh",
         "sshd", "iptables", "selinux", "apparmor", "audit", "auditd", "parola", "password",
