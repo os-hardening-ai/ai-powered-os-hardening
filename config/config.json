@@ -54,9 +54,9 @@
       "hyde": true,
       "stepback": true,
       "max_subqueries": 2,
-      "use_claim_verification": false,
+      "use_claim_verification": true,
       "min_verification_confidence": 0.6,
-      "max_verification_claims": 1,
+      "max_verification_claims": 3,
       "use_filter_agent": true
     },
     "source_documents": [
