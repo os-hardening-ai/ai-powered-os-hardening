@@ -50,27 +50,43 @@ class RuleEngine:
         _logger.info("[RuleEngine] Loaded %d rules from %s", len(self._rules), self._path.name)
 
     def detect_conflicts(self, rule_ids: List[str]) -> List[RuleConflict]:
-        """Find rules that write to the same config files or manage the same kernel module."""
+        """GERÇEK çakışmaları bulur — iki kuralın AYNI ayarı FARKLI değere set etmesi.
+
+        ÖNEMLİ: Aynı config dosyasına farklı ayar EKLEYEN kurallar çakışma DEĞİLDİR
+        (örn. sshd_config'e biri PermitRootLogin biri PasswordAuthentication ekler →
+        birlikte yaşar, yalnız uygulama sırası önemli → bkz. detect_order_notes).
+        Gerçek çakışma = aynı sshd_directive'e farklı expected_value, ya da aynı kernel
+        modülünü yöneten 2+ kural. Bu, /etc/modprobe.d'yi paylaşan ama FARKLI modülleri
+        ele alan onlarca bağımsız kuralın yarattığı yanlış-pozitif gürültüyü ortadan kaldırır.
+        """
         self._ensure_loaded()
         conflicts: List[RuleConflict] = []
         selected = [self._rules[rid] for rid in rule_ids if rid in self._rules]
 
-        # Config file overlap
-        config_map: Dict[str, List[str]] = {}
+        # 1) Config dosyası: yalnız AYNI direktife FARKLI değer → gerçek çelişki
+        config_map: Dict[str, List[dict]] = {}
         for rule in selected:
             for cf in rule.get("config_files", []):
-                config_map.setdefault(str(cf), []).append(rule["id"])
+                config_map.setdefault(str(cf), []).append(rule)
 
-        for resource, rids in config_map.items():
-            for i in range(len(rids)):
-                for j in range(i + 1, len(rids)):
-                    conflicts.append(RuleConflict(
-                        rule_a=rids[i], rule_b=rids[j],
-                        conflict_type="config_file", resource=resource,
-                        description=f"Both rules modify '{resource}'",
-                    ))
+        for resource, grp in config_map.items():
+            for i in range(len(grp)):
+                for j in range(i + 1, len(grp)):
+                    a, b = grp[i], grp[j]
+                    da, db = a.get("sshd_directive"), b.get("sshd_directive")
+                    if da and db and da == db:
+                        va, vb = str(a.get("expected_value")), str(b.get("expected_value"))
+                        if va != vb:
+                            conflicts.append(RuleConflict(
+                                rule_a=a["id"], rule_b=b["id"],
+                                conflict_type="config_file", resource=resource,
+                                description=(
+                                    f"Both set directive '{da}' in '{resource}' to "
+                                    f"different values ({va} vs {vb})"
+                                ),
+                            ))
 
-        # Kernel module overlap
+        # 2) Kernel modülü: AYNI modülü 2+ kural yönetiyorsa gerçek çelişki adayı
         mod_map: Dict[str, List[str]] = {}
         for rule in selected:
             mod = rule.get("kernel_module")
@@ -91,6 +107,33 @@ class RuleEngine:
                         ))
 
         return conflicts
+
+    def detect_order_notes(self, rule_ids: List[str]) -> List[str]:
+        """Aynı config dosyasını değiştiren (çakışmayan) kurallar için SIRA NOTU üretir.
+
+        Çakışma DEĞİL — yalnız 'bu kurallar aynı dosyaya yazıyor, CIS sırasına göre
+        uygula' bilgisidir. Kaynak başına TEK satıra toplanır (çift-çift gürültü yok).
+        Kernel modülü kuralları (modprobe.d altında AYRI dosyalara yazar) bağımsızdır,
+        sıra notu üretmez.
+        """
+        self._ensure_loaded()
+        config_map: Dict[str, List[str]] = {}
+        for rid in rule_ids:
+            rule = self._rules.get(rid)
+            if not rule or rule.get("kernel_module"):
+                continue
+            for cf in rule.get("config_files", []):
+                config_map.setdefault(str(cf), []).append(rid)
+
+        notes: List[str] = []
+        for resource, rids in config_map.items():
+            if len(rids) > 1:
+                ordered = self.resolve_order(rids)
+                notes.append(
+                    f"{len(ordered)} kural '{resource}' dosyasını değiştiriyor "
+                    f"({', '.join(ordered)}) — CIS sırasına göre uygulanır; çakışma değil."
+                )
+        return notes
 
     def resolve_order(self, rule_ids: List[str]) -> List[str]:
         """Sort rules by CIS section number (topological order via numeric key)."""
@@ -113,10 +156,11 @@ class RuleEngine:
         ordered = self.resolve_order(rule_ids)
         conflicts = self.detect_conflicts(rule_ids)
         warnings = [
-            f"Rules {c.rule_a} and {c.rule_b} both modify '{c.resource}' "
-            f"({c.conflict_type}) — review order before applying"
+            f"ÇAKIŞMA: {c.rule_a} ↔ {c.rule_b} — {c.description}"
             for c in conflicts
         ]
+        # Sıra notları (çakışma değil) — açıkça etiketlenir, çakışmadan ayrı.
+        warnings += [f"Sıra notu: {n}" for n in self.detect_order_notes(rule_ids)]
         return ExecutionPlan(ordered_rules=ordered, conflicts=conflicts, warnings=warnings)
 
     def get_rule(self, rule_id: str) -> Optional[dict]:

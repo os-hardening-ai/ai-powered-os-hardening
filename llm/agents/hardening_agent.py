@@ -154,6 +154,15 @@ class HardeningAgent:
                     f"Tehlikeli komut içeren {len(dangerous_ids)} kural çıkarıldı, yeniden üretiliyor: {sorted(dangerous_ids)}",
                 ))
                 if not selected_ids:
+                    # Tüm kurallar tehlikeli çıktı → uygulanabilir güvenli kural kalmadı.
+                    # Önceki iterasyonun TEHLİKELİ artifact'ını DÖNDÜRME (güvenlik): temizle.
+                    artifact = self.artifact_generator.generate([], fmt, os_target, security_level)
+                    steps.append(AgentStep(
+                        "verify", "OutputValidator",
+                        "tüm kurallar tehlikeli komut içeriyordu → güvenli script üretilemedi",
+                        ok=False,
+                    ))
+                    validation = None
                     break
 
         success = bool(artifact and artifact.rule_count > 0 and validation and validation.is_valid)
@@ -189,9 +198,15 @@ class HardeningAgent:
         return bad
 
     def _summarize(self, goal: str, plan: HardeningPlan, artifact: Optional[Artifact], success: bool) -> str:
+        # GERÇEK final kural sayısı = üretilen artifact'ınki (refine'da tehlikeli kural
+        # çıkarılmış olabilir → plan.items'tan farklı). Özet plan'ı değil ÜRETİLENİ yansıtır.
+        final_count = artifact.rule_count if artifact else len(plan.items)
+        removed = len(plan.items) - final_count
+        removed_note = f" ({removed} kural güvenlik nedeniyle çıkarıldı)" if removed > 0 else ""
         base = (
-            f"'{goal}' hedefi için {len(plan.items)} kurallı bir {artifact.format if artifact else '?'} "
-            f"sıkılaştırma planı üretildi ve {'doğrulandı' if success else 'doğrulama uyarıları içeriyor'}."
+            f"'{goal}' hedefi için {final_count} kurallı bir {artifact.format if artifact else '?'} "
+            f"sıkılaştırma planı üretildi{removed_note} ve "
+            f"{'doğrulandı' if success else 'doğrulama uyarıları içeriyor'}."
         )
         if not self.llm:
             return base
@@ -200,7 +215,8 @@ class HardeningAgent:
                 "Aşağıdaki sıkılaştırma planını 1-2 cümleyle, yöneticiye uygun dilde özetle. "
                 "Sadece özet metni döndür.\n\n"
                 f"Hedef: {goal}\nOS: {plan.os_target}\nSeviye: {plan.security_level}\n"
-                f"Kural sayısı: {len(plan.items)}\nÇakışma: {len(plan.conflicts)}\n"
+                f"Üretilen kural sayısı: {final_count}{removed_note}\n"
+                f"Çakışma: {len(plan.conflicts)}\n"
                 f"Doğrulama: {'başarılı' if success else 'uyarılı'}"
             )
             out = self.llm(prompt).strip()

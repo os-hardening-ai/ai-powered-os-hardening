@@ -3,6 +3,7 @@ Pytest Configuration and Shared Fixtures
 AI-Powered OS Hardening Test Suite
 """
 
+import os
 import pytest
 import sys
 from pathlib import Path
@@ -10,6 +11,10 @@ from fastapi.testclient import TestClient
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+# Intent sınıflandırıcı testlerde TF-IDF (AĞSIZ, deterministik). Üretim varsayılanı
+# embedding router; onun kendi ağsız testi sahte embedder ile test_embedding_router.py'de.
+os.environ.setdefault("INTENT_ROUTER", "tfidf")
 
 
 @pytest.fixture(scope="session")

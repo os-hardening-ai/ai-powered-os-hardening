@@ -34,7 +34,7 @@ from llm.pipelines.layers.info_pipeline import InfoPipeline, InfoQueryResult
 from llm.pipelines.layers.action_pipeline import ActionPipeline, ActionQueryResult
 from llm.core.config import CONFIG
 from log_manager import get_logger
-from prometheus_metrics import layer_timer, record_query, record_rejection
+from prometheus_metrics import layer_timer, record_query, record_rejection, record_query_outcome
 from llm.clients import token_tracker
 
 _pipeline_logger = get_logger("pipeline_metrics")
@@ -311,6 +311,15 @@ class SecurePipelineV2:
             output_tokens=0,
         )
 
+        # Per-query end-to-end sinyalleri (gecikme + maliyet + RAG groundedness).
+        # Hepsi metadata'da zaten hesaplanmış → ek hesaplama yok, sadece observe/inc.
+        record_query_outcome(
+            intent=intent.type,
+            total_time_s=result.total_time_s,
+            estimated_cost=result.estimated_cost,
+            verification_confidence=result.metadata.get("verification_confidence"),
+        )
+
         # Log pipeline metrics
         rag_used = result.metadata.get("rag_used", False)
         rag_chunks = result.metadata.get("rag_chunks", 0)
@@ -350,7 +359,11 @@ class SecurePipelineV2:
 
         start_time = datetime.now()
 
-        pattern_result = self.pattern_handler.handle(ctx.user_question)
+        # Intent'in subtype'ını geçir → LocalResponder eşleşmese bile garantili canned
+        # smalltalk yanıtı (naber/teşekkürler gibi girdiler 3B'ye düşmesin).
+        pattern_result = self.pattern_handler.handle(
+            ctx.user_question, subtype=getattr(intent, "subtype", None)
+        )
 
         if not pattern_result:
             # Fallback: If pattern matching fails, use info pipeline

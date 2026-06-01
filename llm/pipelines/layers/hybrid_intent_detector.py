@@ -18,6 +18,7 @@ Benefits:
 from __future__ import annotations
 from typing import Literal, Optional
 from dataclasses import dataclass
+import os
 import re
 
 # Import ML detector
@@ -86,12 +87,12 @@ class HybridIntentDetector:
 
     SMALLTALK_PATTERNS = {
         "greeting": [
-            r'^\s*(merhaba|selam|hi|hello|hey|günaydın|iyi\s*günler)\s*[!?.]?\s*$',
-            r'^\s*(nasılsın|nasılsınız|how\s*are\s*you)\s*[?]?\s*$',
-            r'^\s*(hey\s*there|hi\s*there|hoşgeldin)\s*[!]?\s*$',
+            r'^\s*(merhaba(?:lar)?|selam(?:lar)?|slm|sa|hi|hello|hey|günaydın|iyi\s*günler|iyi\s*akşamlar)\s*[!?.]?\s*$',
+            r'^\s*(nasılsın|nasılsınız|how\s*are\s*you|naber|n[\'’]?aber|nbr|ne\s*haber|naptın|napıyorsun|napıyon|nasıl\s*gidiyor|iyi\s*misin)\s*[?!.]*\s*$',
+            r'^\s*(hey\s*there|hi\s*there|hoşgeldin|hoş\s*geldin)\s*[!]?\s*$',
         ],
         "farewell": [
-            r'^\s*(görüşürüz|hoşça\s*kal|hoşçakal|bye|güle\s*güle|elveda)\s*[!.]?\s*$',
+            r'^\s*(görüşürüz|hoşça\s*kal|hoşçakal|bay\s*bay|baybay|bb|bye|güle\s*güle|elveda)\s*[!.]?\s*$',
             r'^\s*(kendine\s*iyi\s*bak|take\s*care|see\s*you)\s*[!.]?\s*$',
         ],
         "thanks": [
@@ -101,6 +102,26 @@ class HybridIntentDetector:
         "help": [
             r'^\s*(yardım|help|destek|support|assist)\s*[?!]?\s*$',
             r'^\s*(sana\s*bir\s*sorum\s*var|can\s*you\s*help)\s*[?]?\s*$',
+        ],
+    }
+
+    # Lexicon (kök kelimeler) — anchored pattern'i KAÇIRAN ekli/çok-kelimeli selamlamaları
+    # yakalamak için. Yalnız KISA mesajda (<=5 kelime) ve GÜVENLİK sinyali YOKKEN uygulanır
+    # ("merhaba ssh'i sıkılaştır" → güvenlik kelimesi var → smalltalk DEĞİL). TF-IDF ML bunlarda
+    # zayıf olduğundan selamlama/veda/teşekkür burada deterministik yakalanır.
+    SMALLTALK_LEXICON = {
+        "greeting": [
+            "merhaba", "selam", "naber", "ne haber", "napt", "napıyor", "nbr", "günaydın",
+            "iyi günler", "iyi akşamlar", "iyi geceler", "nasılsın", "nasıl gidiyor",
+            "hoş geldin", "hoşgeldin", "selamün", "iyi misin", "iyi sabahlar",
+        ],
+        "farewell": [
+            "görüşürüz", "hoşça kal", "hoşçakal", "baybay", "bay bay", "kendine iyi bak",
+            "güle güle", "elveda", "görüşmek üzere", "allahaısmarladık", "selametle",
+        ],
+        "thanks": [
+            "teşekkür", "sağ ol", "sağol", "minnettar", "eline sağlık", "ellerine sağlık",
+            "eyvallah", "makbule geçti", "emeğine sağlık",
         ],
     }
 
@@ -129,6 +150,18 @@ class HybridIntentDetector:
     ]
 
     # ═════════════════════════════════════════════
+    # SECURITY KEYWORDS (güvenlik sinyali — düşük-güven emniyet ağında kullanılır)
+    # ═════════════════════════════════════════════
+
+    SECURITY_KEYWORDS = [
+        "güvenlik", "security", "hardening", "sıkılaştır", "firewall", "ufw", "ssh",
+        "sshd", "iptables", "selinux", "apparmor", "audit", "auditd", "parola", "password",
+        "vulnerability", "zafiyet", "cis", "nist", "iso", "zero trust", "permission",
+        "izin", "kernel", "modül", "module", "port", "tls", "ssl", "cipher", "sudo",
+        "root", "login", "pam", "fail2ban", "umask", "benchmark", "policy", "politika",
+    ]
+
+    # ═════════════════════════════════════════════
     # ACTION IMPERATIVE PATTERNS
     # ═════════════════════════════════════════════
 
@@ -143,7 +176,8 @@ class HybridIntentDetector:
         self,
         ml_detector: Optional[MLIntentDetector] = None,
         use_ml: bool = True,
-        debug: bool = False
+        debug: bool = False,
+        use_embedding_router: Optional[bool] = None,
     ):
         """
         Initialize hybrid intent detector
@@ -156,18 +190,41 @@ class HybridIntentDetector:
         self.debug = debug
         self.use_ml = use_ml and ML_AVAILABLE
         self.ml_detector = ml_detector
+        self.classifier_backend = "tfidf"
 
-        # Try to load ML models if not provided
+        # Sınıflandırıcı backend: param > env (INTENT_ROUTER=embedding|tfidf) > varsayılan TF-IDF.
+        # KANIT (scripts/evaluate_intent_router.py, 44 etiketli örnek, gerçek Novita):
+        #   TF-IDF %93.2 / ~0.5ms   vs   embedding %75.0 / ~600-1300ms (p95 ~6s).
+        # Embedding kosinüsü KONUYU yakalıyor ama info↔action KİP farkını ("nedir" vs "kapat")
+        # yakalayamıyor + her sorguda canlı embed çağrısı = gecikme. Bu yüzden varsayılan TF-IDF.
+        # Embedding router opt-in deneysel kalır (INTENT_ROUTER=embedding).
+        if use_embedding_router is None:
+            use_embedding_router = os.environ.get("INTENT_ROUTER", "tfidf").lower() == "embedding"
+
+        if self.use_ml and self.ml_detector is None and use_embedding_router:
+            try:
+                from llm.ml.embedding_router import EmbeddingIntentRouter
+                self.ml_detector = EmbeddingIntentRouter(debug=debug)
+                self.classifier_backend = "embedding"
+                if self.debug:
+                    print("[HybridIntentDetector] Embedding router aktif (semantic similarity)")
+            except Exception as e:
+                if self.debug:
+                    print(f"[HybridIntentDetector] Embedding router kurulamadı, TF-IDF'e düşülüyor: {e}")
+
+        # Embedding router yoksa eski TF-IDF ML'i yükle (fallback / INTENT_ROUTER=tfidf)
         if self.use_ml and self.ml_detector is None:
             try:
                 self.ml_detector = MLIntentDetector(debug=False)
                 self.ml_detector.load_models()
+                self.classifier_backend = "tfidf"
                 if self.debug:
-                    print("[HybridIntentDetector] ML models loaded successfully")
+                    print("[HybridIntentDetector] TF-IDF ML models loaded successfully")
             except Exception as e:
                 print(f"[HybridIntentDetector] Warning: Could not load ML models: {e}")
                 print("[HybridIntentDetector] Falling back to pattern-only mode")
                 self.use_ml = False
+                self.classifier_backend = "none"
 
         self.stats = {
             "total": 0,
@@ -200,22 +257,14 @@ class HybridIntentDetector:
         q_lower = q_stripped.lower()
 
         # ─────────────────────────────────────────
-        # Step 1: Check smalltalk patterns (FAST)
+        # Step 1: Smalltalk (pattern + lexicon, ML'siz / deterministik / hızlı)
         # ─────────────────────────────────────────
-        for subtype, patterns in self.SMALLTALK_PATTERNS.items():
-            for pattern in patterns:
-                if re.search(pattern, q_lower, re.IGNORECASE):
-                    self.stats["pattern_used"] += 1
-
-                    if self.debug:
-                        print(f"[HybridIntent] Pattern match: {subtype} ('{pattern}')")
-
-                    return HybridIntent(
-                        type="smalltalk",
-                        subtype=subtype,
-                        confidence=1.0,
-                        method="pattern"
-                    )
+        st = self._smalltalk_subtype(q_lower)
+        if st:
+            self.stats["pattern_used"] += 1
+            if self.debug:
+                print(f"[HybridIntent] Smalltalk: {st}")
+            return HybridIntent(type="smalltalk", subtype=st, confidence=1.0, method="pattern")
 
         # ─────────────────────────────────────────
         # Step 2: Check out-of-scope keywords (FAST)
@@ -224,11 +273,7 @@ class HybridIntentDetector:
 
         if out_of_scope_matches:
             # Check if security keywords also present
-            security_keywords = [
-                "güvenlik", "security", "hardening", "firewall", "ssh",
-                "vulnerability", "zafiyet", "cis", "nist"
-            ]
-            has_security = any(kw in q_lower for kw in security_keywords)
+            has_security = any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
 
             if not has_security:
                 self.stats["pattern_used"] += 1
@@ -255,6 +300,16 @@ class HybridIntentDetector:
                 # Map ML intents to our intent types
                 intent_type = self._map_ml_intent(ml_result.type)
                 subtype = self._get_subtype(ml_result.type)
+
+                # GUARD: ML "smalltalk" dese bile sorguda GÜVENLİK sinyali varsa bu yanlıştır.
+                # (Gerçek smalltalk Step-1 pattern/lexicon'da zaten yakalanırdı; buraya geldiyse
+                # ve güvenlik kelimesi varsa TF-IDF "merhaba/selam" token'ına aldanmış demektir →
+                # "merhaba ssh nasıl sıkılaştırılır" greeting DEĞİL.) imperative varsa action, yoksa info.
+                if intent_type == "smalltalk" and any(kw in q_lower for kw in self.SECURITY_KEYWORDS):
+                    if self.debug:
+                        print("[HybridIntent] ML smalltalk + güvenlik sinyali → override (info/action)")
+                    intent_type = "action_request" if self._check_imperative_patterns(q_lower) else "info_request"
+                    subtype = None
 
                 # High confidence - use ML directly
                 if ml_result.confidence >= self.ML_HIGH_CONFIDENCE:
@@ -305,9 +360,28 @@ class HybridIntentDetector:
 
                     pattern_result = self._pattern_fallback(q_lower)
 
-                    if pattern_result:
+                    # DOMAIN-GATE: pattern_fallback imperatif "yaz/üret" görünce action_request
+                    # döndürür ama bu DOMAIN-BAĞIMSIZdır ("bana şiir yaz" → action). Domain-scoped
+                    # asistanda (best practice: ayrı domain gate) güvenlik sinyali yoksa bu girdi
+                    # KAPSAM DIŞIdır. Düşük ML güveni zaten "tanıdık güvenlik sorusu değil" sinyali.
+                    has_security = any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
+                    if pattern_result and has_security:
                         self.stats["hybrid_used"] += 1
                         return pattern_result
+
+                    # Emniyet ağı (C): ML çok kararsız VE sorguda güvenlik sinyali yoksa,
+                    # zayıf info/action tahminine GÜVENME → kibar red. ("ne haber" gibi
+                    # tanınmayan chitchat'in güvenlik cevabına sızmasını engeller.)
+                    if intent_type in ("info_request", "action_request") and not has_security:
+                        if self.debug:
+                            print("[HybridIntent] Düşük güven + güvenlik sinyali yok → out_of_scope (emniyet)")
+                        self.stats["ml_used"] += 1
+                        return HybridIntent(
+                            type="out_of_scope",
+                            confidence=ml_result.confidence,
+                            method="lowconf_safety",
+                            ml_probabilities=ml_result.probabilities,
+                        )
 
                     # Last resort: use ML result anyway but mark as low confidence
                     self.stats["ml_used"] += 1
@@ -339,6 +413,25 @@ class HybridIntentDetector:
             confidence=0.5,
             method="default"
         )
+
+    def _smalltalk_subtype(self, q_lower: str) -> Optional[str]:
+        """Smalltalk alt-türü (greeting/farewell/thanks/help) ya da None — ML'siz, deterministik.
+        1) Anchored pattern (tam eşleşme). 2) Kısa mesaj (<=5 kelime) + lexicon + güvenlik-yok."""
+        for subtype, patterns in self.SMALLTALK_PATTERNS.items():
+            for pattern in patterns:
+                if re.search(pattern, q_lower, re.IGNORECASE):
+                    return subtype
+        words = q_lower.split()
+        if (
+            len(words) <= 4
+            and "?" not in q_lower
+            and not any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
+            and not any(kw in q_lower for kw in self.OUT_OF_SCOPE_KEYWORDS)
+        ):
+            for subtype, stems in self.SMALLTALK_LEXICON.items():
+                if any(stem in q_lower for stem in stems):
+                    return subtype
+        return None
 
     def _map_ml_intent(self, ml_intent: str) -> IntentType:
         """Map ML intent to our IntentType"""
@@ -403,6 +496,34 @@ class HybridIntentDetector:
             "pattern_rate": self.stats["pattern_used"] / self.stats["total"],
             "hybrid_rate": self.stats["hybrid_used"] / self.stats["total"],
         }
+
+
+def is_smalltalk(text: str) -> bool:
+    """
+    Hızlı/deterministik: metin bir smalltalk pattern'ine (selam/naber/teşekkür/veda/yardım)
+    uyuyor mu? ML YOK — yalnız regex. QueryRewriter'ın greeting'i güvenlik sorusuna yeniden
+    yazmasını engellemek için pipeline ÖNCESİNDE kullanılır (multi-turn fix).
+    """
+    ql = (text or "").strip().lower()
+    if not ql:
+        return False
+    for patterns in HybridIntentDetector.SMALLTALK_PATTERNS.values():
+        for p in patterns:
+            if re.search(p, ql, re.IGNORECASE):
+                return True
+    # Kısa mesaj (<=4 kelime) + lexicon + '?' yok + güvenlik/oos sinyali yok → smalltalk
+    # (ekli/çok-kelimeli selamlamalar; "merhaba hava durumu nasıl" gibi oos önekini DIŞLAR)
+    words = ql.split()
+    if (
+        len(words) <= 4
+        and "?" not in ql
+        and not any(kw in ql for kw in HybridIntentDetector.SECURITY_KEYWORDS)
+        and not any(kw in ql for kw in HybridIntentDetector.OUT_OF_SCOPE_KEYWORDS)
+    ):
+        for stems in HybridIntentDetector.SMALLTALK_LEXICON.values():
+            if any(stem in ql for stem in stems):
+                return True
+    return False
 
 
 # Convenience function

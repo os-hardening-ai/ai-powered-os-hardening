@@ -1237,7 +1237,6 @@ Günaydın dostlar,greeting
 Selam millet,greeting
 Hey arkadaşlar,greeting
 Herkese merhabalar,greeting
-İyi günler dilerim,greeting
 Gününüz güzel geçsin,greeting
 Kendine iyi bak dostum,farewell
 İyi şanslar,farewell
@@ -1280,7 +1279,6 @@ XSS vulnerability nedir,info_request
 SQL injection nasıl önlenir,info_request
 SIEM nedir açıkla,info_request
 IDS ve IPS farkı,info_request
-Penetration testing nedir,info_request
 Vulnerability assessment nasıl yapılır,info_request
 Security audit checklist,info_request
 Compliance requirements neler,info_request
@@ -1288,7 +1286,6 @@ GDPR nedir açıkla,info_request
 PCI DSS standartları,info_request
 ISO 27001 nedir,info_request
 NIST framework açıkla,info_request
-CIS controls nedir,info_request
 Debian firewall kuralı ekle,action_request
 CentOS SSH config hardening script,action_request
 RHEL password policy ayarla,action_request
@@ -1331,16 +1328,12 @@ Telefon modeli öner,out_of_scope
 Oyun önerisi ver,out_of_scope
 Netflix dizi tavsiyesi,out_of_scope
 YouTube video öner,out_of_scope
-Instagram gönderisi,out_of_scope
-Twitter trending,out_of_scope
 Aşk hayatı tavsiyesi,out_of_scope
 İlişki önerisi ver,out_of_scope
-Sağlık tavsiyesi,out_of_scope
 Diyet programı öner,out_of_scope
 Fitness egzersizi,out_of_scope
 Burç yorumu yap,out_of_scope
 Tarot falı bak,out_of_scope
-Rüya tabiri,out_of_scope
 Kahve falı oku,out_of_scope
 Crystal healing,out_of_scope
 Meditation techniques,out_of_scope
@@ -1368,7 +1361,6 @@ TLS certificate nasıl kurulur,info_request
 PKI infrastructure nedir,info_request
 Certificate authority açıkla,info_request
 Digital signature nasıl çalışır,info_request
-Encryption at rest nedir,info_request
 VPN tunnel configuration,info_request
 IPSec protokolü nedir,info_request
 OpenVPN setup guide,info_request
@@ -1409,7 +1401,6 @@ ARM template Azure security,action_request
 Helm chart security values,action_request
 Kustomize overlay security,action_request
 ArgoCD application security,action_request
-Matematik problemi çöz,out_of_scope
 Fizik sorusu sor,out_of_scope
 Kimya deneyi,out_of_scope
 Biyoloji konusu,out_of_scope
@@ -1530,7 +1521,6 @@ Timeout settings optimization,action_request
 Connection pooling security,action_request
 DNS security configuration,action_request
 DNSSEC implementation,action_request
-Zero trust nedir açıklar mısın,info_request
 Zero trust modelini anlatır mısın,info_request
 Bana zero trust hakkında bilgi ver,info_request
 Zero trust mimarisini öğrenmek istiyorum,info_request
@@ -1554,7 +1544,6 @@ MFA hakkında bilgi verir misin,info_request
 SSL/TLS nedir açıkla,info_request
 TLS protokolünü anlat bana,info_request
 SSL sertifikası hakkında bilgi ver,info_request
-TLS handshake nasıl olur,info_request
 SSL/TLS farkını söyler misin,info_request
 VPN nedir açıklar mısın,info_request
 VPN nasıl çalışır anlat,info_request
@@ -1641,7 +1630,6 @@ Selam işler nasıl,greeting
 Hey ne haber,greeting
 Günaydın nasılsınız,greeting
 İyi günler arkadaşlar,greeting
-Selamlar herkese,greeting
 Merhaba dostlar,greeting
 Hey millet nasılsınız,greeting
 Selam ekip,greeting
@@ -1671,8 +1659,472 @@ Yardıma ihtiyacım var acil,help
 Destek gerekli bana,help
 Help me please yardım et,help
 Assistance lazım hemen,help
-Yardımcı olur musun,help
 Support gerekiyor acil,help
 Takıldım yardım lazım,help
 Problem var çözemiyorum yardım,help
 Desteğe ihtiyacım var,help
+selam!,greeting
+slm,greeting
+slm.,greeting
+sa,greeting
+s.a,greeting
+selamünaleyküm,greeting
+merhaba!,greeting
+merhaba.,greeting
+naber?,greeting
+n'aber,greeting
+n'aber?,greeting
+ne haber?,greeting
+nbr,greeting
+nbr?,greeting
+naptın,greeting
+naptın?,greeting
+napıyorsun,greeting
+napıyorsun?,greeting
+napıyon,greeting
+napıyon?,greeting
+naptın bakalım,greeting
+Nasılsın?,greeting
+nasılsın bakalım,greeting
+nasıl gidiyor,greeting
+nasıl gidiyor?,greeting
+iyi misin,greeting
+iyi misin?,greeting
+günaydın!,greeting
+iyi akşamlar,greeting
+iyi akşamlar!,greeting
+iyi geceler,greeting
+hoş geldin,greeting
+hey!,greeting
+heyo,greeting
+heyoo,greeting
+kanka naber,greeting
+kanka naber?,greeting
+selam dostum!,greeting
+hey nasılsın,greeting
+hey nasılsın?,greeting
+selam kanka,greeting
+merhaba dostum,greeting
+naber kanka,greeting
+iyi günler,greeting
+iyi günler!,greeting
+selam arkadaşlar,greeting
+ne var ne yok?,greeting
+nasıl gidiyor hayat,greeting
+naptınız,greeting
+napıyorsunuz,greeting
+günaydınlar,greeting
+hey dostum,greeting
+selam usta,greeting
+merhaba usta,greeting
+naber dostum,greeting
+iyi sabahlar,greeting
+yine merhaba,greeting
+selam tekrar,greeting
+Hoşça kalın,farewell
+Baybay,farewell
+Bay bay,farewell
+Bay,farewell
+Çıkıyorum görüşürüz,farewell
+Kapatıyorum,farewell
+Bb,farewell
+Hadi görüşürüz,farewell
+Görüşürüz hadi,farewell
+Tamam görüşürüz,farewell
+Eyvallah kapatıyorum,farewell
+İyi çalışmalar görüşürüz,farewell
+Ben kaçtım görüşürüz,farewell
+Hadi bay bay,farewell
+Görüşürüz kolay gelsin,farewell
+Kolay gelsin hoşça kal,farewell
+İyi akşamlar görüşürüz,farewell
+İyi geceler görüşürüz,farewell
+Görüşürüz iyi geceler,farewell
+Eyvallah hadi görüşürüz,farewell
+Sonra konuşuruz görüşürüz,farewell
+Çıkıyorum kendine iyi bak,farewell
+Kapatıyorum görüşürüz,farewell
+Ben gidiyorum görüşürüz,farewell
+Gidiyorum hoşça kal,farewell
+Tekrar görüşmek üzere,farewell
+Sonraki sefere görüşürüz,farewell
+Hadi kapatalım görüşürüz,farewell
+İyi günler görüşürüz,farewell
+Eyvallah iyi günler,farewell
+Sağ ol görüşürüz,farewell
+Teşekkürler görüşürüz,farewell
+Teşekkürler hoşça kal,farewell
+Görüşürüz dostum,farewell
+Hoşça kal kendine iyi bak,farewell
+Bay bay görüşürüz,farewell
+Çıkış yapıyorum görüşürüz,farewell
+Oturumu kapatıyorum görüşürüz,farewell
+Ben kaçar görüşürüz,farewell
+Hadi bana eyvallah,farewell
+Görüşürüz birazdan,farewell
+İyi tatiller görüşürüz,farewell
+Mutlu günler görüşürüz,farewell
+Selametle kal,farewell
+Hadi kendine iyi bak,farewell
+Görüşürüz o zaman,farewell
+Tamamdır görüşürüz,farewell
+Kapanıyorum görüşürüz,farewell
+çok teşekkür ederim,thanks
+sağ olun,thanks
+çok makbule geçti,thanks
+eline sağlık,thanks
+harika oldu teşekkürler,thanks
+çok yardımcı oldun sağ ol,thanks
+valla sağ ol,thanks
+teşekkürler çok işime yaradı,thanks
+sağ ol dostum,thanks
+teşekkür ederim çok açıklayıcıydı,thanks
+mükemmel oldu teşekkür ederim,thanks
+harika anlattın sağ ol,thanks
+çok sağ ol gerçekten,thanks
+eyvallah kardeşim,thanks
+teşekkürler bu sıkılaştırma adımları çok net oldu,thanks
+sağ olasın,thanks
+ellerine sağlık,thanks
+çok teşekkürler kurtardın,thanks
+teşekkür ederim hocam,thanks
+valla eline sağlık,thanks
+süper açıklama oldu teşekkürler,thanks
+çok net oldu sağ ol,thanks
+teşekkürler harika çalışıyor,thanks
+çok makbule geçti teşekkür ederim,thanks
+sağ ol be,thanks
+teşekkürler tam istediğim gibi oldu,thanks
+yardımın için teşekkürler,thanks
+yardımın için minnettarım,thanks
+destek için sağ ol,thanks
+açıkladığın için teşekkür ederim,thanks
+çok faydalı oldu teşekkürler,thanks
+teşekkürler problemi çözdün,thanks
+sayende halloldu sağ ol,thanks
+vallahi çok sağ ol,thanks
+süpersin be teşekkürler,thanks
+teşekkürler emeğine sağlık,thanks
+emeğin için teşekkür ederim,thanks
+harikasın teşekkürler,thanks
+çok teşekkür ederim her şey net,thanks
+sağ ol kanka,thanks
+teşekkürler bu kadar detay yeter,thanks
+valla teşekkür ederim,thanks
+çok yardımcı oldun teşekkürler,thanks
+eyvallah çok sağ ol,thanks
+teşekkürler mükemmel açıklama,thanks
+binlerce teşekkür,thanks
+teşekkürler işimi gördü,thanks
+yardım eder misin,help
+ne yapabilirsin,help
+bana nasıl yardımcı olabilirsin,help
+neler yapabiliyorsun,help
+bu sistem ne işe yarar,help
+kullanım kılavuzu var mı,help
+sana ne sorabilirim,help
+nasıl başlarım,help
+özelliklerin neler,help
+beni yönlendirir misin,help
+"merhaba, neler yapabilirsin",help
+bu asistan tam olarak ne işe yarıyor,help
+hangi konularda bana destek olabilirsin,help
+buradan nereye başlamalıyım,help
+"yeni başlıyorum, bana yol gösterir misin",help
+bu araçla neler yapabilirim,help
+kısaca yeteneklerini anlatır mısın,help
+sen ne tür bir asistansın,help
+bana yardımcı olur musun,help
+"elimden tutar mısın, ilk kez kullanıyorum",help
+ne işe yaradığını anlatabilir misin,help
+buraya ne yazabilirim,help
+hangi tür soruları cevaplayabiliyorsun,help
+sana hangi konularda danışabilirim,help
+bu sistemin amacı ne,help
+kullanmaya nasıl başlayacağım,help
+bir rehber ya da kılavuz paylaşır mısın,help
+neler sunuyorsun bana,help
+destek almak istiyorum,help
+yardım menüsünü açar mısın,help
+fonksiyonların neler,help
+bana kısa bir tanıtım yapar mısın,help
+ilk adım olarak ne yapmalıyım,help
+burada nasıl ilerlerim,help
+"kapasiten ne kadar, neler yapabilirsin",help
+"sana ne sorabileceğimi bilmiyorum, yardım eder misin",help
+hangi işlerde işime yararsın,help
+beni biraz yönlendirebilir misin,help
+bu uygulamayı nasıl kullanacağım hakkında bilgi verir misin,help
+sunduğun özellikleri listeler misin,help
+nasıl çalışıyorsun,help
+kullanım için ipucu verir misin,help
+ne tür yardımlar sağlıyorsun,help
+bana baştan anlatır mısın neler yapabildiğini,help
+buradan başlamak için ne önerirsin,help
+"selam, bana nasıl faydalı olabilirsin",help
+tam olarak hangi görevlerde yardımcı oluyorsun,help
+kullanımıyla ilgili genel bilgi alabilir miyim,help
+"menüde neler var, gösterir misin",help
+ne hakkında konuşabiliriz,help
+ne tür sorular sormam beklenir,help
+bana özetle ne yaptığını söyler misin,help
+yardım almak için ne yapmam gerekiyor,help
+hangi alanlarda uzmanlığın var,help
+sistemi tanımam için bana bilgi verir misin,help
+kullanmadan önce ne bilmeliyim,help
+PermitRootLogin ayarı tam olarak nedir ve SSH bağlantılarını nasıl etkiler?,info_request
+"SSH servisi neden sıkılaştırılmalı, varsayılan ayarlar hangi riskleri barındırır?",info_request
+UFW ne işe yarar ve iptables'tan farkı nedir?,info_request
+"SELinux nedir, nasıl bir güvenlik modeli sunar?",info_request
+"auditd arka planda nasıl çalışır, olayları hangi mekanizmayla yakalar?",info_request
+"Parola politikası neden bu kadar önemli, zayıf politikanın sonuçları ne olur?",info_request
+cramfs kernel modülü nedir ve neden CIS tarafından devre dışı bırakılması öneriliyor?,info_request
+CIS Level 1 ile Level 2 profilleri arasındaki temel fark nedir?,info_request
+fail2ban nedir ve brute-force saldırılarını nasıl engeller?,info_request
+"AppArmor tam olarak ne yapar, SELinux'tan ne yönüyle ayrılır?",info_request
+umask değerinin neden 027 olması gerektiğini açıklar mısın?,info_request
+TLS cipher suite seçimi neden güvenlik açısından kritik?,info_request
+/etc/shadow dosyasının izinleri neden bu kadar kısıtlı olmalı?,info_request
+"Zero Trust mimarisi nedir, geleneksel çevre güvenliğinden farkı ne?",info_request
+MFA neden tek başına paroladan daha güvenli kabul ediliyor?,info_request
+Log rotation nedir ve loglar neden döndürülmek zorunda?,info_request
+"sudo yetkileri neden kısıtlanmalı, sınırsız sudo neden tehlikeli?",info_request
+NIST 800-53 çerçevesi nedir ve CIS Benchmark ile ilişkisi nasıl?,info_request
+Kernel modüllerinin yüklenmesini kısıtlamak neden bir sıkılaştırma adımı sayılıyor?,info_request
+"GRUB bootloader parolası ne işe yarar, neden ayarlanması tavsiye ediliyor?",info_request
+ASLR (Address Space Layout Randomization) nedir ve nasıl koruma sağlar?,info_request
+/tmp dizininin ayrı bir bölüm olarak bağlanması neden öneriliyor?,info_request
+"noexec, nosuid ve nodev mount seçenekleri ne anlama gelir?",info_request
+PAM (Pluggable Authentication Modules) nedir ve sıkılaştırmada rolü ne?,info_request
+pwquality kütüphanesi parola karmaşıklığını nasıl denetler?,info_request
+"Account lockout politikası nedir, kaç başarısız denemeden sonra devreye girer?",info_request
+SSH protokol sürüm 2'nin sürüm 1'e göre neden zorunlu tutulduğunu açıklar mısın?,info_request
+"Idle session timeout neden yapılandırılmalı, açık oturumlar ne risk taşır?",info_request
+"rsyslog ile journald arasındaki fark nedir, hangisi ne zaman tercih edilir?",info_request
+Dünyaya yazılabilir (world-writable) dosyalar neden güvenlik açığı oluşturur?,info_request
+"SUID ve SGID bit'leri nedir, neden denetlenmeleri gerekir?",info_request
+Windows Defender Application Control nedir ve nasıl çalışır?,info_request
+BitLocker disk şifrelemesi verileri hangi düzeyde korur?,info_request
+Windows'ta LSASS bellek korumasının amacı nedir?,info_request
+Credential Guard nedir ve kimlik bilgilerini nasıl izole eder?,info_request
+Windows Firewall ile gelen ve giden kuralların farkı nedir?,info_request
+Group Policy Object (GPO) güvenlik sıkılaştırmada nasıl bir rol oynar?,info_request
+PowerShell yürütme politikası (execution policy) ne işe yarar?,info_request
+Windows Event Forwarding nedir ve merkezi log toplamada nasıl kullanılır?,info_request
+AppLocker uygulama beyaz listesini nasıl uygular?,info_request
+SMBv1 protokolü neden devre dışı bırakılmalı?,info_request
+NTLM kimlik doğrulamasının zayıflıkları nelerdir?,info_request
+Kerberos kimlik doğrulaması nasıl çalışır ve neden daha güvenlidir?,info_request
+Hesap denetim politikaları (audit policy) neden ayarlanmalı?,info_request
+En az ayrıcalık (least privilege) ilkesi tam olarak ne anlama gelir?,info_request
+Defans katmanlama (defense in depth) yaklaşımı nedir?,info_request
+Saldırı yüzeyi (attack surface) kavramı neyi ifade eder ve nasıl azaltılır?,info_request
+Gereksiz servislerin kapatılması neden önemli bir sıkılaştırma adımıdır?,info_request
+IPv6 kullanılmıyorsa devre dışı bırakmak neden tavsiye edilir?,info_request
+ICMP yönlendirmelerinin (redirects) kabul edilmemesi neden güvenli?,info_request
+TCP SYN cookies nedir ve hangi saldırıya karşı koruma sağlar?,info_request
+Çekirdek parametrelerini sysctl ile sertleştirmek ne anlama gelir?,info_request
+/etc/passwd ile /etc/shadow dosyaları arasındaki fark nedir?,info_request
+Parola hash algoritması olarak neden SHA-512 veya yescrypt tercih edilir?,info_request
+Parola yaşlandırma (aging) politikası nedir ve maksimum gün sayısı neden sınırlanır?,info_request
+Sahipsiz (unowned) dosyalar sistemde neden risk oluşturur?,info_request
+Çekirdek çekirdek dökümlerinin (core dumps) devre dışı bırakılması neden öneriliyor?,info_request
+AIDE gibi dosya bütünlüğü izleme araçları nasıl çalışır?,info_request
+chrony veya ntp ile zaman senkronizasyonu güvenlik açısından neden önemli?,info_request
+DNS güvenliği için DNSSEC ne sağlar?,info_request
+Banner mesajları (issue/motd) neden yasal ve güvenlik açısından anlamlı?,info_request
+Cron işlerinin izinleri neden sıkı tutulmalı?,info_request
+at ve cron erişiminin kısıtlanması hangi riski azaltır?,info_request
+Sistem güncellemelerinin düzenli uygulanması neden temel bir sıkılaştırma adımıdır?,info_request
+Yama yönetimi (patch management) süreci nasıl işler?,info_request
+Güvenlik referans çizgisi (security baseline) kavramı nedir?,info_request
+Yapılandırma sürüklenmesi (configuration drift) neden bir sorundur?,info_request
+Mikro segmentasyon Zero Trust mimarisinde ne işe yarar?,info_request
+Kimlik temelli erişim ile ağ temelli erişim arasındaki fark nedir?,info_request
+Politika karar noktası (PDP) ve politika uygulama noktası (PEP) nedir?,info_request
+Sürekli doğrulama (continuous verification) Zero Trust'ta neden esastır?,info_request
+SIEM nedir ve loglar neden merkezi bir SIEM'e gönderilmeli?,info_request
+Güvenlik açığı tarayıcıları (vulnerability scanners) nasıl çalışır?,info_request
+CVE ve CVSS skorları neyi ifade eder?,info_request
+Uyumluluk denetimi (compliance scan) ile sıkılaştırma arasındaki ilişki nedir?,info_request
+OpenSCAP aracı CIS profillerini nasıl değerlendirir?,info_request
+Sertifika fixleme (certificate pinning) nedir ve hangi saldırıyı önler?,info_request
+HSTS başlığı tarayıcıyı nasıl güvenli iletişime zorlar?,info_request
+Perfect Forward Secrecy nedir ve neden önemli sayılır?,info_request
+Şifreleme anahtarlarının rotasyonu neden periyodik yapılmalı?,info_request
+Ayrıcalıklı erişim yönetimi (PAM/PIM) çözümleri ne işe yarar?,info_request
+Just-in-time (JIT) erişim modeli nasıl çalışır?,info_request
+Bastion host (sıçrama sunucusu) mimarideki rolü nedir?,info_request
+Hesapların ortak (paylaşımlı) kullanımı neden sakıncalı kabul edilir?,info_request
+Servis hesaplarının interaktif giriş yapamaması neden istenir?,info_request
+"Disk bölümlerinin ayrılması (/var, /var/log, /home) hangi faydayı sağlar?",info_request
+AutoRun ve AutoPlay özelliklerinin kapatılması Windows'ta neden öneriliyor?,info_request
+Guest hesabının devre dışı bırakılması neden temel bir adımdır?,info_request
+Ekran kilidi ve oturum zaman aşımı politikaları neden gerekli?,info_request
+SSH üzerinden root girişini devre dışı bırak.,action_request
+sshd_config dosyasında PermitRootLogin değerini no yap.,action_request
+UFW güvenlik duvarını etkinleştir ve gelen tüm bağlantıları varsayılan olarak reddet.,action_request
+"UFW'de yalnızca 22, 80 ve 443 portlarına izin verecek şekilde kuralları yapılandır.",action_request
+Parola politikasını sıkılaştır: minimum 14 karakter ve karmaşıklık zorunlu olsun.,action_request
+SSH yapılandırmasını sıkılaştıracak bir Ansible playbook yaz.,action_request
+cramfs çekirdek modülünü yükleyemez hale getir ve kara listeye al.,action_request
+MaxAuthTries değerini 4 olarak ayarla.,action_request
+auditd kurallarını CIS önerilerine göre uygula.,action_request
+/etc/ssh/sshd_config dosyasının izinlerini 600 yap ve sahibini root yap.,action_request
+fail2ban'i kur ve SSH için varsayılan jail'i etkinleştir.,action_request
+Sistemi sıkılaştıran kapsamlı bir bash betiği üret.,action_request
+Ubuntu 24.04 için CIS Level 1 kontrollerini uygula.,action_request
+SELinux'u enforcing moduna geç.,action_request
+Gereksiz çalışan servisleri tespit edip kapat.,action_request
+PermitEmptyPasswords ayarını no yaparak boş parolalı girişleri engelle.,action_request
+Tüm sunucuyu CIS benchmark'a uygun şekilde sıkılaştır.,action_request
+"SSH için yalnızca anahtar tabanlı kimlik doğrulamaya izin ver, parola girişini kapat.",action_request
+PasswordAuthentication ayarını no olarak değiştir.,action_request
+SSH protokolünü yalnızca sürüm 2 kullanacak şekilde zorla.,action_request
+X11 yönlendirmeyi sshd_config içinde devre dışı bırak.,action_request
+SSH boşta kalma zaman aşımını ClientAliveInterval 300 ile yapılandır.,action_request
+Telnet servisini kaldır ve paketini sistemden temizle.,action_request
+"rsh, rlogin ve rexec servislerini devre dışı bırak.",action_request
+FTP yerine SFTP kullanılacak şekilde vsftpd'yi kaldır.,action_request
+usb-storage modülünü devre dışı bırakarak USB depolama aygıtlarını engelle.,action_request
+"freevxfs, jffs2 ve hfs dosya sistemi modüllerini kara listeye ekle.",action_request
+Çekirdek parametrelerini sysctl ile sıkılaştır ve IP yönlendirmeyi kapat.,action_request
+net.ipv4.conf.all.accept_redirects değerini 0 yaparak ICMP yönlendirmelerini reddet.,action_request
+ASLR'yi kernel.randomize_va_space=2 ile tam olarak etkinleştir.,action_request
+core dump üretimini fs.suid_dumpable=0 ile kısıtla.,action_request
+"/tmp dizinini noexec, nosuid ve nodev seçenekleriyle ayrı bir bölüm olarak bağla.",action_request
+/var/log için ayrı bir disk bölümü oluştur ve fstab'a ekle.,action_request
+"parola yaşlanma politikasını 90 gün maksimum, 7 gün minimum olarak ayarla.",action_request
+PASS_WARN_AGE değerini login.defs içinde 7 olarak yapılandır.,action_request
+Hesap kilitleme politikasını pam_faillock ile 5 başarısız denemede uygula.,action_request
+root harici UID 0 olan tüm hesapları tespit edip kaldır.,action_request
+Parolasız sudo erişimini kaldır ve NOPASSWD satırlarını temizle.,action_request
+Inaktif kullanıcı hesaplarını 30 gün sonra otomatik devre dışı bırakacak şekilde ayarla.,action_request
+auditd paketini kur ve önyüklemede etkin olacak şekilde yapılandır.,action_request
+Sudo komutlarının tamamını audit kurallarıyla logla.,action_request
+Zaman değişikliği olaylarını izlemek için audit kuralları ekle.,action_request
+/etc/passwd ve /etc/shadow dosyalarındaki değişiklikleri audit ile izle.,action_request
+AppArmor profillerini yükle ve tümünü enforce moduna al.,action_request
+Otomatik güvenlik güncellemelerini unattended-upgrades ile etkinleştir.,action_request
+GRUB önyükleyicisine parola koruması ekle.,action_request
+Tek kullanıcı modu için kök parolası zorunlu hale getir.,action_request
+AIDE dosya bütünlüğü aracını kur ve veritabanını başlat.,action_request
+AIDE için günlük bütünlük kontrolü yapan bir cron görevi oluştur.,action_request
+Banner mesajlarını /etc/issue ve /etc/issue.net içinde yasal uyarı ile güncelle.,action_request
+SSH oturum açma banner'ını sshd_config üzerinden ayarla.,action_request
+Windows Server için RDP NLA'yı zorunlu kıl.,action_request
+Windows'ta SMBv1 protokolünü tamamen devre dışı bırak.,action_request
+Windows Defender'da gerçek zamanlı korumayı grup ilkesiyle etkinleştir.,action_request
+Windows parola politikasını minimum 14 karakter olacak şekilde grup ilkesinden yapılandır.,action_request
+Windows hesap kilitleme eşiğini 5 başarısız denemeye ayarla.,action_request
+Windows Güvenlik Duvarı'nda gelen bağlantıları varsayılan olarak engelle.,action_request
+LSA korumasını RunAsPPL kayıt anahtarı ile etkinleştir.,action_request
+Windows'ta misafir hesabını devre dışı bırak.,action_request
+PowerShell betik bloğu günlüklemesini grup ilkesiyle aç.,action_request
+Windows için AutoRun ve AutoPlay özelliklerini kapat.,action_request
+Sistemdeki tüm dünya yazılabilir dosyaları bulup izinlerini düzelt.,action_request
+Sahipsiz dosya ve dizinleri tarayan bir betik üret.,action_request
+SUID ve SGID bit'i set edilmiş dosyaları listele ve gereksiz olanları temizle.,action_request
+"cron erişimini yalnızca yetkili kullanıcılarla sınırla, cron.deny'yi kaldır.",action_request
+/etc/crontab dosyasının izinlerini 600 olarak ayarla.,action_request
+IPv6'yı ihtiyaç yoksa grub üzerinden tamamen devre dışı bırak.,action_request
+"Avahi, CUPS ve diğer gereksiz ağ servislerini durdur ve kapat.",action_request
+DNS sunucusu olarak çalışmıyorsa named servisini kaldır.,action_request
+NTP zaman senkronizasyonunu chrony ile yapılandır ve etkinleştir.,action_request
+rsyslog ile uzak log sunucusuna log gönderimini yapılandır.,action_request
+Log dosyalarının izinlerini journald için sıkılaştır.,action_request
+SSH için izin verilen kullanıcıları AllowUsers ile beyaz listeye al.,action_request
+umask değerini /etc/profile içinde 027 olarak ayarla.,action_request
+Bash geçmişi zaman damgalarını HISTTIMEFORMAT ile etkinleştir.,action_request
+Konsol oturumları için TMOUT değişkenini 600 saniye olarak ayarla.,action_request
+Ubuntu için CIS Level 2 sıkılaştırmasını uygulayan Ansible rolü oluştur.,action_request
+Docker daemon'ını CIS Docker Benchmark'a göre yapılandır.,action_request
+Tüm açık portları tarayıp gereksiz dinleyen servisleri kapatan bir betik yaz.,action_request
+LDAP üzerinden TLS zorunluluğunu yapılandır.,action_request
+Kerberos ön doğrulamasını zorunlu hale getir.,action_request
+Sistem genelinde minimum TLS 1.2 sürümünü zorla ve eski şifre paketlerini devre dışı bırak.,action_request
+SSH için yalnızca güçlü Ciphers ve KexAlgorithms değerlerine izin ver.,action_request
+wireless arayüzlerini gerekmiyorsa nmcli ile devre dışı bırak.,action_request
+Bluetooth servisini durdur ve önyüklemeden kaldır.,action_request
+prelink paketini kaldır ve önceden bağlanmış ikilileri geri al.,action_request
+Misafir oturumunu lightdm yapılandırmasında kapat.,action_request
+GDM için otomatik oturum açmayı devre dışı bırak.,action_request
+"Bugün hava nasıl olacak, şemsiye almalı mıyım?",out_of_scope
+Yarın İstanbul'da yağmur yağacak mı?,out_of_scope
+2 + 2 kaç eder?,out_of_scope
+144'ün karekökü nedir?,out_of_scope
+Yüzde 15 KDV dahil 200 lira ne kadar eder?,out_of_scope
+Mercimek çorbası tarifi verir misin?,out_of_scope
+Kıymalı pide nasıl yapılır?,out_of_scope
+"Akşam yemeğine ne pişirsem, kolay bir tarif öner.",out_of_scope
+Galatasaray dün maçı kaç kaç bitirdi?,out_of_scope
+Bu akşam hangi maç var?,out_of_scope
+Şampiyonlar Ligi finali ne zaman oynanacak?,out_of_scope
+Bana izleyebileceğim güzel bir bilim kurgu filmi öner.,out_of_scope
+Netflix'te yeni çıkan diziler neler?,out_of_scope
+Komedi türünde bir film tavsiye eder misin?,out_of_scope
+Çalışırken dinlemek için sakin müzik önerir misin?,out_of_scope
+En sevdiğin şarkı hangisi?,out_of_scope
+90'lar Türkçe pop listesi hazırlar mısın?,out_of_scope
+Osmanlı İmparatorluğu ne zaman kuruldu?,out_of_scope
+İkinci Dünya Savaşı hangi yıllarda yaşandı?,out_of_scope
+Dünyanın en uzun nehri hangisidir?,out_of_scope
+Şu cümleyi İngilizceye çevirir misin: İyi günler dilerim.,out_of_scope
+'Teşekkür ederim' Almanca nasıl denir?,out_of_scope
+Bu metni Fransızcaya çevirebilir misin?,out_of_scope
+Kaç yaşındasın?,out_of_scope
+Senin bir sevgilin var mı?,out_of_scope
+"Bugün canın sıkkın mı, nasılsın?",out_of_scope
+"Yeni bir telefon almak istiyorum, hangisini önerirsin?",out_of_scope
+"İndirimde laptop var mı, nereden bakmalıyım?",out_of_scope
+Spor ayakkabı almak için en iyi marka hangisi?,out_of_scope
+Tatil için Antalya mı Bodrum mu daha iyi?,out_of_scope
+"Yurt dışına ilk kez gideceğim, nereyi tavsiye edersin?",out_of_scope
+Kapadokya'da kaç gün kalmak yeterli olur?,out_of_scope
+"Boğazım ağrıyor, ne yapmalıyım?",out_of_scope
+Baş ağrısı için ne içsem iyi gelir?,out_of_scope
+Günde kaç bardak su içmeliyim?,out_of_scope
+Bana komik bir fıkra anlatır mısın?,out_of_scope
+"Çok sıkıldım, bir şaka yap.",out_of_scope
+Apple hissesi şu an kaç dolar?,out_of_scope
+Borsada bugün yükselen hisseler hangileri?,out_of_scope
+Bilgisayarımda oynayabileceğim güzel bir oyun öner.,out_of_scope
+Telefon için bağımlılık yapan oyunlar neler?,out_of_scope
+Bana aşk üzerine kısa bir şiir yazar mısın?,out_of_scope
+Doğa temalı bir şiir yaz.,out_of_scope
+Bugün günlerden ne?,out_of_scope
+Bu ay kaç gün var?,out_of_scope
+"En yakın restoran nerede, önerir misin?",out_of_scope
+Yakınımda güzel bir kahvaltı mekanı var mı?,out_of_scope
+Türk kahvesi nasıl yapılır?,out_of_scope
+Espresso ile latte arasındaki fark nedir?,out_of_scope
+Dolar kuru bugün ne kadar?,out_of_scope
+Euro kaç lira oldu?,out_of_scope
+Altın fiyatları bugün nasıl?,out_of_scope
+Bitcoin şu an kaç dolar?,out_of_scope
+Köpek beslemek mi kedi beslemek mi daha kolay?,out_of_scope
+Evde kolayca yetiştirebileceğim bir bitki öner.,out_of_scope
+Çocuğuma okuyabileceğim güzel bir masal var mı?,out_of_scope
+Bir fıçı birayı kaç kişi içer hesaplayabilir misin?,out_of_scope
+Pizza hamuru kaç saat mayalanmalı?,out_of_scope
+En yakın benzin istasyonu nerede?,out_of_scope
+Bugün hangi ünlülerin doğum günü?,out_of_scope
+Ay'a ilk kim ayak bastı?,out_of_scope
+Türkiye'nin en yüksek dağı hangisidir?,out_of_scope
+Bir hafta sonu kaçamağı için fikir verir misin?,out_of_scope
+Yemekten sonra yürüyüş yapmak sağlıklı mı?,out_of_scope
+Saç dökülmesine ne iyi gelir?,out_of_scope
+Bana motive edici bir söz söyler misin?,out_of_scope
+Hangi burç en uyumludur?,out_of_scope
+"Rüyamda deniz gördüm, anlamı ne?",out_of_scope
+Pasta süslemek için fikir verir misin?,out_of_scope
+İyi bir kitap önerisi yapar mısın?,out_of_scope
+"Bu kışın modası nedir, ne giyilir?",out_of_scope
+En sevdiğin renk hangisi?,out_of_scope
+"Çay mı kahve mi, sence hangisi daha iyi?",out_of_scope
+Yarın hava kaç derece olacak?,out_of_scope
+100 doları liraya çevirir misin?,out_of_scope
+Akşam sinemada hangi filmler var?,out_of_scope
+Maraton koşmak için nasıl antrenman yapmalıyım?,out_of_scope
+Limonlu kek tarifini paylaşır mısın?,out_of_scope
+Sabah erken kalkmanın püf noktaları neler?,out_of_scope

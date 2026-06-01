@@ -20,7 +20,7 @@ from datetime import datetime
 
 from llm.core.context import RequestContext
 from llm.utils.question_classifier import classify_question
-from llm.prompts.simple_prompts import get_prompt_for_complexity
+from llm.prompts.simple_prompts import get_prompt_for_complexity, GROUNDING_DIRECTIVE
 from llm.prompts.cot_prompts import CoTSecurityAnalyzer
 
 # Type alias
@@ -432,6 +432,15 @@ class InfoPipeline:
             _logger.warning("[RefinementLoop:answer] failed: %s", exc)
             return result, raw_results, vr
 
+    def _call_llm(self, fn, prompt: str, ctx: RequestContext) -> str:
+        """LLM'i çağır; RAG bağlamı varsa grounding direktifini SYSTEM mesajı olarak geçir.
+        Callable 'system' parametresini desteklemiyorsa (örn. test mock'u) prompt-only çağırır."""
+        from llm.clients import _accepts_system
+        system = GROUNDING_DIRECTIVE if ctx.retrieved_context else None
+        if system and _accepts_system(fn):
+            return fn(prompt, system=system)
+        return fn(prompt)
+
     def _simple_path(self, ctx: RequestContext) -> str:
         """
         Simple path: Small model + minimal prompt
@@ -448,8 +457,8 @@ class InfoPipeline:
         # Minimal prompt
         prompt = get_prompt_for_complexity(ctx, "simple")
 
-        # LLM call
-        response = self.llm_small(prompt)
+        # LLM call — grounding direktifi SYSTEM mesajı olarak (RAG bağlamı varsa) → echo edilmez
+        response = self._call_llm(self.llm_small, prompt, ctx)
 
         return response.strip()
 
@@ -469,8 +478,8 @@ class InfoPipeline:
         # Medium prompt
         prompt = get_prompt_for_complexity(ctx, "medium")
 
-        # LLM call
-        response = self.llm_large(prompt)
+        # LLM call — grounding direktifi SYSTEM mesajı olarak (RAG bağlamı varsa)
+        response = self._call_llm(self.llm_large, prompt, ctx)
 
         return response.strip()
 
@@ -490,8 +499,8 @@ class InfoPipeline:
         # CoT prompt
         cot_prompt = self.cot_analyzer.build_cot_prompt(ctx)
 
-        # LLM call
-        raw_response = self.llm_large(cot_prompt)
+        # LLM call — grounding direktifi SYSTEM mesajı olarak (RAG bağlamı varsa)
+        raw_response = self._call_llm(self.llm_large, cot_prompt, ctx)
 
         # Parse CoT response
         ctx = self.cot_analyzer.parse_cot_response(raw_response, ctx)

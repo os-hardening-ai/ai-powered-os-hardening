@@ -69,12 +69,13 @@ class TestRulesPlan:
         # CIS bölüm-no sırasına dizilmeli
         assert j["ordered_rules"] == ["1.1.1", "5.1.1", "5.1.2"]
 
-    def test_conflict_surfaced(self, client):
-        # 5.1.1 ve 5.1.2 aynı sshd_config dosyasını yazıyor → çakışma
+    def test_same_file_is_order_note_not_conflict(self, client):
+        # 5.1.1 (PermitRootLogin) ve 5.1.2 (MaxAuthTries): aynı sshd_config ama FARKLI
+        # direktif → çakışma DEĞİL, sıra notu (eski davranış yanlış-pozitifti)
         r = client.post("/api/rules/plan", json={"rule_ids": ["5.1.1", "5.1.2"]})
         j = r.json()
-        assert any({c["rule_a"], c["rule_b"]} == {"5.1.1", "5.1.2"} for c in j["conflicts"])
-        assert j["warnings"]
+        assert j["conflicts"] == []
+        assert any("Sıra notu" in w for w in j["warnings"])
 
     def test_empty_rule_ids_rejected_422(self, client):
         assert client.post("/api/rules/plan", json={"rule_ids": []}).status_code == 422
@@ -113,10 +114,12 @@ class TestRulesPlan:
 
 
 class TestConflicts:
-    def test_conflicts_endpoint(self, client):
+    def test_conflicts_endpoint_no_false_positive(self, client):
+        # Aynı dosya farklı direktif → /api/rules/conflicts boş döner (yanlış-pozitif yok).
+        # Gerçek çakışma (aynı direktif farklı değer) tespiti unit test_rule_engine'de kapsanır.
         r = client.post("/api/rules/conflicts", json={"rule_ids": ["5.1.1", "5.1.2"]})
         assert r.status_code == 200
-        assert isinstance(r.json(), list) and len(r.json()) >= 1
+        assert r.json() == []
 
     def test_no_conflict_returns_empty(self, client):
         r = client.post("/api/rules/conflicts", json={"rule_ids": ["1.1.1", "5.1.1"]})
