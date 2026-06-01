@@ -97,18 +97,20 @@ class ParameterInferenceEngine:
             >>> engine.infer_os("Windows Server 2022 firewall ayarları")
             'windows_server_2022'
         """
-        question_lower = question.lower()
+        matched = self._match_os(question)
+        if matched is None and self.debug:
+            self.inference_log.append(f"OS: {default} (default)")
+        return matched or default
 
+    def _match_os(self, question: str) -> Optional[str]:
+        """OS pattern'i eşleşirse değeri, yoksa None (gerçek-tespit sinyali)."""
+        question_lower = question.lower()
         for pattern, os_value in self.OS_PATTERNS.items():
             if re.search(pattern, question_lower, re.IGNORECASE):
                 if self.debug:
                     self.inference_log.append(f"OS: {os_value} (pattern: {pattern})")
                 return os_value
-
-        if self.debug:
-            self.inference_log.append(f"OS: {default} (default)")
-
-        return default
+        return None
 
     def infer_role(self, question: str, default: str = "sysadmin") -> str:
         """
@@ -133,6 +135,13 @@ class ParameterInferenceEngine:
             >>> engine.infer_role("Monitoring ve alerting kurulumu")
             'devops'
         """
+        matched = self._match_role(question)
+        if matched is None and self.debug:
+            self.inference_log.append(f"Role: {default} (default)")
+        return matched or default
+
+    def _match_role(self, question: str) -> Optional[str]:
+        """Rol açıkça veya intent'ten eşleşirse değeri, yoksa None (gerçek-tespit sinyali)."""
         question_lower = question.lower()
 
         # 1. Explicit role mention
@@ -143,7 +152,6 @@ class ParameterInferenceEngine:
                 return role_value
 
         # 2. Intent-based inference
-        # Developer indicators
         if any(kw in question_lower for kw in [
             'script', 'automation', 'code', 'api', 'sdk', 'library',
             'git', 'docker', 'container', 'build', 'deploy'
@@ -151,8 +159,6 @@ class ParameterInferenceEngine:
             if self.debug:
                 self.inference_log.append("Role: developer (intent: code/automation)")
             return 'developer'
-
-        # DevOps indicators
         if any(kw in question_lower for kw in [
             'ci/cd', 'pipeline', 'ansible', 'terraform', 'kubernetes',
             'monitoring', 'prometheus', 'grafana', 'elk', 'logging'
@@ -160,8 +166,6 @@ class ParameterInferenceEngine:
             if self.debug:
                 self.inference_log.append("Role: devops (intent: infrastructure)")
             return 'devops'
-
-        # Security indicators
         if any(kw in question_lower for kw in [
             'incident', 'threat', 'vulnerability', 'exploit', 'audit',
             'compliance', 'forensic', 'penetration', 'siem'
@@ -169,12 +173,7 @@ class ParameterInferenceEngine:
             if self.debug:
                 self.inference_log.append("Role: security (intent: security ops)")
             return 'security'
-
-        # 3. Default
-        if self.debug:
-            self.inference_log.append(f"Role: {default} (default)")
-
-        return default
+        return None
 
     def infer_security_level(
         self,
@@ -205,23 +204,18 @@ class ParameterInferenceEngine:
             >>> engine.infer_security_level("Basit firewall kuralları", "developer")
             'minimal'
         """
-        question_lower = question.lower()
+        # 1. Explicit keywords (sorudan gerçek tespit)
+        explicit = self._match_security_level(question)
+        if explicit:
+            return explicit
 
-        # 1. Explicit keywords
-        for level, keywords in self.SECURITY_LEVEL_KEYWORDS.items():
-            if any(kw in question_lower for kw in keywords):
-                if self.debug:
-                    self.inference_log.append(f"SecurityLevel: {level} (explicit)")
-                return level
-
-        # 2. Role-based defaults
+        # 2. Role-based defaults (rolden türetilmiş, güvenli)
         role_defaults = {
             'security': 'strict',  # Security team → strict
             'sysadmin': 'balanced',  # SysAdmin → balanced
             'devops': 'balanced',  # DevOps → balanced
             'developer': 'minimal',  # Developer → minimal (dev env)
         }
-
         if role in role_defaults:
             level = role_defaults[role]
             if self.debug:
@@ -231,8 +225,17 @@ class ParameterInferenceEngine:
         # 3. Default
         if self.debug:
             self.inference_log.append(f"SecurityLevel: {default} (default)")
-
         return default
+
+    def _match_security_level(self, question: str) -> Optional[str]:
+        """Açık güvenlik-seviyesi anahtar kelimesi eşleşirse değeri, yoksa None."""
+        question_lower = question.lower()
+        for level, keywords in self.SECURITY_LEVEL_KEYWORDS.items():
+            if any(kw in question_lower for kw in keywords):
+                if self.debug:
+                    self.inference_log.append(f"SecurityLevel: {level} (explicit)")
+                return level
+        return None
 
     def infer_all(
         self,
@@ -273,16 +276,19 @@ class ParameterInferenceEngine:
         # Clear inference log
         self.inference_log = []
 
-        # 1. Infer from question
-        os_inferred = self.infer_os(question)
-        role_inferred = self.infer_role(question)
+        # 1. Infer from question — gerçekten EŞLEŞTİ mi yoksa default'a mı düştü, izle
+        os_match = self._match_os(question)
+        role_match = self._match_role(question)
+        sec_match = self._match_security_level(question)
+        os_inferred = os_match or "ubuntu_22_04"
+        role_inferred = role_match or "sysadmin"
         security_level_inferred = self.infer_security_level(question, role_inferred)
 
-        # Track sources
+        # Track sources: yalnız sorudan EŞLEŞTİYSE 'question' (gerçek tespit), aksi 'default'
         inference_source = {
-            'os': 'question',
-            'role': 'question',
-            'security_level': 'question',
+            'os': 'question' if os_match else 'default',
+            'role': 'question' if role_match else 'default',
+            'security_level': 'question' if sec_match else 'default',
             'zt_maturity': 'default',
         }
 

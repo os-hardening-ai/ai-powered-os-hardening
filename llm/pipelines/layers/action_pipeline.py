@@ -128,7 +128,21 @@ class ActionPipeline:
         if self.debug:
             print(f"[ActionPipeline] Processing action request")
 
-        # STEP 1: Validate metadata
+        # STEP 0: Eksik parametreleri çıkarımla DOLDUR — "tespit edildiyse sorma, boşsa sor".
+        #   • role + security_level: güvenli default'ları var → her zaman doldur (kullanıcıyı
+        #     gereksiz yere meşgul etme; "Otomatik" seçiminin amacı bu).
+        #   • OS: script doğruluğu için kritik → yalnız sorudan GERÇEKTEN tespit edilirse doldur;
+        #     edilemezse boş bırak → _validate_metadata sadece OS'i 'missing' işaretler (boşsa sor).
+        inferred = self.param_engine.infer_all(ctx.user_question)
+        src = inferred.get("inference_source", {})
+        if not ctx.role or ctx.role == "unknown":
+            ctx.role = inferred["role"]
+        if not ctx.security_level:
+            ctx.security_level = inferred["security_level"]
+        if (not ctx.os or ctx.os == "unknown") and src.get("os") == "question":
+            ctx.os = inferred["os"]
+
+        # STEP 1: Validate metadata (yalnız gerçekten boş kalan kritik param → ask)
         missing_params = self._validate_metadata(ctx)
 
         if missing_params:

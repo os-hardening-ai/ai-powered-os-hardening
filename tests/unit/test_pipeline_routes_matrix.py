@@ -293,18 +293,30 @@ class TestActionParams:
     def _ap(self, rag=None):
         return ActionPipeline(llm_large=fake_large, llm_small=fake_small, rag_builder=rag)
 
-    # NOT: security_level RequestContext'te "balanced" default → asla eksik olmaz.
-    # Eksik olabilecekler yalnız os ve role.
-    @pytest.mark.parametrize("ctx_kw,expected_missing", [
-        ({}, {"os", "role"}),                                    # ikisi de yok
-        ({"os": "ubuntu_24_04"}, {"role"}),                      # role eksik
-        ({"role": "sysadmin"}, {"os"}),                          # os eksik
-    ])
-    def test_missing_params_asks_user(self, ctx_kw, expected_missing):
-        r = self._ap().handle(RequestContext(user_question="ssh hardening scripti yaz", **ctx_kw))
+    # YENİ davranış ("tespit edildiyse sorma, boşsa sor"): role + security_level güvenli
+    # default'a sahip → her zaman çıkarımla DOLDURULUR (sorulmaz). Yalnız OS kritik →
+    # ne ctx'te ne soruda tespit edilemezse 'missing' olur.
+    def test_only_os_asked_when_undetected_role_autofilled(self):
+        # "ssh hardening scripti yaz": metinde OS yok → yalnız os sorulur; role otomatik dolar
+        r = self._ap().handle(RequestContext(user_question="ssh hardening scripti yaz"))
         assert r.success is False
-        assert set(r.missing_params) == expected_missing
+        assert set(r.missing_params) == {"os"}        # role SORULMAZ
         assert r.user_prompt_message
+
+    def test_os_in_ctx_generates_without_asking(self):
+        # OS ctx'te var, role yok → role otomatik dolar → script üretilir (soru yok)
+        r = self._ap().handle(RequestContext(
+            user_question="ssh hardening scripti yaz", os="ubuntu_24_04"))
+        assert r.success is True
+        assert not r.missing_params
+
+    def test_os_detected_from_text_generates_without_asking(self):
+        # Kullanıcı bug senaryosu: "Ubuntu 24.04 için ufw firewall sıkılaştırması" →
+        # OS metinden tespit + role otomatik → PARAMS_NEEDED YOK, doğrudan script üretilir.
+        r = self._ap().handle(RequestContext(
+            user_question="Ubuntu 24.04 için ufw firewall sıkılaştırması scripti"))
+        assert r.success is True
+        assert not r.missing_params
 
     @pytest.mark.parametrize("q", [
         "ssh hardening scripti yaz",
