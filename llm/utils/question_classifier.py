@@ -69,6 +69,16 @@ class QuestionClassifier:
         r'\b(nginx.*güvenlik|apache.*harden|güvenlik.*ayar)\b',
     ]
 
+    # KISA olsa bile RAG'a gitmesi gereken hardening AKSIYON / how-to sinyalleri.
+    # YALIN araç adı (ufw/ssh/rdp) BURADA YOK — "ufw ne", "ssh nedir" gibi TANIM soruları
+    # simple kalsın (LLM bilir, RAG'a gerek yok). Yalnız bir EYLEM/prosedür sinyali varsa
+    # ("nasıl sıkılaştırılır", "nasıl yapılandırılır", "harden") medium'a yükseltilir.
+    HARDENING_ACTION_PATTERNS = [
+        r'\b(s[ıi]k[ıi]laşt[ıi]r|güçlendir|harden(?:ing)?|yapılandır|configure|secure)\b',
+        r'nasıl.*(güvenli|yap[ıi]l|ayarla|aç[ıi]l|kapat|değiştir|kur|engelle|etkinleştir|devre)',
+        r'\bhow\s+to\b',
+    ]
+
     def classify(self, question: str) -> QuestionComplexity:
         """
         Soruyu sınıflandır.
@@ -82,12 +92,8 @@ class QuestionClassifier:
         q_lower = question.lower()
         word_count = len(question.split())
 
-        # ─── SIMPLE: Basit bilgi soruları ───
-        # 1. Çok kısa sorular (3 kelime veya daha az)
-        if word_count <= 3:
-            return "simple"
-
-        # 2. Pattern matching
+        # ─── SIMPLE: açık tanım/smalltalk pattern'leri ───
+        # ("firewall nedir", "ssh ne demek" → basit tanım → LLM bilir, RAG'a gerek yok)
         for pattern in self.SIMPLE_PATTERNS:
             if re.search(pattern, q_lower, re.IGNORECASE):
                 return "simple"
@@ -97,10 +103,17 @@ class QuestionClassifier:
             if re.search(pattern, q_lower, re.IGNORECASE):
                 return "complex"
 
-        # ─── MEDIUM: Spesifik ama karmaşık değil ───
+        # ─── MEDIUM: Spesifik/hardening (kısa olsa bile) ───
+        # ÖNEMLİ: bu kontrol, "word_count <= 3 → simple" KISA-DEVRESİNDEN ÖNCE çalışır.
+        # Aksi halde "SSH nasıl sıkılaştırılır" (3 kelime) basit tanım sanılıp 'simple'
+        # olur ve RAG atlanır → hardening sorusu kaynaksız (CIS'siz) cevaplanır.
         for pattern in self.MEDIUM_PATTERNS:
             if re.search(pattern, q_lower, re.IGNORECASE):
                 return "medium"
+
+        # ─── Çok kısa + hiçbir tanım/hardening sinyali YOK → simple (LLM bilir) ───
+        if word_count <= 3:
+            return "simple"
 
         # ─── DEFAULT: Kelime sayısına göre ───
         # Kısa sorular (4-10 kelime) → medium (security chatbot için)

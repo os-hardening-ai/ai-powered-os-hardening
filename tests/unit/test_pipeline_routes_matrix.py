@@ -187,10 +187,20 @@ class TestInfoComplexityRouting:
     def _ip(self, rag=None, **kw):
         return InfoPipeline(llm_small=fake_small, llm_large=fake_large, rag_builder=rag, **kw)
 
-    @pytest.mark.parametrize("q", ["ssh nedir", "ufw ne", "rdp nedir"])
+    # Yalnız AÇIK TANIM soruları ("X nedir/ne demek") simple → LLM, RAG yok.
+    # PERMISSIVE POLİTİKA: tereddütte RAG'a gitmek zararsız, RAG gerekirken gitmemek kötü.
+    # Bu yüzden yalın araç adı ("ufw ne") veya hardening how-to ("nasıl sıkılaştırılır")
+    # kısa olsa bile medium'a (RAG) gider — bkz. test_medium.
+    @pytest.mark.parametrize("q", ["ssh nedir", "rdp nedir", "firewall nedir"])
     def test_simple(self, q):
         r = self._ip().handle(RequestContext(user_question=q))
         assert r.complexity == "simple", f"{q!r} → {r.complexity}"
+
+    @pytest.mark.parametrize("q", ["ssh nasıl sıkılaştırılır", "ufw ne", "sudo güçlendir"])
+    def test_short_security_to_medium(self, q):
+        # REGRESYON: kısa güvenlik sorusu 'simple' diye RAG'sız kalmamalı (permissive).
+        r = self._ip().handle(RequestContext(user_question=q))
+        assert r.complexity == "medium", f"{q!r} → {r.complexity}"
 
     @pytest.mark.parametrize("q", [
         "ssh servisi nasıl güvenli hale getirilir",
