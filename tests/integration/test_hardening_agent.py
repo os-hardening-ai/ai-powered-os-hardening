@@ -98,7 +98,52 @@ class TestRefineLoop:
         assert verify_steps[1].ok is True
 
 
+class TestSummarySync:
+    """D bug regresyonu: refine'da kural çıkınca özet GERÇEK final sayıyı yansıtmalı."""
+
+    def test_summary_reflects_post_refine_count_not_plan(self, tmp_path):
+        # 2 güvenli + 1 tehlikeli plan → refine tehlikeliyi çıkarır → artifact 2 kural.
+        # Özet "2 kural" demeli (plan.items=3 DEĞİL) + çıkarıldı notu içermeli.
+        engine = make_engine(tmp_path, SAFE_RULES + DANGEROUS_RULE)
+        agent = HardeningAgent(rule_engine=engine, max_refine=1)
+        res = agent.run("sıkılaştır", security_level="balanced")
+        assert res.artifact.rule_count == 2
+        assert len(res.plan.items) == 3            # plan başta 3 kural seçti
+        assert "2 kural" in res.summary            # özet ÜRETİLEN sayıyı yansıtır
+        assert "3 kural" not in res.summary        # plan sayısını DEĞİL
+        assert "çıkarıldı" in res.summary          # şeffaflık notu
+
+    def test_summary_llm_prompt_gets_final_count(self, tmp_path):
+        # LLM özet kullanılırken prompt'a GERÇEK final sayı geçer (refine sonrası).
+        captured = {}
+        def _spy(prompt):
+            captured["prompt"] = prompt
+            return "özet"
+        engine = make_engine(tmp_path, SAFE_RULES + DANGEROUS_RULE)
+        agent = HardeningAgent(rule_engine=engine, llm_fn=_spy, max_refine=1)
+        agent.run("sıkılaştır", security_level="balanced")
+        assert "Üretilen kural sayısı: 2" in captured["prompt"]
+
+
 class TestEdgeCases:
+    def test_all_rules_dangerous_no_artifact(self, tmp_path):
+        # Tek kural ve o da tehlikeli → refine hepsini çıkarır → selected_ids boşalır.
+        # Çökme olmamalı; success False (geçerli/güvenli script üretilemedi).
+        engine = make_engine(tmp_path, DANGEROUS_RULE)
+        agent = HardeningAgent(rule_engine=engine, max_refine=1)
+        res = agent.run("temizlik", security_level="balanced")
+        assert isinstance(res, AgentResult)
+        assert res.success is False
+        assert "rm -rf /" not in (res.artifact.content if res.artifact else "")
+
+    def test_no_refine_when_max_refine_zero(self, tmp_path):
+        # max_refine=0 → tehlikeli kural çıkmaz, refine adımı olmaz, doğrulama başarısız kalır.
+        engine = make_engine(tmp_path, SAFE_RULES + DANGEROUS_RULE)
+        agent = HardeningAgent(rule_engine=engine, max_refine=0)
+        res = agent.run("sıkılaştır", security_level="balanced")
+        assert not any(s.name == "refine" for s in res.steps)
+        assert res.success is False  # tehlikeli komut doğrulamadan geçmez
+
     def test_no_applicable_rules(self, tmp_path):
         # only a level-2 rule; balanced asks for level-1 -> empty plan
         engine = make_engine(tmp_path, """

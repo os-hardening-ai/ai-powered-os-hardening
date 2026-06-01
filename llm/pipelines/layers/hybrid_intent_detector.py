@@ -360,14 +360,18 @@ class HybridIntentDetector:
 
                     pattern_result = self._pattern_fallback(q_lower)
 
-                    if pattern_result:
+                    # DOMAIN-GATE: pattern_fallback imperatif "yaz/üret" görünce action_request
+                    # döndürür ama bu DOMAIN-BAĞIMSIZdır ("bana şiir yaz" → action). Domain-scoped
+                    # asistanda (best practice: ayrı domain gate) güvenlik sinyali yoksa bu girdi
+                    # KAPSAM DIŞIdır. Düşük ML güveni zaten "tanıdık güvenlik sorusu değil" sinyali.
+                    has_security = any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
+                    if pattern_result and has_security:
                         self.stats["hybrid_used"] += 1
                         return pattern_result
 
                     # Emniyet ağı (C): ML çok kararsız VE sorguda güvenlik sinyali yoksa,
                     # zayıf info/action tahminine GÜVENME → kibar red. ("ne haber" gibi
                     # tanınmayan chitchat'in güvenlik cevabına sızmasını engeller.)
-                    has_security = any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
                     if intent_type in ("info_request", "action_request") and not has_security:
                         if self.debug:
                             print("[HybridIntent] Düşük güven + güvenlik sinyali yok → out_of_scope (emniyet)")

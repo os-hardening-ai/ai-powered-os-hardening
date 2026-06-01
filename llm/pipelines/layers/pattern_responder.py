@@ -51,6 +51,22 @@ class PatternResponderHandler:
     - No context, no parameters needed
     """
 
+    # Intent detector "smalltalk" + subtype dediği halde LocalResponder pattern'i
+    # eşleşmezse (sürüklenme/drift) kullanılan GARANTİLİ canned yanıtlar. Böylece hiçbir
+    # smalltalk girdisi (naber, teşekkürler, ...) sessizce Info Pipeline'a (3B) düşüp
+    # güvenlik cevabı almaz. Intent detector smalltalk'ın tek doğruluk kaynağıdır.
+    _SUBTYPE_FALLBACK = {
+        "greeting": "Merhaba! 👋 Siber güvenlik ve OS sıkılaştırma (hardening) konularında "
+                    "size nasıl yardımcı olabilirim?",
+        "farewell": "Görüşmek üzere! Güvenlik veya sıkılaştırma konularında tekrar yardım "
+                    "gerekirse buradayım. 🛡️",
+        "thanks": "Rica ederim! 🙂 Başka bir güvenlik/sıkılaştırma sorunuz olursa çekinmeyin.",
+        "help": "Size SSH/RDP/Firewall sıkılaştırma, CIS Benchmark, NIST 800-207 ve Zero "
+                "Trust konularında yardımcı olabilirim. Ne yapmak istersiniz?",
+        "other": "Siber güvenlik ve OS hardening konularında yardımcı olabilirim — "
+                 "bir güvenlik sorusu sorabilirsiniz.",
+    }
+
     def __init__(self, debug: bool = False):
         """
         Args:
@@ -72,7 +88,7 @@ class PatternResponderHandler:
             }
         }
 
-    def handle(self, question: str) -> Optional[PatternResponse]:
+    def handle(self, question: str, subtype: Optional[str] = None) -> Optional[PatternResponse]:
         """
         Handle smalltalk question with pattern matching
 
@@ -99,7 +115,14 @@ class PatternResponderHandler:
         response_text = self.local_responder.check_and_respond(question)
 
         if not response_text:
-            return None  # No pattern match, needs LLM
+            # GARANTİ: Layer-2 intent "smalltalk" + subtype verdiyse, LocalResponder
+            # pattern'i eşleşmese bile canned yanıt döndür (drift → 3B kaçağını önler).
+            if subtype:
+                response_text = self._SUBTYPE_FALLBACK.get(
+                    subtype, self._SUBTYPE_FALLBACK["other"]
+                )
+            else:
+                return None  # No pattern match, needs LLM
 
         # Infer category from response
         category = self._infer_category(question, response_text)

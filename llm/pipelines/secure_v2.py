@@ -350,7 +350,11 @@ class SecurePipelineV2:
 
         start_time = datetime.now()
 
-        pattern_result = self.pattern_handler.handle(ctx.user_question)
+        # Intent'in subtype'ını geçir → LocalResponder eşleşmese bile garantili canned
+        # smalltalk yanıtı (naber/teşekkürler gibi girdiler 3B'ye düşmesin).
+        pattern_result = self.pattern_handler.handle(
+            ctx.user_question, subtype=getattr(intent, "subtype", None)
+        )
 
         if not pattern_result:
             # Fallback: If pattern matching fails, use info pipeline

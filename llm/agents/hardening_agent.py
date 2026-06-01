@@ -154,6 +154,15 @@ class HardeningAgent:
                     f"Tehlikeli komut içeren {len(dangerous_ids)} kural çıkarıldı, yeniden üretiliyor: {sorted(dangerous_ids)}",
                 ))
                 if not selected_ids:
+                    # Tüm kurallar tehlikeli çıktı → uygulanabilir güvenli kural kalmadı.
+                    # Önceki iterasyonun TEHLİKELİ artifact'ını DÖNDÜRME (güvenlik): temizle.
+                    artifact = self.artifact_generator.generate([], fmt, os_target, security_level)
+                    steps.append(AgentStep(
+                        "verify", "OutputValidator",
+                        "tüm kurallar tehlikeli komut içeriyordu → güvenli script üretilemedi",
+                        ok=False,
+                    ))
+                    validation = None
                     break
 
         success = bool(artifact and artifact.rule_count > 0 and validation and validation.is_valid)

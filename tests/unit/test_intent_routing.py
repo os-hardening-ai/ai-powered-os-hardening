@@ -33,6 +33,9 @@ SECURITY = [
     "cramfs modülünü devre dışı bırak", "ssh için ansible playbook yaz",
 ]
 OUT_OF_SCOPE = ["hava durumu nasıl", "2+2 kaç eder", "film öner", "yemek tarifi ver"]
+# Off-domain İMPERATİFLER: emir kipi var ama güvenlik sinyali yok → action DEĞİL, out_of_scope
+# (domain-gate). Eskiden "yaz/üret" pattern'i bunları action_request'e kaçırıyordu.
+OFFDOMAIN_IMPERATIVE = ["bana şiir yaz", "bana bir masal yaz", "resim çiz", "hikaye anlat", "bana şarkı yaz"]
 
 # Zorlu smalltalk varyantları (ekli/çok-kelimeli) — modül düzeyinde (parametrize için)
 HARD_SMALLTALK = [
@@ -89,6 +92,12 @@ class TestOutOfScopeRouting:
     def test_off_topic_rejected(self, detector, q):
         r = detector.detect(q)
         assert r.type == "out_of_scope", f"{q!r} → {r.type}"
+
+    @pytest.mark.parametrize("q", OFFDOMAIN_IMPERATIVE)
+    def test_offdomain_imperative_not_action(self, detector, q):
+        # Domain-gate: emir kipi + güvenlik sinyali yok → out_of_scope (action'a kaçmaz)
+        r = detector.detect(q)
+        assert r.type == "out_of_scope", f"{q!r} → {r.type} (out_of_scope bekleniyor)"
 
 
 class TestRobustSmalltalk:
