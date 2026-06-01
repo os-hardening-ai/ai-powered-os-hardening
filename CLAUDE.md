@@ -190,9 +190,10 @@ The primary pipeline is `SecurePipelineV2` (`llm/pipelines/secure_v2.py`). Every
 ```
 User Input
     ↓
-[Layer 1] Safety Classification   — LLM-based, ~200ms
-    ↓ categories: defensive_security | offensive_illegal | generic_it | ambiguous
-    ↓ offensive_illegal → REJECT immediately
+[Layer 1] Safety Classification   — YEREL fast-path (fast_local_safety, 0 LLM) → belirsizse LLM (~200ms)
+    ↓ categories: safe_defensive | safe_educational | off_topic | ambiguous | unsafe_offensive | unsafe_spam
+    ↓ unsafe_* → REJECT;  off_topic → OUT_OF_SCOPE (alan-dışı);  smalltalk → safety atlanır (0 call)
+    ↓ (fast_local_safety: net güvenlik/alan-dışı'yı LLM'siz sınıflar; saldırgan/dual-use/uzun → LLM'e düşer)
 [Layer 2] Intent Detection        — Pattern matching (<1ms) + ML fallback (5–10ms)
     ↓ intents: os_hardening | script_or_config | incident_analysis | conceptual_explanation
     ↓           generic_qna | smalltalk_greeting | smalltalk_farewell | smalltalk_other
@@ -302,6 +303,21 @@ python scripts/build_index.py
 | `ENABLE_DEBUG_LOGS` | Verbose pipeline logging | `false` |
 | `ENABLE_JUDGE_STEP` | Output quality checking | `true` |
 | `ENABLE_CORRECTION_STEP` | Auto-correct bad outputs | `true` |
+
+### Lane-tabanlı yük dengeleme (quota optimizasyonu — bkz. `docs/18`)
+| Variable | Description | Örnek |
+|----------|-------------|-------|
+| `LLM_SMALL_LANES` | small/helper havuzu `provider:model` lane'leri (round-robin) | `openrouter:meta-llama/llama-3.2-1b-instruct,sambanova:gemma-3-12b-it` |
+| `LLM_LARGE_LANES` | large/üretim havuzu lane'leri | `cerebras:gpt-oss-120b,openrouter:deepseek/deepseek-v4-flash` |
+| `CHAIN_LLM_TIMEOUT` | lane başına timeout (s); yavaş lane erken iptal → hızlı fallback | `30` |
+| `LLM_BALANCE_TOP_N` | klasik zincirde round-robin baş sağlayıcı sayısı (1=kapalı) | `3` |
+| `ANSWER_CACHE_TTL_S` | InfoPipeline answer-cache TTL (0=kapalı) | `1800` |
+| `OPENROUTER_API_KEY` / `SAMBANOVA_API_KEY` | lane sağlayıcı key'leri (paid model → kredi gerekir) | required (lane için) |
+
+> Lane env'leri **boşsa** klasik `LLM_PROVIDER` zinciri kullanılır. Lane'ler `small`/`large`
+> havuzlarını ayrı round-robin'ler; her lane'in ayrı rate-limit'i → agregat throughput katlanır.
+> **OpenRouter paid modelleri kredi gerektirir** (yetersizse `402` → fallback başka lane'e düşer;
+> `/metrics` `llm_lane_failures`'ta görünür). `:free` varyantlar kredi tüketmez.
 
 > **Not**: `NOVITA_API_KEY` LLM için kullanılmıyor (provider=groq) ama embedding için `rag/embeddings/novita_embeddings.py` tarafından hâlâ kullanılıyor — silme.
 
@@ -628,20 +644,24 @@ rag=True chunks=7 cost=$0.0006
 
 Her request tipinin toplam LLM API çağrısı:
 
-| Request Tipi | Layer 1 | QueryPlanner | FilterAgent | Generation | ClaimVerifier | **Toplam** |
+Her request tipinin toplam LLM API çağrısı (**quota optimizasyonu sonrası** — bkz. `docs/18`):
+
+| Request Tipi | Layer 1 (Safety) | QueryPlanner | FilterAgent | Generation | ClaimVerifier | **Toplam** |
 |---|---|---|---|---|---|---|
-| Smalltalk (3A) | 1 (small) | — | — | 0 | — | **1** |
-| Info + RAG, simple (3B) | 1 (small) | **0** (atlanır) | 0-1 (small) | 1 (small) | 0 (kapalı) | **2-3** |
-| Info + RAG, medium/complex (3B) | 1 (small) | 3 (small, parallel) | 0-1 (small) | 1 (large) | 0 (kapalı) | **5-6** |
-| Action/Script (3C) | 1 (small) | — | — | 1 (large) | — | **2** |
+| Smalltalk (3A) | 0 (deterministik) | — | — | 0 | — | **0** |
+| Info, **medium** (3B) | 0–1 (yerel fast-path / LLM) | **0** (yalnız complex) | 0–1 | 1 (large) | 0 (kapalı) | **~1–2** |
+| Info, **complex** (3B) | 0–1 | 3 (parallel) | 0–1 | 1 (large) | 0 (kapalı) | **~5** |
+| Action/Script (3C) | 0–1 | — | — | 1 (large) | — (deep-check kapalı) | **~1–2** |
+| **Tekrar eden soru (cache HIT)** | — | — | — | — | — | **0** |
 
-**QueryPlanner detayı** (`rag/query/query_planner.py`):
-- `_decompose`: 1 call → `max_subqueries=2` subquery üretir
-- `_generate_hyde`: 1 call → hypothetical answer passage
-- `_stepback`: 1 call → broader context query
-- Hepsi `ThreadPoolExecutor(max_workers=3)` ile **parallel** — wall-clock ~500ms
+**Çağrı azaltma mekanizmaları** (her biri bir PR):
+- **Yerel safety fast-path** (`fast_local_safety`): net güvenlik/alan-dışı → LLM'siz; saldırgan/dual-use/uzun → LLM safety'ye düşer.
+- **QueryPlanner yalnız `complex`**: medium → `retrieve_balanced` (3 paralel call kalkar).
+- **ClaimVerifier kapalı** (`use_claim_verification=false`).
+- **Action deep-check kapalı** (`use_deep_check=False`): statik regex güvenlik kalır.
+- **Answer cache**: tekrar eden soru → 0 call.
 
-**Rate limit aşıldığında**: `groq_client.py` `RuntimeError` fırlatır, `info_pipeline.py` catch edip Türkçe hata mesajı döner.
+**Quota / rate-limit gerçeği**: Cerebras `gpt-oss-120b` free tier = **5 istek/dk** (token değil, istek/dk darboğaz). Tek çok-çağrılı istek bile limiti aşıp `429+backoff` (gözlenen "65s LLM") yaratıyordu. Çözüm: yukarıdaki call-azaltma + **lane-tabanlı round-robin yük dengeleme** (`LLM_*_LANES`). Detay + eval sonuçları (v1→v3, ~4× hız, 0 timeout): `docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md`.
 
 ---
 
@@ -682,6 +702,8 @@ Tamamlananlar (production blocker olmaktan çıktı):
 | `docs/10_ARCHITECTURE_ANALYSIS.md` | English | Architecture analysis & 12 weaknesses |
 | `docs/11_PERFORMANCE_ANALYSIS.md` | English | Performance benchmarks |
 | `docs/12_FRONTEND_INTEGRATION.md` | English | React/Vue/SSE integration guide |
+| `docs/13_GUVENLIK.md` … `docs/17_LLM_SAGLAYICI_SECIMI.md` | Turkish | Güvenlik, değerlendirme, eksikler, kullanıcı çalışması, LLM sağlayıcı seçimi |
+| **`docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md`** | **Turkish** | **Quota darboğazı, call-azaltma, lane yük dengeleme, eval v1→v3 (~4× hız, 0 timeout)** |
 | `docs/archive/` | Mixed | Deprecated/historical docs |
 | `llm/archive/` | Mixed | Deprecated step-based pipeline code |
 
