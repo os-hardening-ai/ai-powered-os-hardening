@@ -1,12 +1,15 @@
 """
-Tests for the answer-groundedness refinement loop (InfoPipeline._refine_answer).
+Tests for the LIGHTWEIGHT answer-groundedness refinement loop
+(InfoPipeline._refine_answer).
 
 When the verification confidence of the FIRST answer is below `refine_threshold`,
-the pipeline reformulates the query, re-retrieves, regenerates, and re-verifies —
-keeping the new answer ONLY if its confidence improved. One attempt (latency bound).
+the pipeline makes ONE small-model correction call against the ALREADY-retrieved
+sources (NO re-retrieval / NO re-planning) and re-verifies — keeping the new
+answer ONLY if its confidence improved.
 
-All fakes (no network/LLM): the verifier scores confidence from chunk content,
-so we deterministically drive low→high (or low→still-low) transitions.
+All fakes (no network/LLM): the verifier scores confidence from the ANSWER text
+('GROUNDED' → high), so we deterministically drive low→high (or low→still-low)
+transitions without any retrieval round.
 """
 
 from __future__ import annotations
@@ -20,38 +23,33 @@ from rag.verify.claim_verifier import VerificationResult
 
 
 class FakeLLM:
-    """Her çağrıda artan numarayla cevap döner → hangi cevabın tutulduğu izlenebilir."""
-    def __init__(self):
+    """Sabit bir metin döner; çağrı sayısını izler. system= kwargs'ı kabul eder."""
+    def __init__(self, text: str):
         self.calls = 0
+        self.text = text
 
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, prompt: str, **kw) -> str:
         self.calls += 1
-        return f"ANSWER_{self.calls}"
+        return self.text
 
 
 class FakeRag:
-    """retrieve_balanced: refined sorgu ('tam yapılandırma' içerir) iyi/zayıf chunk döndürür."""
-    def __init__(self, refined_good: bool = True):
-        self.refined_good = refined_good
+    """retrieve_balanced: tek kaynak seti döner; refinement bunu YENİDEN çağırmamalı."""
+    def __init__(self):
         self.calls: list[str] = []
 
     def retrieve_balanced(self, query: str, **kw):
         self.calls.append(query)
-        refined = "tam yapılandırma" in query
-        if refined and self.refined_good:
-            chunks = [{"text": "good rule one", "id": "r1", "metadata": {}},
-                      {"text": "good rule two", "id": "r2", "metadata": {}}]
-            return "CTX_REFINED", chunks
-        # initial (veya refined-ama-hala-zayıf)
-        chunks = [{"text": "weak ctx a", "id": "w1", "metadata": {}},
-                  {"text": "weak ctx b", "id": "w2", "metadata": {}}]
-        return "CTX_INITIAL", chunks
+        return "CTX_SOURCES", [
+            {"text": "rule a", "id": "r1", "metadata": {}},
+            {"text": "rule b", "id": "r2", "metadata": {}},
+        ]
 
 
 class FakeVerifier:
-    """Confidence chunk içeriğinden: 'good' → 0.9 (geçerli), aksi 0.3 (düşük)."""
+    """Confidence ANSWER içeriğinden: 'GROUNDED' → 0.9 (geçerli), aksi 0.3 (düşük)."""
     def verify(self, answer, chunks):
-        good = any("good" in c.get("text", "") for c in chunks)
+        good = "GROUNDED" in (answer or "")
         conf = 0.9 if good else 0.3
         return VerificationResult(
             is_valid=conf >= 0.6,
@@ -66,10 +64,11 @@ def force_medium(monkeypatch):
     monkeypatch.setattr(ip_mod, "classify_question", lambda q: "medium")
 
 
-def _pipeline(rag, verifier, enable_refinement=True, refine_threshold=0.55):
+def _pipeline(rag, verifier, *, large_text, small_text,
+              enable_refinement=True, refine_threshold=0.40):
     return InfoPipeline(
-        llm_small=FakeLLM(),
-        llm_large=FakeLLM(),
+        llm_small=FakeLLM(small_text),
+        llm_large=FakeLLM(large_text),
         rag_builder=rag,
         claim_verifier=verifier,
         enable_refinement=enable_refinement,
@@ -80,57 +79,51 @@ def _pipeline(rag, verifier, enable_refinement=True, refine_threshold=0.55):
 _Q = "ubuntu 24.04 ssh sshd_config sıkılaştırma adımları neler"
 
 
-class TestRefinementTriggers:
-    def test_low_confidence_triggers_refine_and_keeps_better(self):
-        rag = FakeRag(refined_good=True)
-        p = _pipeline(rag, FakeVerifier())
+class TestLightweightRefinement:
+    def test_low_confidence_triggers_correction_and_keeps_better(self):
+        # İlk üretim (large) ungrounded → 0.3 → düzeltme (small) GROUNDED → 0.9 → tut.
+        rag = FakeRag()
+        p = _pipeline(rag, FakeVerifier(),
+                      large_text="INITIAL ungrounded answer",
+                      small_text="GROUNDED corrected answer")
         res = p.handle(RequestContext(user_question=_Q))
-        assert res.verification_confidence == 0.9        # düşük 0.3'ten yükseldi
         assert p.stats["refine_count"] == 1
-        assert len(rag.calls) == 2                        # initial + refine retrieval
-        assert res.answer.startswith("ANSWER_2")          # refined cevap tutuldu
+        assert p.llm_small.calls == 1                 # TEK düzeltme çağrısı
+        assert len(rag.calls) == 1                    # YENİDEN retrieval YOK
+        assert res.verification_confidence == 0.9     # 0.3 → 0.9 iyileşti
+        assert "GROUNDED" in res.answer               # düzeltilmiş cevap tutuldu
 
     def test_high_initial_confidence_no_refine(self):
-        # initial retrieval'i de 'good' yap → ilk confidence 0.9 → refine yok
-        rag = FakeRag(refined_good=True)
-        rag.retrieve_balanced = lambda q, **kw: (rag.calls.append(q) or (
-            "CTX", [{"text": "good a", "id": "g1", "metadata": {}},
-                    {"text": "good b", "id": "g2", "metadata": {}}]))
-        p = _pipeline(rag, FakeVerifier())
+        # İlk üretim zaten GROUNDED → 0.9 → düzeltme hiç çalışmaz.
+        rag = FakeRag()
+        p = _pipeline(rag, FakeVerifier(),
+                      large_text="GROUNDED initial answer",
+                      small_text="should-not-be-called")
         res = p.handle(RequestContext(user_question=_Q))
-        assert res.verification_confidence == 0.9
         assert p.stats["refine_count"] == 0
-        assert len(rag.calls) == 1                         # yalnız initial
+        assert p.llm_small.calls == 0
+        assert res.verification_confidence == 0.9
 
     def test_refinement_disabled(self):
-        rag = FakeRag(refined_good=True)
-        p = _pipeline(rag, FakeVerifier(), enable_refinement=False)
+        rag = FakeRag()
+        p = _pipeline(rag, FakeVerifier(),
+                      large_text="INITIAL ungrounded answer",
+                      small_text="GROUNDED corrected answer",
+                      enable_refinement=False)
         res = p.handle(RequestContext(user_question=_Q))
-        assert res.verification_confidence == 0.3          # düşük kaldı
         assert p.stats["refine_count"] == 0
-        assert len(rag.calls) == 1
+        assert p.llm_small.calls == 0
+        assert res.verification_confidence == 0.3     # düşük kaldı
 
     def test_keeps_original_when_not_improved(self):
-        # refined retrieval da zayıf → yeni confidence iyileşmez → orijinali koru
-        rag = FakeRag(refined_good=False)
-        p = _pipeline(rag, FakeVerifier())
+        # Düzeltme de GROUNDED değil → iyileşmez → orijinali koru.
+        rag = FakeRag()
+        p = _pipeline(rag, FakeVerifier(),
+                      large_text="INITIAL ungrounded answer",
+                      small_text="still ungrounded text")
         res = p.handle(RequestContext(user_question=_Q))
         assert p.stats["refine_count"] == 1
-        assert len(rag.calls) == 2
-        assert res.answer.startswith("ANSWER_1")           # orijinal cevap korundu
+        assert p.llm_small.calls == 1                 # düzeltme denendi
+        assert len(rag.calls) == 1                    # ama YENİDEN retrieval YOK
         assert res.verification_confidence == 0.3
-
-
-class TestReformulate:
-    def test_reformulate_includes_question_and_hint(self):
-        p = _pipeline(FakeRag(), FakeVerifier())
-        out = p._reformulate("ssh nasıl güvenli", ["PermitRootLogin no olmalı"])
-        assert "ssh nasıl güvenli" in out
-        assert "PermitRootLogin" in out
-        assert "tam yapılandırma" in out   # refined retrieval'i tetikleyen işaret
-
-    def test_reformulate_no_unsupported(self):
-        p = _pipeline(FakeRag(), FakeVerifier())
-        out = p._reformulate("firewall ayarları", [])
-        assert out.startswith("firewall ayarları")
-        assert "CIS Benchmark" in out
+        assert "INITIAL" in res.answer                # orijinal cevap korundu

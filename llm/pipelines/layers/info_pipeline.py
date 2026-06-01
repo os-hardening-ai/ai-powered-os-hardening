@@ -75,7 +75,7 @@ class InfoPipeline:
         claim_verifier=None,
         debug: bool = False,
         enable_refinement: bool = True,
-        refine_threshold: float = 0.55,
+        refine_threshold: float = 0.40,
     ):
         """
         Args:
@@ -258,10 +258,10 @@ class InfoPipeline:
                 vr = self.claim_verifier.verify(result, raw_results_for_verify)
                 _t["claim_verify_s"] = (datetime.now() - _t0).total_seconds()
 
-                # Cevap-groundedness refinement loop: üretilen cevap kaynaklarla yeterince
-                # örtüşmüyorsa (confidence < eşik) sorguyu GENİŞLET → yeniden retrieve →
-                # yeniden üret → yeniden doğrula; yalnız DAHA İYİ cevabı tut. Tek deneme
-                # (H3 latency sınırı). simple yol RAG'siz olduğu için hariç.
+                # Cevap-groundedness refinement loop (HAFİF): üretilen cevap kaynaklarla
+                # yeterince örtüşmüyorsa (confidence < eşik) → yeniden-retrieval/planlama YOK,
+                # zaten elde olan kaynaklara karşı TEK küçük-model düzeltme çağrısı. Yalnız
+                # DAHA İYİ cevabı tut. Tek deneme. simple yol RAG'siz olduğu için hariç.
                 if (
                     self.enable_refinement
                     and complexity != "simple"
@@ -379,57 +379,52 @@ class InfoPipeline:
             self.stats["complex_count"] += 1
             return self._complex_path(ctx), "large+CoT", 0.0015
 
-    def _reformulate(self, question: str, unsupported: List[str]) -> str:
-        """Refinement için sorguyu deterministik genişlet: orijinal + (varsa) ilk
-        desteklenmeyen iddianın terimleri + spesifik yapılandırma/CIS vurgusu."""
-        hint = unsupported[0][:120] if unsupported else ""
-        return f"{question} {hint} CIS Benchmark tam yapılandırma adımları ve kesin komutlar".strip()
-
     def _refine_answer(self, ctx, complexity, result, raw_results, vr, _t):
-        """Düşük groundedness'ta TEK refinement denemesi:
-        sorguyu genişlet → yeniden retrieve → yeniden üret → yeniden doğrula.
+        """HAFİF refinement: yeniden-retrieval/yeniden-planlama YOK.
+
+        Zaten elde olan kaynaklara (raw_results / ctx.retrieved_context) karşı TEK
+        küçük-model düzeltme çağrısı ile desteklenmeyen iddiaları çıkarır/uyumlar.
+        Eski sürüm sorguyu genişletip tüm RAG yolunu baştan koşuyordu
+        (reformulate + queryplan×3 + retrieve_multi + büyük-model üretim + verify
+        ≈ 9 call, ~36s). Bu sürüm ~1 küçük-model call + 1 verify ≈ birkaç saniye.
         Yalnız confidence ARTARSA yeni cevabı tutar; aksi halde orijinali korur.
         """
         try:
             self.stats["refine_count"] += 1
+            unsupported = list(vr.unsupported)
+            if not unsupported or not ctx.retrieved_context:
+                return result, raw_results, vr
             _logger.info(
-                "[RefinementLoop:answer] confidence %.2f < %.2f — genişletilmiş yeniden retrieval",
-                vr.confidence, self.refine_threshold,
+                "[RefinementLoop:light] confidence %.2f < %.2f — %d iddia için tek düzeltme çağrısı",
+                vr.confidence, self.refine_threshold, len(unsupported),
             )
-            refined_q = self._reformulate(ctx.user_question, list(vr.unsupported))
+            unsupported_txt = "\n".join(f"- {c}" for c in unsupported[:5])
+            correction_prompt = (
+                "Aşağıdaki KAYNAKLAR'a dayanarak CEVAP'ı düzelt. Kaynaklarca "
+                "DESTEKLENMEYEN şu ifadeleri kaynaklarla uyumlu hale getir ya da çıkar; "
+                "yeni iddia EKLEME, cevabın dilini ve formatını koru.\n\n"
+                f"DESTEKLENMEYEN İFADELER:\n{unsupported_txt}\n\n"
+                f"KAYNAKLAR:\n{ctx.retrieved_context}\n\n"
+                f"CEVAP:\n{result}\n\n"
+                "DÜZELTİLMİŞ CEVAP:"
+            )
+            _t1 = datetime.now()
+            new_answer = self._call_llm(self.llm_small, correction_prompt, ctx)
+            _t["refine_correct_s"] = (datetime.now() - _t1).total_seconds()
 
-            _t0 = datetime.now()
-            if self.query_planner is not None and hasattr(self.rag_builder, "retrieve_multi"):
-                plan = self.query_planner.plan(refined_q)
-                new_ctx, new_raw = self.rag_builder.retrieve_multi(
-                    queries=plan.all_queries(), original_query=ctx.user_question,
-                )
-            else:
-                new_ctx, new_raw = self.rag_builder.retrieve_balanced(refined_q)
-            _t["refine_retrieve_s"] = (datetime.now() - _t0).total_seconds()
-
-            if not new_raw:
+            if not new_answer or not new_answer.strip():
                 return result, raw_results, vr
 
-            # Yeni context ile yeniden üret
-            prev_context = ctx.retrieved_context
-            ctx.retrieved_context = new_ctx
-            _t1 = datetime.now()
-            new_answer, _, _ = self._generate(ctx, complexity)
-            _t["refine_gen_s"] = (datetime.now() - _t1).total_seconds()
-
-            new_vr = self.claim_verifier.verify(new_answer, new_raw)
+            # Aynı kaynaklara karşı yeniden doğrula (claims=1 → tek call); sadece iyileşirse tut
+            new_vr = self.claim_verifier.verify(new_answer, raw_results)
             if new_vr.confidence > vr.confidence:
                 _logger.info(
-                    "[RefinementLoop:answer] iyileşti %.2f → %.2f", vr.confidence, new_vr.confidence
+                    "[RefinementLoop:light] iyileşti %.2f → %.2f", vr.confidence, new_vr.confidence
                 )
-                return new_answer, new_raw, new_vr
-
-            # İyileşmediyse orijinali koru (context'i geri al)
-            ctx.retrieved_context = prev_context
+                return new_answer, raw_results, new_vr
             return result, raw_results, vr
         except Exception as exc:
-            _logger.warning("[RefinementLoop:answer] failed: %s", exc)
+            _logger.warning("[RefinementLoop:light] failed: %s", exc)
             return result, raw_results, vr
 
     def _call_llm(self, fn, prompt: str, ctx: RequestContext) -> str:
