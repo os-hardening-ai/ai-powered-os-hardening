@@ -704,6 +704,7 @@ Tamamlananlar (production blocker olmaktan çıktı):
 | `docs/12_FRONTEND_INTEGRATION.md` | English | React/Vue/SSE integration guide |
 | `docs/13_GUVENLIK.md` … `docs/17_LLM_SAGLAYICI_SECIMI.md` | Turkish | Güvenlik, değerlendirme, eksikler, kullanıcı çalışması, LLM sağlayıcı seçimi |
 | **`docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md`** | **Turkish** | **Quota darboğazı, call-azaltma, lane yük dengeleme, eval v1→v3 (~4× hız, 0 timeout)** |
+| **`docs/19_AGENTIC_AI_VE_SELF_VERIFY.md`** | **Turkish** | **Agentic ajan (İP-6/İP-7), 6-adımlı tool-use, sözdizimi self-verify (`bash -n`) + kural izolasyonu + LLM-repair son çare** |
 | `docs/archive/` | Mixed | Deprecated/historical docs |
 | `llm/archive/` | Mixed | Deprecated step-based pipeline code |
 

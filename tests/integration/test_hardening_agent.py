@@ -9,6 +9,7 @@ loop that drops rules carrying dangerous commands.
 
 from __future__ import annotations
 
+import shutil
 import textwrap
 
 import pytest
@@ -17,6 +18,8 @@ from domain.rule_engine.rule_engine import RuleEngine
 from llm.agents.hardening_agent import HardeningAgent, AgentResult
 
 pytestmark = pytest.mark.integration
+
+_HAS_BASH = shutil.which("bash") is not None
 
 
 SAFE_RULES = """
@@ -40,6 +43,16 @@ DANGEROUS_RULE = """
     level: 1
     category: "misc"
     remediation_script_content: "rm -rf / --no-preserve-root"
+"""
+
+# Tehlikeli DEĞİL ama sözdizimi BOZUK (dengesiz çift tırnak) → `bash -n` patlar,
+# fakat OutputValidator tehlikeli-komut taramasından GEÇER (echo zararsız).
+BROKEN_BASH_RULE = """
+  - id: "7.7.7"
+    title: "Broken quote rule"
+    level: 1
+    category: "misc"
+    remediation_script_content: 'echo "unterminated string >> /etc/some.conf'
 """
 
 
@@ -163,3 +176,98 @@ class TestEdgeCases:
         agent = HardeningAgent(rule_engine=engine, llm_fn=lambda _p: "Yönetici özeti: 2 kural uygulandı.")
         res = agent.run("ssh", security_level="balanced")
         assert "Yönetici özeti" in res.summary
+
+
+class TestSyntaxSelfVerify:
+    """Step 6: üretilen script `bash -n`/`yaml.load` ile FİİLEN doğrulanır; bozuksa
+    (a) bozuk kural izole edilip çıkarılır (deterministik), (b) son çare LLM-repair."""
+
+    @pytest.mark.skipif(not _HAS_BASH, reason="bash yok — `bash -n` doğrulaması atlanır")
+    def test_syntax_step_present_and_ok_on_happy_path(self, tmp_path):
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine)  # llm None
+        res = agent.run("ssh", fmt="bash")
+        syntax_steps = [s for s in res.steps if s.name == "syntax"]
+        assert len(syntax_steps) == 1 and syntax_steps[0].ok  # tek geçiş, geçerli
+        assert res.success
+
+    @pytest.mark.skipif(not _HAS_BASH, reason="bash yok")
+    def test_broken_rule_isolated_and_dropped(self, tmp_path):
+        # SAFE + sözdizimi bozuk kural → izolasyon bozuğu bulur, çıkarır, yeniden üretir.
+        engine = make_engine(tmp_path, SAFE_RULES + BROKEN_BASH_RULE)
+        agent = HardeningAgent(rule_engine=engine, max_syntax_fix=1)  # llm None
+        res = agent.run("sıkılaştır", fmt="bash")
+        # deterministik syntax-isolate refine adımı ateşlendi
+        assert any(s.name == "refine" and s.tool == "syntax-isolate" for s in res.steps)
+        # bozuk kural final çıktıdan SİLİNDİ, güvenli kurallar kaldı
+        assert "7.7.7" not in res.artifact.content
+        assert "unterminated" not in res.artifact.content
+        assert "PermitRootLogin no" in res.artifact.content
+        # son syntax kontrolü temiz → success
+        syntax_steps = [s for s in res.steps if s.name == "syntax"]
+        assert len(syntax_steps) == 2 and syntax_steps[-1].ok
+        assert res.success
+
+    def test_ansible_syntax_checked_via_yaml(self, tmp_path):
+        # bash gerektirmez — ansible yaml.safe_load ile doğrulanır (safe_dump → geçerli).
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine)
+        res = agent.run("hepsi", fmt="ansible")
+        syntax_steps = [s for s in res.steps if s.name == "syntax"]
+        assert len(syntax_steps) == 1 and syntax_steps[0].ok
+        assert res.success
+
+    @pytest.mark.skipif(not _HAS_BASH, reason="bash yok")
+    def test_llm_repair_last_resort_accepted(self, tmp_path, monkeypatch):
+        # İzolasyon suçluyu bulamazsa (iskelet düzeyi hata) → LLM-repair son çaresi.
+        engine = make_engine(tmp_path, BROKEN_BASH_RULE)
+        # Onarılmış script: geçerli + güvenli + min uzunluğu (50 char) aşar.
+        fixed = ("#!/usr/bin/env bash\nset -euo pipefail\n"
+                 "echo 'AllowGroups sudo' >> /etc/ssh/sshd_config\necho tamamlandi\n")
+        agent = HardeningAgent(
+            rule_engine=engine, max_syntax_fix=1,
+            llm_fn=lambda _p: "```bash\n" + fixed + "```",  # fenced → strip edilmeli
+        )
+        # izolasyonu bilerek devre dışı bırak → LLM-repair dalına zorla
+        monkeypatch.setattr(agent, "_isolate_broken_rule_ids", lambda *a, **k: set())
+        res = agent.run("temizlik", fmt="bash")
+        assert any(s.tool == "LLM-repair" and s.ok for s in res.steps)
+        assert "AllowGroups sudo" in res.artifact.content  # fence ayıklandı + onarıldı
+        assert res.success
+
+    @pytest.mark.skipif(not _HAS_BASH, reason="bash yok")
+    def test_llm_repair_rejected_when_still_invalid(self, tmp_path, monkeypatch):
+        # LLM onarımı HÂLÂ bozuksa reddedilir → bozuk script sessizce sunulmaz, success False.
+        engine = make_engine(tmp_path, BROKEN_BASH_RULE)
+        # 50+ char (uzunluk geçer) AMA dengesiz tırnak → SÖZDİZİMİ nedeniyle reddedilmeli.
+        agent = HardeningAgent(
+            rule_engine=engine, max_syntax_fix=1,
+            llm_fn=lambda _p: ('#!/usr/bin/env bash\n'
+                               'echo "still an unterminated string that is plenty long enough'),
+        )
+        monkeypatch.setattr(agent, "_isolate_broken_rule_ids", lambda *a, **k: set())
+        res = agent.run("temizlik", fmt="bash")
+        assert any(s.tool == "LLM-repair" and not s.ok for s in res.steps)
+        assert not res.success
+        assert any("Sözdizimi" in i for i in res.issues)
+
+
+class TestSyntaxHelpers:
+    def test_strip_code_fence(self, tmp_path):
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine)
+        assert agent._strip_code_fence("```bash\necho hi\n```") == "echo hi"
+        assert agent._strip_code_fence("```\necho hi\n```") == "echo hi"
+        assert agent._strip_code_fence("echo hi") == "echo hi"  # çitsiz → değişmez
+
+    def test_syntax_check_skips_unverifiable_formats(self, tmp_path):
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine)
+        ok, err = agent._syntax_check("Set-Item X 14", "powershell")
+        assert ok and err == ""        # pwsh doğrulayıcı yok → engelleme
+
+    def test_syntax_check_detects_bad_yaml(self, tmp_path):
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine)
+        ok, err = agent._syntax_check("key: [unclosed", "ansible")
+        assert not ok and err          # geçersiz YAML yakalanır
