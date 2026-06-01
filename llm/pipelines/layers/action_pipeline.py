@@ -247,11 +247,16 @@ class ActionPipeline:
                 rag_sources=rag_sources,
             )
 
-        # STEP 2D: Output Validation
+        # STEP 2D: Output Validation — STATİK (regex) güvenlik kontrolü HER ZAMAN çalışır
+        # (tehlikeli komut, kod-bloğu, min-uzunluk, LLM-refusal). LLM tabanlı derin
+        # validate+correct (use_deep_check) KAPATILDI: action'da generation + judge +
+        # correction = 3 sıralı LLM call demekti; Cerebras 5 istek/dk limitinde bu burst
+        # 429-backoff (~30-60s) → timeout tetikliyordu. Statik kontrol tehlikeli komutları
+        # (rm -rf vb.) zaten yakaladığından güvenlik korunur, maliyet/gecikme düşer.
         validation = self.validator.validate(
             output=script,
             intent="action_request",
-            use_deep_check=True  # Critical for scripts
+            use_deep_check=False,  # quota: LLM judge/correction atlandı; statik regex kalır
         )
 
         if not validation.is_valid:
@@ -273,7 +278,7 @@ class ActionPipeline:
 
         # Success stats
         self.stats["successful_scripts"] += 1
-        estimated_cost = 0.0025 + 0.0005 + 0.001  # Script + ZT + Validation
+        estimated_cost = 0.0025 + 0.0005  # Script + ZT (validation artık statik → $0, LLM call yok)
         self.stats["total_cost"] += estimated_cost
 
         response_time = (datetime.now() - start_time).total_seconds()
