@@ -53,3 +53,18 @@ class TestActionPipelineDegradation:
         assert result.success is False
         assert result.missing_params  # asked for params
         assert called["n"] == 0  # LLM never invoked
+
+    def test_validation_is_static_no_llm_deep_check(self):
+        """#38 (quota): action validation use_deep_check=False → STATİK regex; LLM
+        judge/correction call YOK. Statik kontrol güvenliği (tehlikeli komut/kod-bloğu)
+        korur ama 5/dk limitinde fazladan 1-2 call'ı keser."""
+        def large(_p, **kw):
+            return ("İşte CIS uyumlu sıkılaştırma scripti:\n```bash\n"
+                    "#!/usr/bin/env bash\nset -euo pipefail\n"
+                    "sudo ufw default deny incoming\nsudo ufw enable\n```\n")
+
+        pipe = ActionPipeline(llm_large=large, rag_builder=None, debug=False)
+        result = pipe.handle(_ctx())
+        assert result.success is True
+        assert result.validation is not None
+        assert result.validation.validation_method == "regex"  # LLM deep-check DEĞİL

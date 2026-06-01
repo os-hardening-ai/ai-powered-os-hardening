@@ -227,6 +227,29 @@ class TestInfoComplexityRouting:
     def _ip(self, rag=None, **kw):
         return InfoPipeline(llm_small=fake_small, llm_large=fake_large, rag_builder=rag, **kw)
 
+    def test_queryplanner_runs_only_for_complex(self, monkeypatch):
+        """#39 (quota): QueryPlanner (3 paralel call) yalnız 'complex'te koşar; 'medium'
+        retrieve_balanced kullanır → info isteği call sayısı düşer."""
+        import types
+        from llm.pipelines.layers import info_pipeline as ipmod
+
+        class SpyPlanner:
+            def __init__(self):
+                self.calls = 0
+            def plan(self, q):
+                self.calls += 1
+                return types.SimpleNamespace(all_queries=lambda: [q])
+
+        sp = SpyPlanner()
+        ip = InfoPipeline(llm_small=fake_small, llm_large=fake_large, rag_builder=FakeRAG(n=3),
+                          query_planner=sp, claim_verifier=None, enable_refinement=False)
+        monkeypatch.setattr(ipmod, "classify_question", lambda q: "medium")
+        ip.handle(RequestContext(user_question="ssh sshd_config nasıl sıkılaştırılır"))
+        assert sp.calls == 0, "medium → QueryPlanner ATLANMALI"
+        monkeypatch.setattr(ipmod, "classify_question", lambda q: "complex")
+        ip.handle(RequestContext(user_question="kapsamlı hardening ve zero trust mimarisi uygula"))
+        assert sp.calls == 1, "complex → QueryPlanner çalışmalı"
+
     # Yalnız AÇIK TANIM soruları ("X nedir/ne demek") simple → LLM, RAG yok.
     # PERMISSIVE POLİTİKA: tereddütte RAG'a gitmek zararsız, RAG gerekirken gitmemek kötü.
     # Bu yüzden yalın araç adı ("ufw ne") veya hardening how-to ("nasıl sıkılaştırılır")
