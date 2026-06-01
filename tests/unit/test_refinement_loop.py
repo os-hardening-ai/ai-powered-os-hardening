@@ -127,3 +127,23 @@ class TestLightweightRefinement:
         assert len(rag.calls) == 1                    # ama YENİDEN retrieval YOK
         assert res.verification_confidence == 0.3
         assert "INITIAL" in res.answer                # orijinal cevap korundu
+
+
+class TestAnswerCache:
+    """Aynı soru tekrar → 0 LLM/RAG call (exact-match answer cache)."""
+
+    def test_repeat_question_is_cache_hit(self):
+        rag = FakeRag()
+        large = FakeLLM("GROUNDED cached answer")
+        small = FakeLLM("unused")
+        p = InfoPipeline(llm_small=small, llm_large=large, rag_builder=rag,
+                         claim_verifier=None, enable_refinement=False)
+        q = "ubuntu ssh nasıl sıkılaştırılır (cache testi)"
+        r1 = p.handle(RequestContext(user_question=q))
+        llm_after_first = large.calls + small.calls
+        rag_after_first = len(rag.calls)
+        assert llm_after_first >= 1 and rag_after_first >= 1   # ilk: gerçekten üretildi
+        r2 = p.handle(RequestContext(user_question=q))         # aynı soru → cache HIT
+        assert large.calls + small.calls == llm_after_first    # EK LLM call YOK
+        assert len(rag.calls) == rag_after_first               # EK RAG YOK
+        assert r2.answer == r1.answer

@@ -28,6 +28,51 @@ LLMCallable = Callable[[str], str]
 
 _logger = logging.getLogger(__name__)
 
+# ── ANSWER CACHE (exact-match, normalize) ────────────────────────────────────
+# Best-practice: aynı soruyu YENİDEN ÜRETME → 0 LLM call. Anahtar = normalize(soru) +
+# os + role + security_level. Yalnız BAŞARILI cevaplar cache'lenir (hata/boş değil).
+# In-memory LRU + TTL (tek container; çok-worker için ileride Redis'e taşınabilir).
+# ANSWER_CACHE_TTL_S=0 → cache kapalı. (Semantik benzerlik eşleştirme ileride embedding
+# cache üstüne eklenebilir; bu sürüm güvenli exact-match — yanlış-hit riski yok.)
+import os as _os
+import re as _re
+from collections import OrderedDict as _OrderedDict
+
+_ANSWER_CACHE: "dict" = _OrderedDict()
+_ANSWER_CACHE_MAX = 500
+try:
+    _ANSWER_CACHE_TTL_S = float(_os.environ.get("ANSWER_CACHE_TTL_S", "1800"))
+except ValueError:
+    _ANSWER_CACHE_TTL_S = 1800.0
+
+
+def _answer_cache_key(ctx: "RequestContext") -> str:
+    q = _re.sub(r"\s+", " ", (ctx.user_question or "").strip().lower())
+    return f"{q}|{ctx.os or ''}|{ctx.role or ''}|{ctx.security_level or ''}"
+
+
+def _answer_cache_get(key: str):
+    if _ANSWER_CACHE_TTL_S <= 0:
+        return None
+    item = _ANSWER_CACHE.get(key)
+    if item is None:
+        return None
+    ts, result = item
+    if (datetime.now() - ts).total_seconds() > _ANSWER_CACHE_TTL_S:
+        _ANSWER_CACHE.pop(key, None)
+        return None
+    _ANSWER_CACHE.move_to_end(key)  # LRU dokunuşu
+    return result
+
+
+def _answer_cache_put(key: str, result) -> None:
+    if _ANSWER_CACHE_TTL_S <= 0:
+        return
+    _ANSWER_CACHE[key] = (datetime.now(), result)
+    _ANSWER_CACHE.move_to_end(key)
+    while len(_ANSWER_CACHE) > _ANSWER_CACHE_MAX:
+        _ANSWER_CACHE.popitem(last=False)
+
 
 
 @dataclass
@@ -130,6 +175,13 @@ class InfoPipeline:
         """
         start_time = datetime.now()
         _t: dict[str, float] = {}  # per-step timing accumulator
+
+        # ANSWER CACHE: aynı soru (+os/role/level) tekrar gelirse 0 LLM call ile dön.
+        _ck = _answer_cache_key(ctx)
+        _cached = _answer_cache_get(_ck)
+        if _cached is not None:
+            _logger.info("[InfoPipeline] answer-cache HIT → 0 LLM call (%.40s)", ctx.user_question)
+            return _cached
 
         # Classify complexity
         complexity = classify_question(ctx.user_question)
@@ -304,7 +356,7 @@ class InfoPipeline:
         # Calculate response time
         response_time = (datetime.now() - start_time).total_seconds()
 
-        return InfoQueryResult(
+        result_obj = InfoQueryResult(
             answer=result,
             complexity=complexity,
             used_rag=use_rag and rag_chunks > 0,
@@ -317,6 +369,10 @@ class InfoPipeline:
             unsupported_claims=unsupported_claims,
             timing=_t,
         )
+        # Yalnız BAŞARILI cevabı cache'le (LLM hatası/boş cevabı tekrar sunma).
+        if model_used != "error" and result and result.strip():
+            _answer_cache_put(_ck, result_obj)
+        return result_obj
 
     def _should_use_rag(self, question: str, complexity: str) -> bool:
         """

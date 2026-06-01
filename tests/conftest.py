@@ -17,6 +17,18 @@ sys.path.insert(0, str(project_root))
 os.environ.setdefault("INTENT_ROUTER", "tfidf")
 
 
+@pytest.fixture(autouse=True)
+def _clear_answer_cache():
+    """InfoPipeline modül-seviyesi answer-cache'i her testten ÖNCE temizle → test izolasyonu
+    (aynı soruyu tekrar soran testler birbirinin cache'inden etkilenmesin)."""
+    try:
+        from llm.pipelines.layers import info_pipeline as _ip
+        _ip._ANSWER_CACHE.clear()
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture(scope="session")
 def app():
     """FastAPI application instance (session-scoped).
