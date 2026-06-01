@@ -192,11 +192,14 @@ class HybridIntentDetector:
         self.ml_detector = ml_detector
         self.classifier_backend = "tfidf"
 
-        # Embedding router tercihi: param > env (INTENT_ROUTER=embedding|tfidf) > varsayılan embedding.
-        # Embedding router TF-IDF'ten sağlam (argo/typo/beklenmedik ifade) → varsayılan AÇIK;
-        # embedding sağlayıcısı (Novita) kurulamazsa otomatik TF-IDF'e düşer (graceful degrade).
+        # Sınıflandırıcı backend: param > env (INTENT_ROUTER=embedding|tfidf) > varsayılan TF-IDF.
+        # KANIT (scripts/evaluate_intent_router.py, 44 etiketli örnek, gerçek Novita):
+        #   TF-IDF %93.2 / ~0.5ms   vs   embedding %75.0 / ~600-1300ms (p95 ~6s).
+        # Embedding kosinüsü KONUYU yakalıyor ama info↔action KİP farkını ("nedir" vs "kapat")
+        # yakalayamıyor + her sorguda canlı embed çağrısı = gecikme. Bu yüzden varsayılan TF-IDF.
+        # Embedding router opt-in deneysel kalır (INTENT_ROUTER=embedding).
         if use_embedding_router is None:
-            use_embedding_router = os.environ.get("INTENT_ROUTER", "embedding").lower() == "embedding"
+            use_embedding_router = os.environ.get("INTENT_ROUTER", "tfidf").lower() == "embedding"
 
         if self.use_ml and self.ml_detector is None and use_embedding_router:
             try:
