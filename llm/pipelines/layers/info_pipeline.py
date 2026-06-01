@@ -274,16 +274,20 @@ class InfoPipeline:
 
                 verification_confidence = vr.confidence
                 unsupported_claims = list(vr.unsupported)
-                if not vr.is_valid:
+                # Disclaimer'ı yalnızca BİRDEN FAZLA desteksiz iddia varken göster. Tek bir
+                # iddianın "desteksiz" çıkması (özellikle az örneklemde) çoğu kez kalibrasyon/
+                # retrieval artefaktıdır → kullanıcıyı korkutucu "%0 güven" ile yanıltmayalım.
+                # Ayrıca yüzde basmıyoruz (az iddiada precision yanıltıcı); niteliksel + eylem odaklı.
+                if not vr.is_valid and len(vr.unsupported) >= 2:
                     _logger.warning(
                         "[InfoPipeline] Low verification confidence %.2f — unsupported: %s",
                         vr.confidence,
                         vr.unsupported[:2],
                     )
                     result += (
-                        f"\n\n> ⚠️ **Güven skoru:** %{vr.confidence * 100:.0f} — "
-                        "bazı ifadeler kaynak dokümanlarla tam örtüşmüyor, "
-                        "lütfen kritik komutları resmi CIS Benchmark'tan doğrulayın."
+                        "\n\n> ℹ️ **Not:** Bu yanıttaki bazı ifadeler getirilen kaynak "
+                        "dokümanlarla doğrudan eşleşmedi. Kritik komutları uygulamadan önce "
+                        "resmi CIS Benchmark / dağıtım dokümantasyonundan teyit edin."
                     )
             except Exception as cv_exc:
                 _logger.warning("[InfoPipeline] ClaimVerifier failed: %s", cv_exc)

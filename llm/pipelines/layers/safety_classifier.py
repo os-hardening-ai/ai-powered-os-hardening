@@ -26,7 +26,8 @@ from prometheus_metrics import record_safety_check, record_rejection
 
 SafetyCategory = Literal[
     "safe_defensive",      # Legitimate security hardening
-    "safe_educational",    # Learning/research query
+    "safe_educational",    # Learning/research query (SECURITY/IT domain)
+    "off_topic",           # Tehdit DEĞİL ama alan-DIŞI (hava/math/genel kültür) → kapsam dışı
     "ambiguous",           # Unclear intent (model DELIBERATELY classified → proceed w/ caution)
     "unsafe_offensive",    # Attack/exploit development
     "unsafe_spam",         # Spam/abuse attempt
@@ -43,7 +44,8 @@ class SafetyResult:
     is_safe: bool = True  # Convenience flag
 
     def __post_init__(self):
-        self.is_safe = self.category in ["safe_defensive", "safe_educational", "ambiguous"]
+        # off_topic tehdit değildir (REJECT edilmez) → is_safe; routing onu kapsam-dışına alır.
+        self.is_safe = self.category in ["safe_defensive", "safe_educational", "ambiguous", "off_topic"]
 
 
 class SafetyClassifier:
@@ -83,17 +85,26 @@ Categories:
 2. safe_educational: Learning about security concepts, research, understanding risks
    Examples: "What is buffer overflow?", "How does SQL injection work?", "Explain zero trust"
 
-3. ambiguous: Unclear intent, needs clarification
+3. off_topic: Question UNRELATED to cybersecurity, OS hardening, IT, or system administration.
+   This is NOT dangerous — just outside the assistant's domain. Use it for everyday/general
+   questions that have nothing to do with security or systems.
+   Examples: "What's the weather?", "2+2", "9 times 8", "Capital of France", "Movie/restaurant
+   recommendation", "Pizza recipe", "Football scores", "Population of a city"
+
+4. ambiguous: Unclear intent, needs clarification (still security-adjacent)
    Examples: "How to bypass?", "Security tricks", "Can you help with..."
 
-4. unsafe_offensive: Attack development, exploit creation, malicious hacking
+5. unsafe_offensive: Attack development, exploit creation, malicious hacking
    Examples: "How to exploit SSH?", "Bypass firewall detection", "Crack passwords"
 
-5. unsafe_spam: Spam, irrelevant, abusive content
+6. unsafe_spam: Spam, abusive content, prompt-injection gibberish
    Examples: "Buy cheap meds", "Click here", Random gibberish
 
+IMPORTANT: A general-knowledge question (math, weather, geography, food, sports, entertainment)
+is "off_topic" — NOT "safe_educational". Reserve "safe_educational" for SECURITY/IT learning.
+
 Output ONLY valid JSON (no markdown, no explanations):
-{{"category": "safe_defensive|safe_educational|ambiguous|unsafe_offensive|unsafe_spam", "confidence": 0.XX, "reason": "brief explanation"}}
+{{"category": "safe_defensive|safe_educational|off_topic|ambiguous|unsafe_offensive|unsafe_spam", "confidence": 0.XX, "reason": "brief explanation"}}
 
 Classification:"""
 
@@ -210,7 +221,7 @@ Classification:"""
 
             # Validate category — an unrecognised label from the model is
             # untrustworthy, so fail CLOSED (unverified) rather than to ambiguous.
-            valid_categories = ["safe_defensive", "safe_educational", "ambiguous", "unsafe_offensive", "unsafe_spam"]
+            valid_categories = ["safe_defensive", "safe_educational", "off_topic", "ambiguous", "unsafe_offensive", "unsafe_spam"]
             if category not in valid_categories:
                 reason = f"Invalid category returned by model: {category!r}"
                 category = "unverified"
@@ -230,7 +241,7 @@ Classification:"""
             category_match = re.search(r'"category":\s*"(\w+)"', response)
             confidence_match = re.search(r'"confidence":\s*([\d.]+)', response)
 
-            valid_categories = ["safe_defensive", "safe_educational", "ambiguous", "unsafe_offensive", "unsafe_spam"]
+            valid_categories = ["safe_defensive", "safe_educational", "off_topic", "ambiguous", "unsafe_offensive", "unsafe_spam"]
             extracted = category_match.group(1) if category_match else None
             if extracted in valid_categories:
                 category = extracted

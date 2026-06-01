@@ -197,6 +197,12 @@ def build_from_preset(
 # çıkarıyordu). 0 retry → 429/hata anında bir sonraki HIZLI sağlayıcıya (sambanova) düşer.
 _CHAIN_RETRIES = 0
 
+# Zincir-içi TEK-çağrı timeout'u (saniye). Yavaş-ama-başarılı (kuyruğa giren) bir sağlayıcı
+# REQUEST_TIMEOUT (~60s) kadar asılıp SONRA fallback'i geciktiriyordu (eval bulgusu: 92s =
+# 60s asılma + 32s fallback). Düşük timeout → yavaş sağlayıcı erkenden iptal edilir →
+# FallbackLLM bir sonraki HIZLI sağlayıcıya çabuk düşer. CHAIN_LLM_TIMEOUT ile ayarlanabilir.
+_CHAIN_TIMEOUT = float(os.environ.get("CHAIN_LLM_TIMEOUT", "30"))
+
 
 def get_small_cerebras_llm() -> OpenAICompatibleClient:
     from llm.core.config import SMALL_MODEL_TEMPERATURE
@@ -204,24 +210,24 @@ def get_small_cerebras_llm() -> OpenAICompatibleClient:
     # erişilemez döndü → small DA gpt-oss-120b (kanıtlı 1.36s; free tier'da maliyet $0).
     # Daha ucuz small isteniyorsa CEREBRAS_SMALL_MODEL ile doğru API id verilmeli.
     model = os.environ.get("CEREBRAS_SMALL_MODEL", "gpt-oss-120b")
-    return build_from_preset("cerebras", model=model, temperature=SMALL_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
+    return build_from_preset("cerebras", model=model, temperature=SMALL_MODEL_TEMPERATURE, timeout=_CHAIN_TIMEOUT, max_retries=_CHAIN_RETRIES)
 
 
 def get_large_cerebras_llm() -> OpenAICompatibleClient:
     from llm.core.config import LARGE_MODEL_TEMPERATURE
     # large = gpt-oss-120b ($0.35/$0.75, frontier reasoning MoE) — üretim
     model = os.environ.get("CEREBRAS_LARGE_MODEL", "gpt-oss-120b")
-    return build_from_preset("cerebras", model=model, temperature=LARGE_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
+    return build_from_preset("cerebras", model=model, temperature=LARGE_MODEL_TEMPERATURE, timeout=_CHAIN_TIMEOUT, max_retries=_CHAIN_RETRIES)
 
 
 def get_small_sambanova_llm() -> OpenAICompatibleClient:
     from llm.core.config import SMALL_MODEL_TEMPERATURE
-    return build_from_preset("sambanova", temperature=SMALL_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
+    return build_from_preset("sambanova", temperature=SMALL_MODEL_TEMPERATURE, timeout=_CHAIN_TIMEOUT, max_retries=_CHAIN_RETRIES)
 
 
 def get_large_sambanova_llm() -> OpenAICompatibleClient:
     from llm.core.config import LARGE_MODEL_TEMPERATURE
-    return build_from_preset("sambanova", temperature=LARGE_MODEL_TEMPERATURE, max_retries=_CHAIN_RETRIES)
+    return build_from_preset("sambanova", temperature=LARGE_MODEL_TEMPERATURE, timeout=_CHAIN_TIMEOUT, max_retries=_CHAIN_RETRIES)
 
 
 def _gemini_client(temperature: float) -> OpenAICompatibleClient:
@@ -232,7 +238,7 @@ def _gemini_client(temperature: float) -> OpenAICompatibleClient:
         model_name=os.environ.get("GEMINI_FLASH_MODEL", "google/gemini-3.1-flash-lite"),
         api_key=os.environ.get("OPENROUTER_API_KEY", "") or "",
         base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-        temperature=temperature, max_retries=_CHAIN_RETRIES,
+        temperature=temperature, timeout=_CHAIN_TIMEOUT, max_retries=_CHAIN_RETRIES,
     )
 
 

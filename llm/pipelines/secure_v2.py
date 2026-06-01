@@ -267,24 +267,30 @@ class SecurePipelineV2:
             print(f"  Subtype: {intent.subtype}")
             print(f"  Confidence: {intent.confidence:.2f}")
 
-        # ─── SEMANTİK KAPSAM DÜZELTMESİ ──────────────────────────────────────────
-        # Intent detector düşük güvende KÖR keyword listesiyle out_of_scope diyebilir
-        # (örn. "rdp kuralları" → SECURITY_KEYWORDS'te yok diye reddediliyordu). Ama
-        # Layer-1 LLM safety bunu safe_defensive/safe_educational (= meşru güvenlik konusu)
-        # işaretlediyse, SEMANTİK sinyale güven → info_request'e çevir. Böylece listeye
-        # sonsuza dek keyword eklemek (whack-a-mole) gerekmez. math/weather → 'ambiguous'
-        # → out_of_scope korunur; yalnız net güvenlik konuları kurtarılır.
-        if intent.type == "out_of_scope" and safety_result.category in (
+        # ─── SEMANTİK KAPSAM KAPISI (Layer-1 safety = domain otoritesi) ──────────
+        # Keyword listesi (intent detector) ölçeklenmez (whack-a-mole). Bunun yerine
+        # zaten hesaplanmış LLM safety kategorisini domain sinyali olarak kullanırız:
+        #   • off_topic (hava/math/genel kültür) → intent ne derse desin OUT_OF_SCOPE.
+        #     (ML modeli "2+2 kaç eder"i yanlışlıkla info_request sayabiliyor; safety LLM'in
+        #      off_topic'i bağlayıcıdır → yanlış info sızıntısını kapatır.)
+        #   • out_of_scope ama safe_defensive/safe_educational (örn. "rdp kuralları") →
+        #     INFO_REQUEST'e kurtar. (intent detector RDP'yi tanımayıp reddetmişti.)
+        if intent.metadata is None:
+            intent.metadata = {}
+        if safety_result.category == "off_topic":
+            if self.debug:
+                print("  [SCOPE GATE] safety=off_topic → out_of_scope (alan-dışı)")
+            intent.type = "out_of_scope"
+            intent.metadata["scope_override"] = "safety_off_topic"
+        elif intent.type == "out_of_scope" and safety_result.category in (
             "safe_defensive", "safe_educational"
         ):
             if self.debug:
                 print(
-                    f"  [SCOPE OVERRIDE] out_of_scope → info_request "
-                    f"(safety={safety_result.category} semantik domain sinyali)"
+                    f"  [SCOPE GATE] out_of_scope → info_request "
+                    f"(safety={safety_result.category} semantik güvenlik sinyali)"
                 )
             intent.type = "info_request"
-            if intent.metadata is None:
-                intent.metadata = {}
             intent.metadata["scope_override"] = "safety_semantic"
 
         # ─────────────────────────────────────────────
