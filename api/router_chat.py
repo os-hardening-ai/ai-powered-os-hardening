@@ -205,6 +205,21 @@ def get_llm_client_provider_stats() -> dict:
     return {}
 
 
+def get_llm_client_lane_diagnostics() -> dict:
+    """Lane/provider başına ORTALAMA GECİKME (ms) + BAŞARISIZLIK sayısı → yavaş/ölü lane
+    tespiti (ör. codestral 0 başarı + N fail → erişilemez; llama-1b avg 40s → yavaş)."""
+    try:
+        if _llm_small is not None and hasattr(_llm_small, "get_stats"):
+            s = _llm_small.get_stats()
+            return {
+                "avg_latency_ms": dict(s.get("avg_latency_ms_by_provider", {})),
+                "failures": dict(s.get("failures_by_provider", {})),
+            }
+    except Exception:
+        pass
+    return {"avg_latency_ms": {}, "failures": {}}
+
+
 def _set_llm_request_metrics(request: Request, result) -> None:
     """Pipeline sonucundaki provider/model/token'ı MetricsMiddleware için request.state'e yaz
     → /metrics 'llm_providers'/'llm_models'/'tokens' panelleri dolar. HEM /chat HEM /chat/stream

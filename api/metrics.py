@@ -211,6 +211,43 @@ class MetricsCollector:
         sorted_metrics = sorted(self.metrics, key=lambda m: m.duration_ms, reverse=True)
         return sorted_metrics[:limit]
 
+    def get_endpoint_breakdown(self, time_window_minutes: Optional[int] = None) -> Dict[str, dict]:
+        """Özellik-grubu (chat / agent / rules / rag / diğer) başına gecikme + sayı.
+        'Agent vs normal chat' gecikme karşılaştırması için → endpoint path'i bucket'a eşlenir."""
+        metrics_list = list(self.metrics)
+        if time_window_minutes:
+            cutoff = datetime.now() - timedelta(minutes=time_window_minutes)
+            metrics_list = [m for m in metrics_list if m.timestamp >= cutoff]
+
+        def bucket(ep: str) -> str:
+            ep = ep or ""
+            if ep.startswith("/api/chat"):
+                return "chat"
+            if ep.startswith("/api/agent"):
+                return "agent"
+            if ep.startswith("/api/rules") or ep.startswith("/api/artifacts"):
+                return "rules"
+            if ep.startswith("/rag"):
+                return "rag"
+            if ep.startswith("/v1"):
+                return "openai_compat"
+            return "other"
+
+        groups: Dict[str, List[float]] = defaultdict(list)
+        for m in metrics_list:
+            groups[bucket(m.endpoint)].append(m.duration_ms)
+
+        out: Dict[str, dict] = {}
+        for g, lats in groups.items():
+            s = sorted(lats)
+            out[g] = {
+                "count": len(s),
+                "avg_ms": round(statistics.mean(s), 1),
+                "p95_ms": round(self._percentile(s, 0.95), 1),
+                "max_ms": round(max(s), 1),
+            }
+        return out
+
 
 # ─────────────────────────────────────────────
 # Global Metrics Instance
