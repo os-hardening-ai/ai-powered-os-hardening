@@ -235,14 +235,33 @@ async def _run_pipeline(
     # 1) Session history
     session_id = payload.session_id or ""
     history: List[Dict[str, str]] = []
+    turns: List = []
     if session_id:
         turns = _session_store.get_history(session_id)
         history = [{"role": t.role, "content": t.content} for t in turns]
 
+    effective_question = payload.question
+
+    # 1b) PENDING-PARAM follow-up: önceki asistan turu parametre sorduysa (ör. OS),
+    #     bu mesaj o sorunun CEVABIDIR → orijinal action sorusuyla BİRLEŞTİR. Aksi halde
+    #     "ubuntu 24.04" gibi kısa cevap sıfırdan sınıflandırılıp KAPSAM DIŞI'na düşer.
+    pending_merged = False
+    if turns and turns[-1].role == "assistant" and getattr(turns[-1], "intent", None) == "params_needed":
+        original_q = next(
+            (t.content for t in reversed(turns[:-1]) if t.role == "user"), None
+        )
+        if original_q:
+            effective_question = f"{original_q} {payload.question}".strip()
+            pending_merged = True
+            _conv_logger.info(
+                "[PendingParams] orijinal '%s' + cevap '%s' → '%s'",
+                original_q[:40], payload.question[:30], effective_question[:70],
+            )
+
     # 2) Query rewrite (follow-up → standalone). Smalltalk ASLA yeniden yazılmaz —
     #    aksi halde QueryRewriter geçmiş bağlamıyla "naber"i güvenlik sorusuna çevirir.
-    effective_question = payload.question
-    if history and not is_smalltalk(payload.question):
+    #    Pending-param birleştirmesi yapıldıysa rewrite'a gerek yok (zaten standalone).
+    if not pending_merged and history and not is_smalltalk(payload.question):
         try:
             from rag.query.query_rewriter import QueryRewriter
             _rewriter = QueryRewriter(llm_fn=llm_small)
@@ -326,6 +345,18 @@ async def _run_pipeline(
     return result, effective_question, inferred_os, history
 
 
+def _assistant_turn_intent(result) -> Optional[str]:
+    """Asistan turu için intent etiketi. Action pipeline parametre sorduysa (PARAMS_NEEDED)
+    'params_needed' işaretle → sonraki tur bu cevabı orijinal soruyla BİRLEŞTİRİR
+    (pending-param follow-up; kısa cevabın kapsam-dışı yanlış sınıflanmasını önler)."""
+    try:
+        if result.layer_path and "PARAMS_NEEDED" in result.layer_path:
+            return "params_needed"
+        return result.intent.type if result.intent else None
+    except Exception:
+        return None
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     """
@@ -361,7 +392,10 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         # Session history'ye kaydet
         if session_id:
             _session_store.add_turn(session_id, "user", effective_question)
-            _session_store.add_turn(session_id, "assistant", sanitized_answer[:500])
+            _session_store.add_turn(
+                session_id, "assistant", sanitized_answer[:500],
+                intent=_assistant_turn_intent(result),
+            )
 
         # Log conversation (question + answer)
         _request_id = (result.metadata or {}).get("request_id")
@@ -440,7 +474,10 @@ async def chat_stream(payload: ChatRequest, request: Request):
         if session_id:
             try:
                 _session_store.add_turn(session_id, "user", effective_question)
-                _session_store.add_turn(session_id, "assistant", sanitized_answer[:500])
+                _session_store.add_turn(
+                    session_id, "assistant", sanitized_answer[:500],
+                    intent=_assistant_turn_intent(result),
+                )
             except Exception:
                 pass
 
