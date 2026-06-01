@@ -10,7 +10,7 @@
 
 CIS Benchmark dokümanları, NIST 800-207 ve ISO 27001 üzerinde RAG ile semantik arama yapıp,
 LLM ile işletim sistemi sıkılaştırma önerileri ve uygulanabilir hardening script'leri üreten
-yapay zekâ destekli karar-destek sistemi. Güvenlik uzmanlarına hızlı, kaynak-temelli ve
+yapay zekâ tabanlı karar destek sistemi. Güvenlik uzmanlarına hızlı, kaynak-temelli ve
 denetlenebilir bilgi sunar.
 
 ### Key Features
