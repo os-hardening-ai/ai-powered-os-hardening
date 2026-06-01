@@ -114,14 +114,18 @@ class HybridIntentDetector:
             "merhaba", "selam", "naber", "ne haber", "napt", "napıyor", "nbr", "günaydın",
             "iyi günler", "iyi akşamlar", "iyi geceler", "nasılsın", "nasıl gidiyor",
             "hoş geldin", "hoşgeldin", "selamün", "iyi misin", "iyi sabahlar",
+            "slm", "mrb", "mrhb",   # yaygın kısaltmalar
         ],
         "farewell": [
             "görüşürüz", "hoşça kal", "hoşçakal", "baybay", "bay bay", "kendine iyi bak",
             "güle güle", "elveda", "görüşmek üzere", "allahaısmarladık", "selametle",
+            "grşrz", "bb",   # kısaltmalar
         ],
         "thanks": [
             "teşekkür", "sağ ol", "sağol", "minnettar", "eline sağlık", "ellerine sağlık",
             "eyvallah", "makbule geçti", "emeğine sağlık",
+            # yaygın kısaltmalar — eskiden "tşk" gibi kısaltmalar LLM'e düşüp off_topic → red oluyordu
+            "tşk", "tsk", "tşkr", "tşkler", "teşekkurler", "tesekkur", "sagol", "sgl", "eyw", "eyv",
         ],
     }
 
