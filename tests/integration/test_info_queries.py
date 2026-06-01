@@ -11,7 +11,10 @@ Güvenlik kavramları hakkında soru sorma örneklerini içerir.
 import sys
 import os
 
-if sys.platform == 'win32':
+# NOT: pytest altında sys.stdout/stderr DEĞİŞTİRİLMEZ — capture mekanizmasını bozar
+# ("I/O operation on closed file" → tüm suite toplanmaz). Yalnız standalone script
+# olarak çalışınca (pytest import edilmemişken) Windows konsol UTF-8 düzeltmesi uygulanır.
+if sys.platform == 'win32' and "pytest" not in sys.modules:
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')

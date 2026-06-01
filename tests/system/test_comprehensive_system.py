@@ -16,6 +16,18 @@ import sys
 import time
 from pathlib import Path
 
+# Bu dosya bir STANDALONE smoke-script'tir (çalıştırma: python tests/system/test_comprehensive_system.py).
+# Prosedürel gövdesi import anında çalışır ve hata halinde sys.exit(1) eder — pytest altında bu
+# TÜM oturumu INTERNALERROR ile çökertir. Bu yüzden pytest collection'ında modülü baştan atlarız;
+# manuel script çalıştırmada (pytest import edilmemişken) gövde normal akar.
+if "pytest" in sys.modules:
+    import pytest
+    pytest.skip(
+        "Standalone sistem smoke-script'i — pytest altında çalıştırılmaz "
+        "(manuel: python tests/system/test_comprehensive_system.py).",
+        allow_module_level=True,
+    )
+
 # ============================================
 # TEST 1: Python Environment Check
 # ============================================
