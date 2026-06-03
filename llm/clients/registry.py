@@ -57,10 +57,13 @@ _REGISTRY: Dict[str, ProviderSpec] = {
         Cost.FREE_TIER, free_priority=5,
         notes="EN HIZLI + ücretsiz 1M token/gün (gpt-oss-120b ~1.4s); 30 RPM cap",
     ),
+    # DEPRECATED — 2026-06 kontrolü: izole/ardışık çağrıda BİLE 5/5 "rate limit/kota aşıldı"
+    # (burst değil, tek-tek). Free-tier sert throttle → güvenilmez fallback. Otomatik zincirden
+    # ÇIKARILDI (explicit LLM_PROVIDER=sambanova ile hâlâ denenebilir). Kota açılırsa geri alınır.
     "sambanova": ProviderSpec(
         "sambanova", "llm.clients.openai_compatible_client:get_small_sambanova_llm,get_large_sambanova_llm",
-        Cost.FREE_TIER, free_priority=8,
-        notes="Hızlı + güvenilir fallback (gpt-oss-120b ~3.2s); dar ücretsiz kota",
+        Cost.FREE_TIER, free_priority=8, deprecated=True,
+        notes="DEPRECATED: izole testte 5/5 rate-limit (free-tier sert throttle) — zincirden çıkarıldı.",
     ),
     # Gemini 3.1 Flash Lite — OpenRouter üzerinden (validated 3.06s, H3✓, 1M context).
     # CHEAP_PAID ($0.25/$1.50) → include_cheap ile zincire girer (kullanıcı isteği).
