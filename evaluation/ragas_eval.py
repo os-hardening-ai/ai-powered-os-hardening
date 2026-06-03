@@ -60,6 +60,12 @@ EVAL_QUESTIONS: List[Tuple[str, str]] = [
 ]
 
 
+def _eval_questions():
+    """A3 — paylaşımlı 52-soruluk dataset (evaluation/eval_dataset.py)."""
+    from evaluation.eval_dataset import EVAL_QUESTIONS
+    return EVAL_QUESTIONS
+
+
 def _build_sample(question: str, os_version: str, llm_large, grounding: str) -> dict:
     """Gerçek pipeline: retrieve → GROUNDING_DIRECTIVE'li üretim → RAGAS örneği."""
     from llm.rag.integration import RAGContextBuilder
@@ -96,9 +102,10 @@ def main() -> None:
     small, large = get_llm_clients()
     evaluator = RAGASEvaluator(llm_fn=small)   # judge = küçük/hızlı model
 
-    sample_n = int(os.environ.get("RAGAS_SAMPLE", "0")) or len(EVAL_QUESTIONS)
+    all_q = _eval_questions()  # A3 — paylaşımlı 53-soruluk dataset
+    sample_n = int(os.environ.get("RAGAS_SAMPLE", "0")) or len(all_q)
     throttle = float(os.environ.get("RAGAS_THROTTLE_S", "1.5"))
-    questions = EVAL_QUESTIONS[:sample_n]
+    questions = all_q[:sample_n]
 
     print(f"RAGAS değerlendirme — {len(questions)} soru (gerçek pipeline + LLM-judge)")
     samples = []
