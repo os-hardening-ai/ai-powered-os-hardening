@@ -109,3 +109,49 @@ class MMRReranker:
             )
             for rank, i in enumerate(selected_idx)
         ]
+
+
+class CrossEncoderReranker:
+    """Cross-encoder reranker — (query, chunk) çiftini BİRLİKTE skorlar.
+
+    Bi-encoder (embedding) araması anlamı yakalar ama query-chunk etkileşimini göremez;
+    cross-encoder ikisini birlikte değerlendirir → daha isabetli relevance sıralaması.
+    En iyi desen: GENİŞ aday çek (top-20) → cross-encoder ile rerank → top-k LLM'e.
+    Araştırma (Databricks): reranking halüsinasyonu ~%35 azaltır → İP-5 groundedness'e doğrudan katkı.
+
+    Model LAZY yüklenir (ilk rerank'ta) → import/CI maliyeti yok; test için `model` inject edilir
+    (indirme olmaz). Çok dilli varsayılan (TR sorgu + EN CIS): mmarco-mMiniLMv2.
+
+    DURUM: DEFAULT KAPALI. RAG retrieval (Engin) `use_cross_encoder` toggle'ı + model deploy ile
+    etkinleştirilir (ops adımı — model ağırlığı ~100-500MB, ilk çağrıda indirilir/cache'lenir).
+    """
+
+    def __init__(self, model_name: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", model=None) -> None:
+        self._model_name = model_name
+        self._model = model  # test/inject için; None ise lazy yüklenir
+
+    def _ensure_model(self):
+        if self._model is None:
+            from sentence_transformers import CrossEncoder  # lazy import (ağır)
+            self._model = CrossEncoder(self._model_name)
+        return self._model
+
+    def rerank(self, query: str, candidates: List[dict], top_n: int = 5) -> List[RerankedResult]:
+        """(query, chunk) çiftlerini skorla → en yüksek top_n'i sıralı döndür."""
+        if not candidates:
+            return []
+        model = self._ensure_model()
+        pairs = [(query, c.get("text", "")) for c in candidates]
+        scores = [float(s) for s in model.predict(pairs)]
+        order = sorted(range(len(candidates)), key=lambda i: -scores[i])[:top_n]
+        return [
+            RerankedResult(
+                id=str(candidates[i].get("id", i)),
+                text=candidates[i].get("text", ""),
+                metadata=candidates[i].get("metadata", {}),
+                original_score=float(candidates[i].get("score", 0.0)),
+                mmr_score=scores[i],   # cross-encoder relevance skoru
+                rank=rank,
+            )
+            for rank, i in enumerate(order)
+        ]

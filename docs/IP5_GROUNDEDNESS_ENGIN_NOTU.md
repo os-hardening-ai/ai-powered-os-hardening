@@ -40,6 +40,18 @@ kapsanmayan alanları belirt" kısıtı eklendi. (Eval'le doğrulandı — bu do
 - Çok-geniş sorgular için kökten çözüm: **multi-query** (hedefi SSH/parola/audit alt-sorgulara
   böl, ayrı retrieve+birleştir). `rag/retrieval/`. Daha fazla iş ama tavanı kaldırır.
 
+## 3. Cross-encoder reranker (BEN ekledim — etkinleştirme SENDE)
+
+`rag/retrieval/reranker.py::CrossEncoderReranker` eklendi (test'li, default KAPALI, lazy model).
+Araştırma: cross-encoder reranking halüsinasyonu ~%35 azaltır (İP-5 groundedness'e doğrudan).
+
+**Etkinleştirme (RAG retrieval — SENİN alanın):**
+- Desen: GENİŞ aday çek (top-20) → `CrossEncoderReranker.rerank(query, candidates, top_n=5)` → top-5 LLM'e.
+- `RAGContextBuilder`'a `use_cross_encoder` toggle ekle; açıkken MMR yerine/sonrasında cross-encoder.
+- **Ops:** model ağırlığı (~100-500MB) ilk çağrıda indirilir → Docker image'a önceden çek veya
+  ilk-istek gecikmesini kabul et. Çok dilli varsayılan (TR sorgu + EN CIS): `mmarco-mMiniLMv2`.
+- Yeni dep YOK (sentence-transformers zaten kurulu).
+
 ## Doğrulama
 Değişiklikten sonra `LLM_PROVIDER=novita python -m evaluation.ragas_eval` (veya `ip_metrics`)
 ile yeniden ölç; context_recall + faithfulness yükselmeli. Hedef: faithfulness ≥ 0.90.
