@@ -11,7 +11,6 @@ Modular pipeline components for the 4-layer security architecture.
 
 **Layer 2: Intent Detection**
 - `HybridIntentDetector`: Pattern + ML intent detection
-- `IntentDetector`: Basic pattern matching
 
 **Layer 3: Routing**
 - `PatternResponderHandler`: Fast responses (no LLM)
@@ -25,7 +24,6 @@ Modular pipeline components for the 4-layer security architecture.
 
 from .safety_classifier import SafetyClassifier
 from .hybrid_intent_detector import HybridIntentDetector, HybridIntent
-from .intent_detector import IntentDetector
 from .pattern_responder import PatternResponderHandler, PatternResponse
 from .info_pipeline import InfoPipeline, InfoQueryResult
 from .action_pipeline import ActionPipeline, ActionQueryResult
@@ -36,7 +34,6 @@ __all__ = [
     "SafetyClassifier",
     "HybridIntentDetector",
     "HybridIntent",
-    "IntentDetector",
     "PatternResponderHandler",
     "PatternResponse",
     "InfoPipeline",

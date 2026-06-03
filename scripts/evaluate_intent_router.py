@@ -6,7 +6,7 @@ ETİKETLİ bir değerlendirme seti üzerinde ÖLÇEREK yanıtlamak. Karşılaşt
 davranışını yansıtsın diye HybridIntentDetector.detect() seviyesinde yapılır (pattern hızlı
 yolu + ML backend birlikte). Ayrıca yalnız-ML predict() gecikmesi de ölçülür.
 
-Çalıştırma:  python scripts/benchmark_intent_router.py
+Çalıştırma:  python scripts/evaluate_intent_router.py
 Gerekli:     NOVITA_API_KEY (.env)  — embedding router gerçek embed çağrısı yapar.
 """
 from __future__ import annotations

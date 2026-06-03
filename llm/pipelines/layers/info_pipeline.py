@@ -375,59 +375,34 @@ class InfoPipeline:
         return result_obj
 
     def _should_use_rag(self, question: str, complexity: str) -> bool:
-        """
-        Smart RAG triggering decision
+        """RAG retrieval kararı — NİYETE BAĞLI (ayrı keyword otoritesi DEĞİL).
 
-        Strategy:
-        - SKIP RAG: Generic questions LLM knows (e.g., "Firewall nedir?")
-        - USE RAG: Specific OS/config questions (e.g., "Ubuntu 22.04 SSH hardening")
-
-        Args:
-            question: User question
-            complexity: Question complexity (simple/medium/complex)
-
-        Returns:
-            True if RAG should be used
+        Bu metoda yalnız info_request niyetiyle gelinir (3B). info_request için RAG
+        VARSAYILAN AÇIKtır: bilgi cevabının amacı CIS/OS dayanağına oturmaktır. TEK
+        optimizasyon: somut bir OS/config/CIS göstergesi YOKKEN saf jenerik tanım sorusu
+        ("firewall nedir") gelirse LLM bunu zaten bilir → retrieval'ı atla (gecikme/maliyet).
+        Karar 3 net dalda; rakip keyword labirenti yok.
         """
         q_lower = question.lower()
 
-        # Generic question patterns (NO RAG)
+        # Somut dayanak gerektiren göstergeler (OS/sürüm/config/CIS) → mutlaka retrieval.
+        specific_indicators = [
+            "ubuntu", "centos", "debian", "windows", "rhel",            # OS
+            "22.04", "24.04", "20.04", "server 2022",                   # sürüm
+            "sshd_config", "firewalld", "ufw", "selinux", "apparmor",   # config
+            "cis benchmark", "cis control", "benchmark",                # CIS
+        ]
+        # Saf tanım kalıpları (somut gösterge yoksa retrieval'ı atlamak güvenli).
         generic_patterns = [
             "nedir", "ne demek", "nasıl çalışır", "ne işe yarar",
             "what is", "what does", "explain",
         ]
 
-        # Specific question indicators (USE RAG)
-        specific_indicators = [
-            # OS-specific
-            "ubuntu", "centos", "debian", "windows", "rhel",
-            # Version-specific
-            "22.04", "24.04", "20.04", "server 2022",
-            # Specific configs
-            "sshd_config", "firewalld", "ufw", "selinux", "apparmor",
-            # CIS benchmark queries
-            "cis benchmark", "cis control", "benchmark",
-        ]
-
-        # Check for generic patterns
-        has_generic_pattern = any(pattern in q_lower for pattern in generic_patterns)
-
-        # Check for specific indicators
-        has_specific_indicator = any(indicator in q_lower for indicator in specific_indicators)
-
-        # Decision logic
-        if has_specific_indicator:
-            return True  # Always use RAG for specific queries
-
-        if has_generic_pattern and not has_specific_indicator:
-            return False  # Skip RAG for pure generic definitions
-
-        # Medium/complex queries without explicit generic pattern → use RAG
-        if complexity in ["medium", "complex"]:
-            return True
-
-        # Default: Simple queries without specific indicators → skip RAG
-        return False
+        if any(ind in q_lower for ind in specific_indicators):
+            return True                                  # somut OS/config/CIS → dayanak çek
+        if any(p in q_lower for p in generic_patterns):
+            return False                                 # saf tanım (somut yok) → atla
+        return complexity in ("medium", "complex")       # belirsiz: karmaşıksa çek, basitse atla
 
     def _generate(self, ctx: RequestContext, complexity: str) -> tuple[str, str, float]:
         """Karmaşıklığa göre cevap üret. Döndürür: (cevap, model_used, estimated_cost).
