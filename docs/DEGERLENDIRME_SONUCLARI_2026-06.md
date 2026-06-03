@@ -126,7 +126,48 @@ düşük (ilk token hızlı). Daha hızlı model veya streaming ile uçtan-uca d
 **Embedding (ayrı):** Novita qwen3-embedding-8b (4096 dim) vs OpenRouter qwen3-embedding-8b (4096 dim)
 → aynı model, OpenRouter daha hızlı DEĞİL (0.6–4.3s vs 0.6–2.7s) → Novita'da kalır (taşıma faydasız).
 
+### 6b. Grounding-lane model araştırması + final lane config
+
+`evaluation/grounding_model_bench.py` — adaylar GENİŞ sorgularda (faithfulness):
+
+| Model | geniş-sorgu faithfulness | latency | karar |
+|-------|-------------------------:|--------:|-------|
+| **qwen3-next-80b** | **0.888** | 8.3s | grounding lane (en iyi) |
+| gemini-3.1-flash-lite | 0.794 | 3.65s | grounding lane (hızlı) |
+| gemini-2.5-flash-lite | 0.725 | 6.46s | — |
+| deepseek-v4-flash | 0.600 | 23.4s | elendi (yavaş+düşük) |
+
+**Bulgu (İP-5 ile birleşik):** broad-grounding ÜRETİM MODELİNE çok duyarlı — cerebras 0.00,
+qwen3-80b 0.888. → **iki ayrı lane** (LaneLoadBalancer round-robin):
+
+```
+LLM_SMALL_LANES (HIZ-kritik): cerebras:gpt-oss-120b, openrouter:openai/gpt-oss-120b, sambanova:gpt-oss-120b
+LLM_LARGE_LANES (GROUNDING-kritik): openrouter:qwen/qwen3-next-80b-a3b-instruct, openrouter:google/gemini-3.1-flash-lite
+```
+- Hız lane = aynı model (gpt-oss-120b) round-robin → kota dağıtımı (5/dk cap'i aşar) + SambaNova
+  geri eklendi (kota dönünce çalışır, dönmezse atlanır).
+- Grounding lane = yalnız iyi-ground'layanlar (qwen3-80b 0.888 + gemini-3.1 0.794); cerebras
+  geniş sorguda zayıf ground'ladığı için bu lane'e KONMADI.
+- İP-5 etkisi: grounding-kritik üretim qwen/gemini'ye gidince broad groundedness ~0.80-0.89.
+
 ---
+
+## 7. Ablation — RAG Bileşen Katkısı (A1)
+
+`evaluation/run_ablation.py` (18 soru), retrieval metrikleri config başına:
+
+| Config | Avg Chunks | Avg MaxScore | Avg Latency |
+|--------|-----------:|-------------:|------------:|
+| baseline (dense) | 10.0 | 0.740 | 7.0s |
+| +hybrid (BM25+dense) | 10.0 | 0.740 | 6.9s |
+| +mmr (rerank) | 10.0 | 0.740 | 6.3s |
+| **+queryplan (multi-query)** | **17.5** | **0.790** | 14.8s |
+| full | 17.4 | 0.794 | 15.5s |
+
+**Bulgu:** Hybrid/MMR retrieval max-score'u değiştirmiyor (0.740) — MMR çeşitlilik/latency için
+(6.3s, en düşük). **Query-planning asıl kapsama kazancı**: chunks +%75 (10→17.5), max-score +0.05,
+bedeli 2× latency. → **İP-5 geniş-sorgu çözümünün retrieval-katman kanıtı** (groundedness A1'i için
+§1; query-planning kapsamayı artırıyor). Trade-off: kapsama ↑ vs latency ↑.
 
 ## Çalıştırma (tekrar üretim)
 ```
