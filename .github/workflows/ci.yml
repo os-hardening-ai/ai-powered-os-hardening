@@ -18,6 +18,16 @@ jobs:
       PYTHONIOENCODING: utf-8
       INTENT_ROUTER: tfidf          # eval/test deterministik TF-IDF (embedding/ağ yok)
       ANSWER_CACHE_TTL_S: "0"        # CI'da cache kapalı (deterministik)
+      # Config loader birincil sağlayıcı için NON-EMPTY anahtar ister (import-time validasyon).
+      # Testler SAHTE LLM kullanır → bu dummy'ler GERÇEK çağrıda KULLANILMAZ, sadece config geçsin diye.
+      CEREBRAS_API_KEY: ci-dummy-not-used
+      SAMBANOVA_API_KEY: ci-dummy-not-used
+      OPENROUTER_API_KEY: ci-dummy-not-used
+      NOVITA_API_KEY: ci-dummy-not-used
+      QDRANT_API_KEY: ci-dummy-not-used
+      QDRANT_URL: http://localhost:6333
+      LLM_SMALL_LANES: ""            # CI'da lane balancer kapalı (gerçek client kurma) → fake LLM
+      LLM_LARGE_LANES: ""
     steps:
       - uses: actions/checkout@v4
 
