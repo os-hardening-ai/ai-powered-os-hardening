@@ -134,6 +134,7 @@ class HardenResponse(BaseModel):
     plan: PlanResponse
     provider: str = ""
     latency_s: float = 0.0
+    mode: str = "catalog"      # "catalog" (CIS kural seçimi) | "freeform" (özel script)
 
 
 def _active_provider() -> str:
@@ -213,6 +214,7 @@ async def agent_harden(body: HardenRequest):
             ),
             provider=_prov,
             latency_s=_dt,
+            mode=getattr(res, "mode", "catalog"),
         )
     except APIError:
         raise

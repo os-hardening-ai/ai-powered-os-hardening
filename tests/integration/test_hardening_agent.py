@@ -271,3 +271,59 @@ class TestSyntaxHelpers:
         agent = HardeningAgent(rule_engine=engine)
         ok, err = agent._syntax_check("key: [unclosed", "ansible")
         assert not ok and err          # geçersiz YAML yakalanır
+
+
+class TestCatalogMissFreeform:
+    """Katalog-dışı özel istek (dev grubu oluştur) → serbest-form dal (mode=freeform).
+
+    Düzeltilen bug: "SSH için dev grubu oluştur ve allow ver" eskiden 23 generic CIS
+    kuralı döküyordu; artık LLM ile hedefe-özel script üretilir.
+    """
+
+    # groupadd + AllowGroups dev üreten sahte LLM (gerçek model yerine)
+    def _devgroup_llm(self):
+        script = (
+            "```bash\n#!/usr/bin/env bash\nset -euo pipefail\n"
+            "groupadd -f dev\n"
+            "grep -q 'AllowGroups' /etc/ssh/sshd_config || echo 'AllowGroups dev' >> /etc/ssh/sshd_config\n"
+            "sshd -t && systemctl reload sshd\n```"
+        )
+        return lambda _p: script
+
+    def test_devgroup_request_uses_freeform(self, tmp_path):
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine, llm_fn=self._devgroup_llm())
+        res = agent.run("SSH için dev grubu oluştur ve bu gruba SSH izni ver",
+                        os_target="ubuntu_24_04", security_level="balanced", fmt="bash")
+        assert res.mode == "freeform"
+        assert res.success
+        # Kullanıcının GERÇEK isteği karşılanıyor:
+        assert "groupadd" in res.artifact.content and "dev" in res.artifact.content
+        assert "AllowGroups dev" in res.artifact.content
+        # Eski hatalı davranış YOK: 20+ generic CIS kuralı dökülmedi
+        assert res.artifact.rule_count == 0   # katalog kuralı değil
+        assert any(s.name == "freeform_generate" for s in res.steps)
+
+    def test_normal_hardening_stays_catalog(self, tmp_path):
+        # REGRESYON: normal CIS hedefi hâlâ katalog akışı (mode=catalog), bozulmadı.
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine)
+        res = agent.run("SSH ve parola sıkılaştır", security_level="balanced")
+        assert res.mode == "catalog"
+        assert res.artifact is not None and res.artifact.rule_count >= 1
+
+    def test_dangerous_freeform_rejected(self, tmp_path):
+        # GÜVENLİK: serbest-form tehlikeli komut üretirse REDDEDİLİR (success=False).
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine,
+                               llm_fn=lambda _p: "```bash\nrm -rf /\n```")
+        res = agent.run("dev grubu oluştur", security_level="balanced")
+        assert res.mode == "freeform"
+        assert res.success is False
+        assert res.issues   # güvenlik sorunu bildirildi
+
+    def test_freeform_without_llm_fails_gracefully(self, tmp_path):
+        engine = make_engine(tmp_path, SAFE_RULES)
+        agent = HardeningAgent(rule_engine=engine, llm_fn=None)
+        res = agent.run("dev grubu oluştur", security_level="balanced")
+        assert res.mode == "freeform" and res.success is False
