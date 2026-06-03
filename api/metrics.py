@@ -19,9 +19,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from collections import defaultdict, deque
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Scope, Receive, Send, Message
 
 
 # ─────────────────────────────────────────────
@@ -260,51 +258,45 @@ metrics_collector = MetricsCollector(max_history_hours=24)
 # Middleware for Automatic Metrics Collection
 # ─────────────────────────────────────────────
 
-class MetricsMiddleware(BaseHTTPMiddleware):
-    """
-    Middleware to automatically collect request metrics.
-    """
+class MetricsMiddleware:
+    """Collect request metrics without buffering streaming responses."""
 
-    def __init__(self, app: ASGIApp, collector: Optional[MetricsCollector] = None):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, collector: Optional[MetricsCollector] = None) -> None:
+        self.app = app
         self.collector = collector or metrics_collector
 
-    async def dispatch(self, request: Request, call_next):
-        # Start timer
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         start_time = time.time()
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+        status: list[int] = [500]
+        collector = self.collector
 
-        # Process request
-        response = None
-        error = None
+        async def send_wrapper(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                status[0] = message.get("status", 500)
+            elif message["type"] == "http.response.body" and not message.get("more_body", False):
+                duration_ms = (time.time() - start_time) * 1000
+                state = scope.get("state") or {}
+                metric = RequestMetrics(
+                    timestamp=datetime.now(),
+                    endpoint=path,
+                    method=method,
+                    status_code=status[0],
+                    duration_ms=duration_ms,
+                    llm_provider=state.get("llm_provider"),
+                    llm_model=state.get("llm_model"),
+                    tokens_used=int(state.get("llm_tokens", 0)),
+                    error=None if status[0] < 400 else f"HTTP {status[0]}",
+                )
+                collector.record(metric)
+            await send(message)
 
-        try:
-            response = await call_next(request)
-            status_code = response.status_code
-        except Exception as e:
-            status_code = 500
-            error = str(e)
-            raise
-        finally:
-            # Calculate duration
-            duration_ms = (time.time() - start_time) * 1000
-
-            # Create metric (LLM fields populated by router via request.state)
-            metric = RequestMetrics(
-                timestamp=datetime.now(),
-                endpoint=request.url.path,
-                method=request.method,
-                status_code=status_code,
-                duration_ms=duration_ms,
-                error=error,
-                llm_provider=getattr(request.state, "llm_provider", None),
-                llm_model=getattr(request.state, "llm_model", None),
-                tokens_used=getattr(request.state, "llm_tokens", 0),
-            )
-
-            # Record metric
-            self.collector.record(metric)
-
-        return response
+        await self.app(scope, receive, send_wrapper)
 
 
 # ─────────────────────────────────────────────

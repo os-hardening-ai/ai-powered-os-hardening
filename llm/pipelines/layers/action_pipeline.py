@@ -500,6 +500,143 @@ class ActionPipeline:
 
         return prompt
 
+    def handle_stream(self, ctx: RequestContext):
+        """Gerçek token streaming varinatı. Yields:
+            ("pre_gen", ActionQueryResult)  — ZT+RAG bitti, LLM başlamadan önce
+            ("token",   str)                — LLM script token'ı
+            ("done",    ActionQueryResult)  — tamamlanmış sonuç
+        """
+        start_time = datetime.now()
+        self.stats["total_requests"] += 1
+
+        # Step 0: Parametre çıkarımı
+        inferred = self.param_engine.infer_all(ctx.user_question)
+        src = inferred.get("inference_source", {})
+        if not ctx.role or ctx.role == "unknown":
+            ctx.role = inferred["role"]
+        if not ctx.security_level:
+            ctx.security_level = inferred["security_level"]
+        if (not ctx.os or ctx.os == "unknown") and src.get("os") == "question":
+            ctx.os = inferred["os"]
+
+        # Step 1: Parametre doğrulama
+        missing_params = self._validate_metadata(ctx)
+        if missing_params:
+            self.stats["missing_params_count"] += 1
+            user_message = self._build_missing_params_message(missing_params, ctx.user_question)
+            result = ActionQueryResult(
+                success=False,
+                missing_params=missing_params,
+                user_prompt_message=user_message,
+                response_time_s=(datetime.now() - start_time).total_seconds(),
+            )
+            yield ("pre_gen", result)
+            yield ("token", user_message)
+            yield ("done", result)
+            return
+
+        # Step 2A: Zero Trust Enrichment
+        zt_enrichment = self.zt_enricher.enrich(ctx)
+        ctx.zt_principles = zt_enrichment.zt_principles
+        ctx.standards = zt_enrichment.standards
+        ctx.extra["impact_level"] = zt_enrichment.impact_level
+        ctx.extra["rollback_approach"] = zt_enrichment.rollback_approach
+
+        # Step 2B: RAG retrieval
+        rag_sources: list = []
+        if self.rag_builder:
+            try:
+                rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                if rag_context and raw_results:
+                    ctx.retrieved_context = rag_context
+                    ctx.extra["rag_raw_results"] = raw_results
+                    for r in raw_results:
+                        meta = r.get("metadata", {})
+                        section_id = meta.get("section_id") or meta.get("rule_id") or ""
+                        section_title = meta.get("section_title") or meta.get("title") or ""
+                        section = (
+                            f"{section_id} - {section_title}"
+                            if (section_id and section_title)
+                            else section_id or section_title or "N/A"
+                        )
+                        rag_sources.append({
+                            "score": r.get("score", 0.0),
+                            "source": meta.get("benchmark_product") or meta.get("source_id") or "CIS Benchmark",
+                            "section": section,
+                            "doc_type": meta.get("doc_type", ""),
+                            "text": r.get("text", "")[:500],
+                        })
+            except Exception as e:
+                if self.debug:
+                    print(f"[ActionPipeline.stream] RAG failed: {e}")
+
+        yield ("pre_gen", ActionQueryResult(
+            success=True, model_used="large+CoT+ZT", rag_sources=rag_sources,
+        ))
+
+        # Step 2C: Script token streaming
+        cot_prompt = self._build_script_prompt(ctx)
+        collected: list[str] = []
+        try:
+            if hasattr(self.llm_large, "stream"):
+                for tok in self.llm_large.stream(cot_prompt):
+                    collected.append(tok)
+                    yield ("token", tok)
+            else:
+                raw = self.llm_large(cot_prompt)
+                collected.append(raw)
+                yield ("token", raw)
+        except Exception as gen_exc:
+            err = (
+                "⚠️ Script üretimi şu anda tamamlanamadı (LLM servisi geçici olarak "
+                "erişilemez veya hız limiti aşıldı). Lütfen birkaç saniye sonra tekrar deneyin."
+            )
+            yield ("token", err)
+            yield ("done", ActionQueryResult(
+                success=False,
+                user_prompt_message=err,
+                response_time_s=(datetime.now() - start_time).total_seconds(),
+                rag_sources=rag_sources,
+            ))
+            return
+
+        script = "".join(collected)
+
+        # CoT parse
+        try:
+            ctx_parsed = self.cot_analyzer.parse_cot_response(script, ctx)
+            if ctx_parsed.final_answer:
+                script = ctx_parsed.final_answer
+        except Exception:
+            pass
+
+        # Step 2D: Statik output doğrulama
+        validation = self.validator.validate(output=script, intent="action_request", use_deep_check=False)
+        if not validation.is_valid:
+            if validation.corrected_output:
+                script = validation.corrected_output
+            else:
+                warning = "\n\n# VALIDATION WARNINGS:\n"
+                for issue in validation.issues[:3]:
+                    warning += f"# - {issue}\n"
+                script = script + warning
+
+        estimated_cost = 0.003
+        self.stats["successful_scripts"] += 1
+        self.stats["total_cost"] += estimated_cost
+
+        yield ("done", ActionQueryResult(
+            success=True,
+            answer=script,
+            script=script,
+            model_used="large+CoT+ZT+Validation",
+            response_time_s=(datetime.now() - start_time).total_seconds(),
+            estimated_cost=estimated_cost,
+            zt_enrichment=zt_enrichment,
+            validation=validation,
+            rag_sources=rag_sources,
+        ))
+
     def get_stats(self) -> dict:
         """Get usage statistics"""
         total = self.stats["total_requests"]
