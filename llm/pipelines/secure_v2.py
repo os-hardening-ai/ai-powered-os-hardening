@@ -610,6 +610,229 @@ Nasil yardimci olabilirim?
 Lutfen sorunuzu savunma odakli olacak sekilde yeniden ifade edin.
 """
 
+    def run_stream(self, ctx: RequestContext):
+        """Gerçek token streaming pipeline. Sync generator, yields:
+            {"type": "pre_gen", "meta": {...}, "sources": list|None}
+            {"type": "token",   "content": str}
+            {"type": "done",    "result":  PipelineResult}
+
+        Layer 1 (safety) + Layer 2 (intent) sync koşar; Layer 3B/3C LLM üretimini
+        token-by-token akıtır. TTFT ≈ safety + intent + RAG (~4.5s) — tam pipeline
+        bekleme (~8s) yerine.
+        """
+        start_time = datetime.now()
+        token_tracker.reset()
+
+        # ── Layer 1: Safety ──────────────────────────────────────────────────────
+        layer1_start = datetime.now()
+        with layer_timer("1"):
+            if is_smalltalk(ctx.user_question):
+                safety_result = SafetyResult(
+                    category="safe_defensive", confidence=1.0,
+                    reason="smalltalk (deterministik, safety LLM atlandı)",
+                )
+                safety_cost = 0.0
+            else:
+                local_safety = fast_local_safety(ctx.user_question)
+                if local_safety is not None:
+                    safety_result = local_safety
+                    safety_cost = 0.0
+                else:
+                    safety_result = self.safety_classifier.classify(ctx.user_question)
+                    safety_cost = 0.0001
+        layer1_time_s = (datetime.now() - layer1_start).total_seconds()
+
+        if not safety_result.is_safe:
+            self.stats["total_queries"] += 1
+            self.stats["rejected_unsafe"] += 1
+            rejection_msg = self._build_rejection_message(safety_result)
+            record_rejection(layer="1")
+            total_time = (datetime.now() - start_time).total_seconds()
+            result = PipelineResult(
+                success=False, answer=rejection_msg, layer_path="1→REJECT",
+                safety=safety_result,
+                intent=HybridIntent(type="unknown", subtype="", confidence=0.0, metadata={}),
+                total_time_s=total_time, estimated_cost=0.0001,
+                metadata={"reason": "unsafe_query", "request_id": ctx.request_id},
+            )
+            yield {"type": "pre_gen", "meta": {"safety": safety_result.category, "intent": "unknown", "layer_path": "1→REJECT"}, "sources": None}
+            yield {"type": "token", "content": rejection_msg}
+            yield {"type": "done", "result": result}
+            return
+
+        # ── Layer 2: Intent ──────────────────────────────────────────────────────
+        layer2_start = datetime.now()
+        with layer_timer("2"):
+            intent = self.intent_detector.detect(ctx.user_question)
+        layer2_time_s = (datetime.now() - layer2_start).total_seconds()
+
+        # Scope gate (run() ile aynı mantık)
+        if intent.metadata is None:
+            intent.metadata = {}
+        if safety_result.category == "off_topic":
+            intent.type = "out_of_scope"
+            intent.metadata["scope_override"] = "safety_off_topic"
+        elif intent.type == "out_of_scope" and safety_result.category in (
+            "safe_defensive", "safe_educational"
+        ):
+            intent.type = "info_request"
+            intent.metadata["scope_override"] = "safety_semantic"
+
+        # ── Layer 3: Routing ─────────────────────────────────────────────────────
+        layer3_start = datetime.now()
+
+        def _base_meta(layer_path: str, extra: dict | None = None) -> dict:
+            m = {
+                "safety": safety_result.category,
+                "intent": intent.type,
+                "intent_subtype": getattr(intent, "subtype", None),
+                "layer_path": layer_path,
+            }
+            if extra:
+                m.update(extra)
+            return m
+
+        def _sources_from(rag_sources: list) -> list | None:
+            if not rag_sources:
+                return None
+            return [
+                {"score": s.get("score", 0.0), "source": s.get("source"),
+                 "section": s.get("section", "N/A"), "text": s.get("text")}
+                for s in rag_sources
+            ]
+
+        result: PipelineResult | None = None
+
+        with layer_timer("3"):
+            if intent.type == "out_of_scope":
+                r = self._handle_out_of_scope(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1
+                yield {"type": "pre_gen", "meta": _base_meta(r.layer_path), "sources": None}
+                yield {"type": "token", "content": r.answer}
+                result = r
+
+            elif intent.type == "smalltalk":
+                r = self._handle_layer_3a(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1
+                yield {"type": "pre_gen", "meta": _base_meta(r.layer_path), "sources": None}
+                yield {"type": "token", "content": r.answer}
+                result = r
+
+            elif intent.type == "action_request":
+                layer_path = "1→2→3C"
+                action_result = None
+                for ev_type, ev_data in self.action_pipeline.handle_stream(ctx):
+                    if ev_type == "pre_gen":
+                        self.stats["action_responses"] += 1
+                        yield {
+                            "type": "pre_gen",
+                            "meta": _base_meta(layer_path, {
+                                "model": ev_data.model_used,
+                                "rag_used": bool(ev_data.rag_sources),
+                                "rag_chunks": len(ev_data.rag_sources or []),
+                            }),
+                            "sources": _sources_from(ev_data.rag_sources or []),
+                        }
+                    elif ev_type == "token":
+                        yield {"type": "token", "content": ev_data}
+                    elif ev_type == "done":
+                        action_result = ev_data
+
+                total_time = (datetime.now() - start_time).total_seconds()
+                _lp = layer_path + ("→PARAMS_NEEDED" if action_result and not action_result.success and action_result.missing_params else "")
+                result = PipelineResult(
+                    success=bool(action_result and action_result.success),
+                    answer=(action_result.answer or action_result.user_prompt_message or "") if action_result else "",
+                    layer_path=_lp,
+                    safety=safety_result, intent=intent, total_time_s=total_time,
+                    estimated_cost=0.0001 + (action_result.estimated_cost if action_result else 0.0),
+                    metadata={
+                        "model": action_result.model_used if action_result else "unknown",
+                        "rag_used": bool(action_result.rag_sources) if action_result else False,
+                        "rag_chunks": len(action_result.rag_sources) if action_result else 0,
+                        "tokens_used": token_tracker.get(),
+                        "request_id": ctx.request_id,
+                    },
+                )
+
+            else:
+                # info_request + fallback for unknown
+                layer_path = "1→2→3B"
+                info_result = None
+                for ev_type, ev_data in self.info_pipeline.handle_stream(ctx):
+                    if ev_type == "pre_gen":
+                        self.stats["info_responses"] += 1
+                        yield {
+                            "type": "pre_gen",
+                            "meta": _base_meta(layer_path, {
+                                "complexity": ev_data.complexity,
+                                "model": ev_data.model_used,
+                                "rag_used": ev_data.used_rag,
+                                "rag_chunks": ev_data.rag_chunks,
+                            }),
+                            "sources": _sources_from(ev_data.rag_sources),
+                        }
+                    elif ev_type == "token":
+                        yield {"type": "token", "content": ev_data}
+                    elif ev_type == "done":
+                        info_result = ev_data
+
+                total_time = (datetime.now() - start_time).total_seconds()
+                result = PipelineResult(
+                    success=True,
+                    answer=info_result.answer if info_result else "",
+                    layer_path=layer_path,
+                    safety=safety_result, intent=intent, total_time_s=total_time,
+                    estimated_cost=0.0001 + (info_result.estimated_cost if info_result else 0.0),
+                    metadata={
+                        **({"complexity": info_result.complexity, "rag_used": info_result.used_rag,
+                            "rag_chunks": info_result.rag_chunks, "model": info_result.model_used,
+                            "rag_sources": info_result.rag_sources, "step_timing": info_result.timing}
+                           if info_result else {}),
+                        "tokens_used": token_tracker.get(),
+                        "request_id": ctx.request_id,
+                    },
+                )
+
+        # Safety cost düzelt (run() ile aynı mantık)
+        result.estimated_cost = max(0.0, result.estimated_cost + (safety_cost - 0.0001))
+        self.stats["total_queries"] += 1
+        self.stats["total_cost"] += result.estimated_cost
+
+        total_tokens = token_tracker.get()
+        record_query(
+            status="answered" if result.success else "rejected",
+            intent=intent.type,
+            complexity=result.metadata.get("complexity", "unknown"),
+            model=result.metadata.get("model", "unknown"),
+            rag_used=result.metadata.get("rag_used", False),
+            input_tokens=total_tokens, output_tokens=0,
+        )
+        record_query_outcome(
+            intent=intent.type,
+            total_time_s=result.total_time_s,
+            estimated_cost=result.estimated_cost,
+            verification_confidence=result.metadata.get("verification_confidence"),
+        )
+        layer3_time_s = (datetime.now() - layer3_start).total_seconds()
+        step_timing = result.metadata.get("step_timing", {})
+        _pipeline_logger.info(
+            "intent=%s path=%s [stream] "
+            "layer1=%.3fs layer2=%.3fs layer3=%.3fs "
+            "qplan=%.3fs rag_ret=%.3fs llm=%.3fs verify=%.3fs "
+            "total=%.3fs rag=%s chunks=%d cost=$%.4f",
+            intent.type, result.layer_path,
+            layer1_time_s, layer2_time_s, layer3_time_s,
+            step_timing.get("query_planner_s", 0.0),
+            step_timing.get("rag_retrieve_s", 0.0),
+            step_timing.get("llm_gen_s", 0.0),
+            step_timing.get("claim_verify_s", 0.0),
+            result.total_time_s, result.metadata.get("rag_used", False),
+            result.metadata.get("rag_chunks", 0), result.estimated_cost,
+        )
+
+        yield {"type": "done", "result": result}
+
     def get_stats(self) -> dict:
         """Get pipeline statistics"""
         total = self.stats["total_queries"]

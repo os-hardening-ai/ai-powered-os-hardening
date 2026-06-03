@@ -157,6 +157,74 @@ class InfoPipeline:
             "total_cost": 0.0,
         }
 
+    def _retrieve_rag(
+        self, ctx: RequestContext, complexity: str
+    ) -> tuple[int, list, list, dict]:
+        """RAG retrieval — handle() ve handle_stream() tarafından ortaklaşa kullanılır.
+
+        Returns: (rag_chunks, rag_sources, raw_results_for_verify, timing_updates)
+        """
+        _t: dict = {}
+        rag_chunks, rag_sources, raw_results_for_verify = 0, [], []
+        try:
+            if self.query_planner is not None and complexity == "complex":
+                try:
+                    _t0 = datetime.now()
+                    plan = self.query_planner.plan(ctx.user_question)
+                    _t["query_planner_s"] = (datetime.now() - _t0).total_seconds()
+                    all_queries = plan.all_queries()
+                    _t0 = datetime.now()
+                    if hasattr(self.rag_builder, "retrieve_multi"):
+                        rag_context, raw_results = self.rag_builder.retrieve_multi(
+                            queries=all_queries, original_query=ctx.user_question,
+                        )
+                    else:
+                        rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                    _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
+                except Exception as qp_exc:
+                    _logger.warning("[InfoPipeline] QueryPlanner failed, using balanced: %s", qp_exc)
+                    _t0 = datetime.now()
+                    rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                    _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
+            else:
+                _t0 = datetime.now()
+                rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
+                _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
+
+            if rag_context and raw_results:
+                ctx.retrieved_context = rag_context
+                rag_chunks = len(raw_results)
+                raw_results_for_verify = raw_results
+                self.stats["rag_used_count"] += 1
+                for result in raw_results:
+                    metadata = result.get("metadata", {})
+                    section_id = metadata.get("section_id") or metadata.get("section") or ""
+                    section_title = metadata.get("section_title") or metadata.get("title") or ""
+                    if section_id and section_title and section_id != section_title:
+                        section = f"{section_id} - {section_title}"
+                    elif section_id:
+                        section = section_id
+                    elif section_title:
+                        section = section_title
+                    else:
+                        section = "N/A"
+                    chunk_text = result.get("text", "")
+                    rag_sources.append({
+                        "score": result.get("score", 0.0),
+                        "source": metadata.get("benchmark_product") or metadata.get("source_id") or "CIS Benchmark",
+                        "section": section,
+                        "text": chunk_text[:500] if chunk_text else None,
+                    })
+                _logger.info("[InfoPipeline] RAG OK — %d chunks, %d sources", rag_chunks, len(rag_sources))
+            else:
+                _logger.info(
+                    "[InfoPipeline] RAG returned empty — context=%s, results=%d",
+                    bool(rag_context), len(raw_results),
+                )
+        except Exception as e:
+            _logger.error("[InfoPipeline] RAG ERROR: %s", e)
+        return rag_chunks, rag_sources, raw_results_for_verify, _t
+
     def handle(self, ctx: RequestContext) -> InfoQueryResult:
         """
         Handle information query
@@ -189,11 +257,6 @@ class InfoPipeline:
         if self.debug:
             print(f"[InfoPipeline] Complexity: {complexity}")
 
-        # RAG kararı iki koşula bağlı:
-        #  1) rag_builder mevcut (API'dan use_rag=True geldi), VE
-        #  2) _should_use_rag akıllı tetikleme: jenerik tanım sorularında
-        #     ("firewall nedir") RAG'i ATLA → gereksiz embedding + Qdrant çağrısı yok,
-        #     daha hızlı + daha az kota tüketimi. Spesifik/zor sorularda RAG çalışır.
         use_rag = self.rag_builder is not None and self._should_use_rag(
             ctx.user_question, complexity
         )
@@ -201,88 +264,13 @@ class InfoPipeline:
         if self.debug:
             print(f"[InfoPipeline] RAG usage: {use_rag} (builder={self.rag_builder is not None})")
 
-        # RAG retrieval (if needed)
         rag_chunks = 0
         rag_sources = []
         raw_results_for_verify: List[dict] = []
         _logger.debug("[InfoPipeline] use_rag=%s, rag_builder=%s", use_rag, "SET" if self.rag_builder else "NONE")
         if use_rag and self.rag_builder:
-            try:
-                # Query planning: expand query before retrieval.
-                # QUOTA: QueryPlanner 3 PARALEL LLM call yapar (decompose+hyde+stepback).
-                # Cerebras 5 istek/dk limitinde, bir info isteğinin safety+gen+verify dışında
-                # +3 call'ı tek başına limiti patlatıyordu. Bu yüzden YALNIZCA "complex"te
-                # koşulur; "medium" doğrudan retrieve_balanced kullanır (LLM planner yok →
-                # info isteği 6 call yerine ~3 call). Recall'da küçük kayıp, quota'da büyük kazanç.
-                if self.query_planner is not None and complexity == "complex":
-                    try:
-                        _t0 = datetime.now()
-                        plan = self.query_planner.plan(ctx.user_question)
-                        _t["query_planner_s"] = (datetime.now() - _t0).total_seconds()
-                        all_queries = plan.all_queries()
-                        _logger.debug(
-                            "[InfoPipeline] QueryPlanner: %d queries for '%s'",
-                            len(all_queries),
-                            ctx.user_question[:50],
-                        )
-                        # Use retrieve_multi if available, else fall back to balanced
-                        _t0 = datetime.now()
-                        if hasattr(self.rag_builder, "retrieve_multi"):
-                            rag_context, raw_results = self.rag_builder.retrieve_multi(
-                                queries=all_queries,
-                                original_query=ctx.user_question,
-                            )
-                        else:
-                            rag_context, raw_results = self.rag_builder.retrieve_balanced(
-                                ctx.user_question
-                            )
-                        _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
-                    except Exception as qp_exc:
-                        _logger.warning("[InfoPipeline] QueryPlanner failed, using balanced: %s", qp_exc)
-                        _t0 = datetime.now()
-                        rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
-                        _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
-                else:
-                    # Standard balanced retrieval: YAML rules + PDF benchmarks
-                    _t0 = datetime.now()
-                    rag_context, raw_results = self.rag_builder.retrieve_balanced(ctx.user_question)
-                    _t["rag_retrieve_s"] = (datetime.now() - _t0).total_seconds()
-
-                if rag_context and raw_results:
-                    ctx.retrieved_context = rag_context
-                    rag_chunks = len(raw_results)
-                    raw_results_for_verify = raw_results
-                    self.stats["rag_used_count"] += 1
-
-                    # Extract source metadata
-                    for result in raw_results:
-                        metadata = result.get("metadata", {})
-                        section_id = metadata.get("section_id") or metadata.get("section") or ""
-                        section_title = metadata.get("section_title") or metadata.get("title") or ""
-                        if section_id and section_title and section_id != section_title:
-                            section = f"{section_id} - {section_title}"
-                        elif section_id:
-                            section = section_id
-                        elif section_title:
-                            section = section_title
-                        else:
-                            section = "N/A"
-                        chunk_text = result.get("text", "")
-                        rag_sources.append({
-                            "score": result.get("score", 0.0),
-                            "source": metadata.get("benchmark_product") or metadata.get("source_id") or "CIS Benchmark",
-                            "section": section,
-                            "text": chunk_text[:500] if chunk_text else None,
-                        })
-
-                    _logger.info("[InfoPipeline] RAG OK — %d chunks, %d sources", rag_chunks, len(rag_sources))
-                else:
-                    _logger.info(
-                        "[InfoPipeline] RAG returned empty — context=%s, results=%d",
-                        bool(rag_context), len(raw_results)
-                    )
-            except Exception as e:
-                _logger.error("[InfoPipeline] RAG ERROR: %s", e)
+            rag_chunks, rag_sources, raw_results_for_verify, _rag_t = self._retrieve_rag(ctx, complexity)
+            _t.update(_rag_t)
         else:
             self.stats["rag_skipped_count"] += 1
             _logger.debug("[InfoPipeline] RAG skipped")
@@ -542,6 +530,131 @@ class InfoPipeline:
 
         # Return final answer
         return ctx.final_answer if ctx.final_answer else raw_response
+
+    def handle_stream(self, ctx: RequestContext):
+        """Gerçek token streaming varinatı. Yields:
+            ("pre_gen", InfoQueryResult)  — RAG bitti, LLM başlamadan önce (answer="")
+            ("token",   str)              — LLM token'ı
+            ("done",    InfoQueryResult)  — tamamlanmış sonuç
+        """
+        from llm.clients import _accepts_system
+
+        start_time = datetime.now()
+        _t: dict = {}
+
+        # Cache hit → token olarak tek parça gönder
+        _ck = _answer_cache_key(ctx)
+        _cached = _answer_cache_get(_ck)
+        if _cached is not None:
+            _logger.info("[InfoPipeline.stream] cache HIT → 0 LLM call")
+            yield ("pre_gen", _cached)
+            yield ("token", _cached.answer)
+            yield ("done", _cached)
+            return
+
+        complexity = classify_question(ctx.user_question)
+        use_rag = self.rag_builder is not None and self._should_use_rag(ctx.user_question, complexity)
+
+        rag_chunks, rag_sources, raw_results_for_verify = 0, [], []
+        if use_rag and self.rag_builder:
+            rag_chunks, rag_sources, raw_results_for_verify, _rag_t = self._retrieve_rag(ctx, complexity)
+            _t.update(_rag_t)
+        else:
+            self.stats["rag_skipped_count"] += 1
+
+        if complexity == "simple" and rag_chunks >= 2:
+            complexity = "medium"
+
+        _model_label = {"simple": "small", "medium": "large"}.get(complexity, "large+CoT")
+        _estimated_cost = {"simple": 0.0002, "medium": 0.0005}.get(complexity, 0.0015)
+
+        partial = InfoQueryResult(
+            answer="",
+            complexity=complexity,
+            used_rag=use_rag and rag_chunks > 0,
+            rag_chunks=rag_chunks,
+            model_used=_model_label,
+            estimated_cost=_estimated_cost,
+            rag_sources=rag_sources,
+            timing=_t,
+        )
+        yield ("pre_gen", partial)
+
+        # LLM ve prompt seç
+        if complexity == "simple":
+            self.stats["simple_count"] += 1
+            fn = self.llm_small
+            prompt = get_prompt_for_complexity(ctx, "simple")
+        elif complexity == "medium":
+            self.stats["medium_count"] += 1
+            fn = self.llm_large
+            prompt = get_prompt_for_complexity(ctx, "medium")
+        else:
+            self.stats["complex_count"] += 1
+            fn = self.llm_large
+            prompt = self.cot_analyzer.build_cot_prompt(ctx)
+
+        system = GROUNDING_DIRECTIVE if ctx.retrieved_context else None
+
+        # Token streaming
+        collected: list[str] = []
+        model_used_actual = _model_label
+        _t0 = datetime.now()
+        try:
+            if hasattr(fn, "stream"):
+                stream_fn = fn.stream
+                gen = (
+                    stream_fn(prompt, system=system)
+                    if (system and _accepts_system(stream_fn))
+                    else stream_fn(prompt)
+                )
+                for tok in gen:
+                    collected.append(tok)
+                    yield ("token", tok)
+            else:
+                # stream() yok — tam cevabı tek parça akıt (graceful degrade)
+                full = self._call_llm(fn, prompt, ctx)
+                collected.append(full)
+                yield ("token", full)
+        except Exception as gen_exc:
+            _logger.error("[InfoPipeline.stream] LLM failed: %s", gen_exc)
+            err = (
+                "Şu anda yanıt üretilemedi — LLM sağlayıcısı geçici olarak kullanılamıyor. "
+                "Lütfen birkaç saniye bekleyip tekrar deneyin."
+            )
+            collected = [err]
+            yield ("token", err)
+            model_used_actual = "error"
+        _t["llm_gen_s"] = (datetime.now() - _t0).total_seconds()
+
+        answer = "".join(collected).strip()
+
+        # Complex: CoT parse
+        if complexity == "complex" and model_used_actual != "error":
+            try:
+                ctx_parsed = self.cot_analyzer.parse_cot_response(answer, ctx)
+                if ctx_parsed.final_answer:
+                    answer = ctx_parsed.final_answer
+            except Exception:
+                pass
+
+        self.stats["total_queries"] += 1
+        self.stats["total_cost"] += _estimated_cost
+
+        result_obj = InfoQueryResult(
+            answer=answer,
+            complexity=complexity,
+            used_rag=use_rag and rag_chunks > 0,
+            rag_chunks=rag_chunks,
+            model_used=model_used_actual,
+            response_time_s=(datetime.now() - start_time).total_seconds(),
+            estimated_cost=_estimated_cost,
+            rag_sources=rag_sources,
+            timing=_t,
+        )
+        if model_used_actual != "error" and answer.strip():
+            _answer_cache_put(_ck, result_obj)
+        yield ("done", result_obj)
 
     def get_stats(self) -> dict:
         """Get usage statistics"""
