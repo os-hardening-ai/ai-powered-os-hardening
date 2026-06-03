@@ -114,3 +114,31 @@ jenerik mesaj + request_id döner. Stack trace / iç detay / secret sızmaz.
   yeniden login). Kullanıcı yönetimi seeding + (gerekirse) elle ekleme ile yapılır.
 - Blacklist Redis erişilemezse **fail-open** (token yine de exp ile düşer).
 - CORS/TrustedHost varsayılanı açık — production öncesi kısıtlanmalı.
+
+## ⚠️ API Anahtarı Sızıntısı — Rotasyon Runbook (PUBLIC'E AÇMADAN ÖNCE)
+
+**Durum:** `.env` git GEÇMİŞİNDE commit'lenmiş (`0b5ca14 ".env yüklendi"`). Şu an `.env`
+`.gitignore`'da (artık izli değil) ve `.env.example` temiz (gerçek değer yok). ANCAK gerçek
+anahtarlar geçmiş commit'lerde duruyor — repo public'e açılırsa veya geçmişe erişen biri
+olursa **sızar**. Sızan anahtarlar: Cerebras, SambaNova, OpenRouter, Novita, Qdrant
+(+ Gmail SMTP app-password, AUTH_*/JWT_SECRET, VPS parolaları varsa).
+
+**Yapılması gerekenler (sırayla):**
+
+1. **Anahtarları ROTATE et** (her sağlayıcının dashboard'ında — bu adım elle yapılır):
+   - Cerebras: console → API Keys → eski anahtarı **revoke**, yeni oluştur.
+   - SambaNova Cloud: API Keys → revoke + yeni.
+   - OpenRouter: Keys → eski anahtarı sil, yeni.
+   - Novita: Key Management → revoke + yeni.
+   - Qdrant Cloud: cluster → API Key → rotate.
+   - Gmail SMTP: Google Account → App Passwords → eski app-password'ü **sil**, yeni üret.
+   - `JWT_SECRET` / `AUTH_*_PASSWORD`: yenile (JWT_SECRET değişince tüm mevcut token'lar düşer — beklenen).
+2. **Yeni anahtarları yalnız `.env`'e** yaz (asla commit etme — `.gitignore` zaten koruyor).
+3. **Git geçmişini temizle** (public'e açmadan önce, opsiyonel ama önerilir):
+   `git filter-repo --path .env --invert-paths` (veya BFG) → tüm geçmişten `.env`'i siler.
+   Sonra force-push gerekir; ekiple (Engin) koordine et çünkü herkesin re-clone'u gerekir.
+   > NOT: history rewrite YIKICI — yalnız anahtarlar rotate edildikten SONRA ve ekip onayıyla.
+4. Doğrula: `git log --all --diff-filter=A -- .env` → boş dönmeli (temizlik sonrası).
+
+**Önemli:** Eski anahtarlar rotate edildikten sonra geçmişteki kopyaları zararsızdır (artık
+geçersiz). O yüzden **önce rotasyon, sonra (isteğe bağlı) history temizliği**.
