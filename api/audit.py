@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Scope, Receive, Send, Message
 
 from api.auth import require_role
 from api.auth_models import Role
@@ -101,44 +101,61 @@ def _client_ip(request: Request) -> str:
     return "unknown"
 
 
-class AuditMiddleware(BaseHTTPMiddleware):
+def _client_ip_from_scope(scope: Scope) -> str:
+    client = scope.get("client")
+    if client:
+        return client[0]
+    return "unknown"
+
+
+class AuditMiddleware:
     """Her isteği audit_log'a yazar (gürültülü prob'lar hariç).
 
-    Kullanıcı kimliği, rota dependency'si çalıştıktan sonra `request.state.user`'da
-    bulunur (korumalı rotalar için). Login gibi kimliksiz uçlar için kullanıcı None'dur;
-    onların özel olayını ilgili endpoint `record_event` ile yazar.
+    Pure ASGI middleware — BaseHTTPMiddleware kullanmaz, bu nedenle SSE/streaming
+    yanıtlarını tamponlamaz. Kayıt, final http.response.body sonrası yapılır.
     """
 
-    def __init__(self, app, enabled: bool = True):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, enabled: bool = True) -> None:
+        self.app = app
         self.enabled = enabled
 
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        if not self.enabled:
-            return response
-        path = request.url.path  # query string HARİÇ (token sızıntısını önler)
-        if any(path.startswith(p) for p in _SKIP_PREFIXES):
-            return response
-        try:
-            user = getattr(request.state, "user", None)
-            username = getattr(user, "username", None)
-            role = user.role.value if user is not None else None
-            request_id = getattr(request.state, "request_id", None)
-            await asyncio.to_thread(
-                audit_store.record,
-                "request",
-                username=username,
-                role=role,
-                endpoint=path,
-                method=request.method,
-                status=response.status_code,
-                ip=_client_ip(request),
-                request_id=request_id,
-            )
-        except Exception as exc:
-            _logger.warning("audit middleware error: %s", exc)
-        return response
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+        enabled = self.enabled
+        status: list[int] = [0]
+
+        async def send_wrapper(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                status[0] = message.get("status", 0)
+            elif message["type"] == "http.response.body" and not message.get("more_body", False):
+                if enabled and not any(path.startswith(p) for p in _SKIP_PREFIXES):
+                    state = scope.get("state") or {}
+                    user = state.get("user")
+                    username = getattr(user, "username", None) if user else None
+                    role = user.role.value if user is not None else None
+                    request_id = state.get("request_id")
+                    try:
+                        await asyncio.to_thread(
+                            audit_store.record,
+                            "request",
+                            username=username,
+                            role=role,
+                            endpoint=path,
+                            method=method,
+                            status=status[0],
+                            ip=_client_ip_from_scope(scope),
+                            request_id=request_id,
+                        )
+                    except Exception as exc:
+                        _logger.warning("audit middleware error: %s", exc)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 # ── Sorgulama ucu ───────────────────────────────────────────────────────────────

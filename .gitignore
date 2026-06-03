@@ -74,7 +74,8 @@ wheels/
 *.db
 *.sqlite
 *.sqlite3
-data/auth.db*          # auth/audit SQLite (WAL/SHM dahil) — asla commit'lenmez
+# auth/audit SQLite + WAL/SHM — asla commit'lenmez
+data/auth.db*
 data/chroma_db/
 cache/
 .cache/

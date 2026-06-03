@@ -4,6 +4,7 @@ import asyncio
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from llm.core.context import RequestContext
@@ -20,7 +21,7 @@ from api.security import validate_chat_input, sanitize_output
 from api.errors import APIError, ErrorCode, raise_internal_error
 
 # Import streaming support
-from api.streaming import stream_chat_response
+from api.streaming import stream_chat_response, format_sse_event
 
 # Intent detection + smalltalk handling (streaming path da Layer 2/3A kullansın diye)
 from llm.pipelines.layers.hybrid_intent_detector import HybridIntentDetector, is_smalltalk
@@ -475,79 +476,196 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 @router.post("/chat/stream")
 async def chat_stream(payload: ChatRequest, request: Request):
     """
-    Streaming version of /chat endpoint using Server-Sent Events (SSE).
+    Gerçek token streaming — Server-Sent Events (SSE).
+
+    Layer 1 (safety) + Layer 2 (intent) + RAG retrieval sync koşar;
+    LLM üretim adımı Cerebras/SambaNova/OpenRouter stream() ile token-by-token akar.
+    TTFT ≈ safety + intent + RAG (~4-5s), sonraki tokenlar gerçek zamanlı gelir.
 
     SSE event order:
         event: metadata  — intent, safety, rag_used, layer_path, session info
-        event: sources   — rag_sources (same structure as /chat, only when RAG returned results)
-        event: message   — one per word/token
-        event: done      — total_tokens, total_time_s, estimated_cost, verification_confidence
+        event: sources   — rag_sources (RAG sonuç döndürdüyse)
+        event: message   — her LLM token için bir olay
+        event: done      — total_tokens, total_time_s, estimated_cost
     """
     timeout_seconds = payload.timeout or 60
 
     try:
-        # /chat (non-stream) ile BİREBİR AYNI yol: tam SecurePipelineV2.run() koşulur,
-        # üretilen cevap SSE üzerinden kelime kelime akıtılır. Böylece safety + intent +
-        # 3A/3B/3C routing, complexity, RAG sources, cost ve verification tek kaynaktan
-        # (SecurePipelineV2) gelir — streaming kendi mini-pipeline'ını ARTIK kurmaz.
-        result, effective_question, inferred_os, history = await _run_pipeline(
-            payload, timeout_seconds
-        )
+        llm_small, llm_large = _get_llm_clients()
 
-        # /metrics (llm_providers/tokens) STREAMING trafikte de dolsun — token sayısı
-        # tam pipeline koştuğundan yanıt akmadan önce biliniyor.
-        _set_llm_request_metrics(request, result)
-
+        # ── Session & query rewrite (run_pipeline ile aynı mantık) ──────────────
         session_id = payload.session_id or ""
-        sanitized_answer = sanitize_output(result.answer or "Cevap üretilemedi.")
-        _meta = result.metadata or {}
-
-        # Oturum geçmişine kaydet (P0-2) — /chat ile aynı
+        history: List[Dict[str, str]] = []
+        turns: List = []
         if session_id:
+            turns = _session_store.get_history(session_id)
+            history = [{"role": t.role, "content": t.content} for t in turns]
+
+        effective_question = payload.question
+        pending_merged = False
+        if turns and turns[-1].role == "assistant" and getattr(turns[-1], "intent", None) == "params_needed":
+            original_q = next(
+                (t.content for t in reversed(turns[:-1]) if t.role == "user"), None
+            )
+            if original_q:
+                effective_question = f"{original_q} {payload.question}".strip()
+                pending_merged = True
+
+        if not pending_merged and history and not is_smalltalk(payload.question):
             try:
-                _session_store.add_turn(session_id, "user", effective_question)
-                _session_store.add_turn(
-                    session_id, "assistant", sanitized_answer[:500],
-                    intent=_assistant_turn_intent(result),
-                )
+                from rag.query.query_rewriter import QueryRewriter
+                rewritten = QueryRewriter(llm_fn=llm_small).rewrite(payload.question, history)
+                if rewritten != payload.question:
+                    effective_question = rewritten
             except Exception:
                 pass
 
-        # RAG kaynakları (P0-1) — /chat ile aynı, result.metadata'dan
-        _srcs = _parse_rag_sources(_meta)
-        rag_sources_data = [s.model_dump() for s in _srcs] if _srcs else None
+        ctx = RequestContext(
+            user_question=effective_question,
+            os=payload.os, role=payload.role,
+            security_level=payload.security_level,  # type: ignore
+            zt_maturity=payload.zt_maturity,  # type: ignore
+            conversation_history=history,
+        )
 
-        async def answer_stream(text: str = sanitized_answer):
-            # SecurePipelineV2 cevabı tek parça üretir → SSE'de kelime kelime akıtılır
-            # (token-token "yazılıyor" hissi, $0 ek maliyet).
-            words = text.split(" ")
-            for i, word in enumerate(words):
-                yield word if i == 0 else " " + word
+        inferred_os: Optional[str] = None
+        if ctx.os is None or ctx.role is None:
+            try:
+                from rag.query.filter_agent import FilterAgent
+                _filters = FilterAgent(llm_fn=llm_small).infer(payload.question)
+                if _filters.os_type and ctx.os is None:
+                    ctx.os = _filters.os_type
+                    inferred_os = _filters.os_type
+                if _filters.role and ctx.role is None:
+                    ctx.role = _filters.role
+            except Exception:
+                pass
 
-        metadata = {
-            "safety": result.safety.category if result.safety else None,
-            "intent": result.intent.type if result.intent else None,
-            "intent_subtype": getattr(result.intent, "subtype", None) if result.intent else None,
-            "layer_path": result.layer_path,
-            "rag_used": _meta.get("rag_used", False),
-            "rag_chunks": _meta.get("rag_chunks", 0),
-            "model": _meta.get("model"),
-            "complexity": _meta.get("complexity"),
-            "inferred_os": inferred_os,
-            "session_id": session_id or None,
-            "history_turns": len(history) // 2,
-            "query_rewritten": effective_question != payload.question,
-            "streaming": "pipeline",
-        }
-        done_extra = {
-            "total_time_s": result.total_time_s,
-            "estimated_cost": result.estimated_cost,
-            "verification_confidence": _meta.get("verification_confidence"),
-            "request_id": result.metadata.get("request_id"),
-        }
-        return await stream_chat_response(
-            answer_stream(), metadata=metadata, sources=rag_sources_data,
-            done_extra=done_extra,
+        rag_builder = None
+        if payload.use_rag:
+            try:
+                rag_builder = RAGContextBuilder(
+                    top_k=payload.rag_top_k,
+                    min_score=payload.rag_min_score,
+                    os_version=payload.os or inferred_os or None,
+                )
+            except Exception as e:
+                _conv_logger.warning("[stream] RAG builder failed: %s", e)
+
+        pipeline = SecurePipelineV2(
+            llm_ultra_fast=llm_small, llm_small=llm_small, llm_large=llm_large,
+            rag_builder=rag_builder, debug=False,
+        )
+
+        # ── Thread→async queue köprüsü ───────────────────────────────────────────
+        # run_stream() sync generator → executor'da koş, olayları async queue'ya aktar.
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        sentinel = object()
+
+        def _produce() -> None:
+            try:
+                for event in pipeline.run_stream(ctx):
+                    loop.call_soon_threadsafe(queue.put_nowait, event)
+            except Exception as exc:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"type": "error", "exc": exc}
+                )
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, sentinel)
+
+        loop.run_in_executor(None, _produce)
+
+        # ── SSE generator ────────────────────────────────────────────────────────
+        _collected: List[str] = []
+        _session_saved = False
+
+        async def sse_generator():
+            nonlocal _session_saved
+            token_count = 0
+            done_payload: dict = {}
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
+                except asyncio.TimeoutError:
+                    yield format_sse_event("error", {"message": "stream timeout", "type": "TimeoutError"})
+                    return
+
+                if event is sentinel:
+                    break
+
+                etype = event.get("type")
+
+                if etype == "pre_gen":
+                    meta = dict(event.get("meta") or {})
+                    meta.update({
+                        "inferred_os": inferred_os,
+                        "session_id": session_id or None,
+                        "history_turns": len(history) // 2,
+                        "query_rewritten": effective_question != payload.question,
+                        "streaming": "real-token",
+                    })
+                    yield format_sse_event("metadata", meta)
+                    sources = event.get("sources")
+                    if sources:
+                        yield format_sse_event("sources", {"rag_sources": sources})
+
+                elif etype == "token":
+                    content = event.get("content", "")
+                    _collected.append(content)
+                    token_count += 1
+                    yield format_sse_event("message", {"token": content})
+
+                elif etype == "done":
+                    result = event.get("result")
+                    if result:
+                        _meta = result.metadata or {}
+                        done_payload = {
+                            "total_tokens": token_count,
+                            "status": "completed",
+                            "total_time_s": result.total_time_s,
+                            "estimated_cost": result.estimated_cost,
+                            "verification_confidence": _meta.get("verification_confidence"),
+                            "request_id": _meta.get("request_id"),
+                        }
+                        # Session history kaydet
+                        if session_id and not _session_saved:
+                            try:
+                                full_answer = sanitize_output("".join(_collected))
+                                _session_store.add_turn(session_id, "user", effective_question)
+                                _session_store.add_turn(
+                                    session_id, "assistant", full_answer[:500],
+                                    intent=_assistant_turn_intent(result),
+                                )
+                                _session_saved = True
+                            except Exception:
+                                pass
+                        _set_llm_request_metrics(request, result)
+                        _conv_logger.info(
+                            f"--- [{_meta.get('request_id')}] intent={result.intent.type if result.intent else 'unknown'} "
+                            f"path={result.layer_path} total={result.total_time_s:.3f}s [stream] ---"
+                        )
+
+                elif etype == "error":
+                    exc = event.get("exc")
+                    yield format_sse_event("error", {
+                        "message": str(exc), "type": type(exc).__name__ if exc else "Unknown"
+                    })
+                    return
+
+            if not done_payload:
+                done_payload = {"total_tokens": token_count, "status": "completed"}
+            yield format_sse_event("done", done_payload)
+
+        return StreamingResponse(
+            sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
 
     except APIError:

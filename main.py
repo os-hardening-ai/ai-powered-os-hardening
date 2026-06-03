@@ -19,6 +19,29 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+
+class StreamingAwareGZipMiddleware:
+    """GZip middleware that skips SSE/streaming endpoints (text/event-stream).
+
+    GZip's internal DEFLATE buffer holds small tokens until it has enough data
+    to emit a compressed block — this makes token streaming appear frozen until
+    the full response arrives.  Any path containing '/stream' is passed through
+    uncompressed so SSE works correctly.
+    """
+
+    def __init__(self, app: ASGIApp, minimum_size: int = 1000) -> None:
+        self._gzip = GZipMiddleware(app, minimum_size=minimum_size)
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") == "http" and "/stream" in scope.get("path", ""):
+            await self._app(scope, receive, send)
+        else:
+            await self._gzip(scope, receive, send)
+
+
 from api.router_rag import router as rag_router
 from api.router_chat import router as chat_router
 from api.router_health import router as health_router
@@ -142,8 +165,8 @@ def create_app() -> FastAPI:
     if cfg.auth.audit_enabled:
         app.add_middleware(AuditMiddleware, enabled=True)
 
-    # 7. Compression
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    # 7. Compression (SSE/stream path'leri atlanır — bkz. StreamingAwareGZipMiddleware)
+    app.add_middleware(StreamingAwareGZipMiddleware, minimum_size=1000)
 
     # 8. Trusted host — ALLOWED_HOSTS env ile override edilebilir (virgülle ayrık).
     #    Varsayılan açık ("*") bırakıldı; production'da env ile kısıtlayın.

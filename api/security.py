@@ -14,7 +14,8 @@ from collections import defaultdict
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import Scope, Receive, Send, Message
+from starlette.datastructures import MutableHeaders
 
 _logger = logging.getLogger(__name__)
 
@@ -121,21 +122,28 @@ def _build_rate_limiter(config: RateLimitConfig):
     return _InMemoryRateLimiter(config)
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+class RateLimitMiddleware:
     """Rate limiting per client IP — Redis-backed when available, else in-memory."""
 
-    def __init__(self, app, config: Optional[RateLimitConfig] = None):
-        super().__init__(app)
+    def __init__(self, app, config: Optional[RateLimitConfig] = None) -> None:
+        self.app = app
         self.config = config or RateLimitConfig()
         self.limiter = _build_rate_limiter(self.config)
-        # X-Forwarded-For is client-controlled; only trust it behind a known proxy.
         self.trust_proxy = os.environ.get("TRUST_PROXY", "").lower() in ("1", "true", "yes")
 
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
         client_id = self._get_rate_limit_key(request)
         if not self.limiter.allow(client_id, time.time()):
-            return self._rate_limited_response()
-        return await call_next(request)
+            response = self._rate_limited_response()
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
 
     def _get_rate_limit_key(self, request: Request) -> str:
         # Kullanıcı-bazlı kota: geçerli JWT varsa anahtar `user:{username}` (IP'den bağımsız,
@@ -176,24 +184,35 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # Security Headers Middleware
 # ─────────────────────────────────────────────────────────────────
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware to add security headers to all responses."""
-    
-    async def dispatch(self, request: Request, call_next):
-        """Add security headers to response."""
-        response = await call_next(request)
-        
-        # Add security headers
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        # CSP: Allow Swagger UI and other essential external resources
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        
-        return response
+class SecurityHeadersMiddleware:
+    """Add security headers to all responses without buffering."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["X-Frame-Options"] = "DENY"
+                headers["X-XSS-Protection"] = "1; mode=block"
+                headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+                headers["Content-Security-Policy"] = (
+                    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; "
+                    "connect-src 'self' https:"
+                )
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+                headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 # ─────────────────────────────────────────────────────────────────

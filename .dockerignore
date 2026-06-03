@@ -39,6 +39,9 @@ docs/
 # Embedding cache — runtime'da yeniden üretilir
 data/cache/
 
+# SQLite auth DB + WAL/SHM — runtime verisi, image'a girmemeli
+data/auth.db*
+
 # CIS PDF kaynak dosyaları — sadece build_index.py için gerekli,
 # runtime'da Qdrant'tan sorgulanır, container'a kopyalanması gerekmez
 data/source/

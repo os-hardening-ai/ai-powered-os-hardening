@@ -1,5 +1,7 @@
 # models/groq_client.py
 from __future__ import annotations
+import logging
+from typing import Optional
 from groq import Groq
 from llm.core.config import (
     GROQ_API_KEY,
@@ -12,17 +14,20 @@ from llm.core.config import (
     MAX_RETRIES,
 )
 from llm.clients import token_tracker
+from llm.clients.base import classify_error
+
+logger = logging.getLogger(__name__)
 
 
 class GroqClient:
     """
     Groq API client - Ultra hızlı ve ucuz LLM inference.
-    
+
     Maliyet: $0.27/1M token (OpenAI'nin %90 ucuz)
     Hız: 500+ token/saniye (en hızlı API)
     Modeller: Llama 3.1, Mixtral, Gemma
     """
-    
+
     def __init__(
         self,
         model_name: str,
@@ -41,9 +46,6 @@ class GroqClient:
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
-        # 429/5xx best-practice: SDK'nın yerleşik retry'ı exponential backoff
-        # uygular VE 429 yanıtındaki `Retry-After` başlığına uyar. timeout ile
-        # asılı kalan socket'i de sınırlıyoruz (yoksa istek süresiz bekleyebilir).
         self.timeout = float(timeout if timeout is not None else REQUEST_TIMEOUT)
         self.max_retries = int(max_retries if max_retries is not None else MAX_RETRIES)
         self.client = Groq(
@@ -51,17 +53,21 @@ class GroqClient:
             timeout=self.timeout,
             max_retries=self.max_retries,
         )
+        logger.info("[OK] Groq API - Model: %s (timeout=%ss, retries=%s)", model_name, self.timeout, self.max_retries)
 
-        print(f"[OK] Groq API - Model: {model_name} (timeout={self.timeout}s, retries={self.max_retries})")
-    
-    def __call__(self, prompt: str) -> str:
-        """Modele prompt gönder ve cevap al"""
+    def _messages(self, prompt: str, system: Optional[str] = None) -> list:
+        msgs = []
+        if system:
+            msgs.append({"role": "system", "content": system})
+        msgs.append({"role": "user", "content": prompt})
+        return msgs
+
+    def __call__(self, prompt: str, system: Optional[str] = None) -> str:
+        """Modele prompt gönder ve cevap al. system verilirse grounding direktifi olarak eklenir."""
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
+                messages=self._messages(prompt, system),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
@@ -75,26 +81,34 @@ class GroqClient:
                 token_tracker.add(response.usage.total_tokens)
 
             return content.strip()
-            
-        except Exception as e:
-            error_msg = str(e)
-            
-            # Rate limit hatası
-            if "rate_limit" in error_msg.lower() or "429" in error_msg:
-                raise RuntimeError(
-                    "⚠️  Groq rate limit aşıldı.\n"
-                    "Çözüm: 1 dakika bekle veya ücretsiz tier limitlerini kontrol et:\n"
-                    "https://console.groq.com/settings/limits"
-                ) from e
-            
-            # API key hatası
-            if "401" in error_msg or "unauthorized" in error_msg.lower():
-                raise RuntimeError(
-                    "❌ Groq API key geçersiz.\n"
-                    "Yeni key al: https://console.groq.com/keys"
-                ) from e
-            
-            raise RuntimeError(f"Groq API hatası: {error_msg}") from e
+
+        except Exception as exc:
+            raise classify_error(exc, "groq")
+
+    def stream(self, prompt: str, system: Optional[str] = None):
+        """GERÇEK token streaming — Groq SDK stream=True ile token delta'larını yield eder."""
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=self._messages(prompt, system),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                stream=True,
+            )
+            got = False
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                content = getattr(delta, "content", None) if delta is not None else None
+                if content:
+                    got = True
+                    yield content
+            if not got:
+                raise RuntimeError(f"Groq stream boş döndü (model={self.model_name})")
+        except Exception as exc:
+            raise classify_error(exc, "groq")
 
 
 def get_small_groq_llm() -> GroqClient:
