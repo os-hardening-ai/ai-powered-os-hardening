@@ -87,12 +87,16 @@ _REGISTRY: Dict[str, ProviderSpec] = {
         notes="DEPRECATED — chat-template hatası + artık aracı (Groq/Cerebras'a yönlendirir); "
               "varsayılan zincirden ÇIKARILDI (yalnızca açıkça LLM_PROVIDER=huggingface ile)",
     ),
-    # CHEAP_PAID — düşük ücretli, kotasız. Groq 429'u için öncelikli güvenlik ağı;
-    # free_priority=25 → Ollama'dan (30) ÖNCE denenir.
+    # CHEAP_PAID — Novita LLM artık LLM fallback zincirinden ÇIKARILDI (deprecated):
+    # (1) yavaş — lane kalite bench'inde llama-8b/deepseek-v3 ~13s (cerebras 1.9s, gemini-lite 2.8s).
+    # (2) Novita asıl EMBEDDING için (qwen3-embedding-8b, rag/embeddings/ — AYRI modül, etkilenmez).
+    # Zincir artık: cerebras → sambanova → gemini(OpenRouter, gemini-3.1-flash-lite). Explicit
+    # LLM_PROVIDER=novita yine çalışır; yalnız OTOMATİK fallback'ten çıkarıldı. (2026-06, bench-kararı)
     "novita": ProviderSpec(
         "novita", "llm.clients.novita_llm_client:get_small_novita_llm,get_large_novita_llm",
-        Cost.CHEAP_PAID, free_priority=25,
-        notes="Düşük ücretli + kotasız — Groq 429 sonrası ilk fallback, Ollama'dan önce",
+        Cost.CHEAP_PAID, free_priority=25, deprecated=True,
+        notes="DEPRECATED (LLM): yavaş (~13s); Novita EMBEDDING için kullanılır (ayrı modül). "
+              "LLM zincirinden çıkarıldı — explicit LLM_PROVIDER=novita ile hâlâ kullanılabilir.",
     ),
     # PAID — pahalı; yalnızca açıkça primary seçilirse.
     "openai": ProviderSpec(
