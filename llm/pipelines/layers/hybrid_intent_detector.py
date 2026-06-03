@@ -62,24 +62,26 @@ class HybridIntent:
 
 class HybridIntentDetector:
     """
-    Hybrid intent detector combining ML and pattern-based approaches
+    Alan-içi niyet sınıflandırıcı: smalltalk vs info_request vs action_request.
 
-    Decision flow:
-    1. Check smalltalk patterns first (100% accuracy, <1ms)
-    2. Check out-of-scope keywords (fast filtering)
-    3. Use ML for info vs action classification
-    4. If ML confidence < 0.6, use pattern fallback
+    TEK TEMİZ KARAR AKIŞI (konsolide — eski 7-mekanizmalı whack-a-mole değil):
+      1. Smalltalk kapısı (deterministik, $0, LLM-öncesi) → `_smalltalk_subtype`
+      2. TF-IDF ML ile info-vs-action + TEK imperatif tiebreak + TEK güven eşiği
+      3. ML yoksa/başarısızsa pattern-only fallback
 
-    Performance:
-    - Smalltalk: <1ms (pattern) or ~5ms (ML fallback)
-    - Info/Action: ~5-10ms (ML primary)
-    - Out-of-scope: <1ms (keyword) or ~5ms (ML fallback)
+    KAPSAM (out_of_scope) BURADA KARARLAŞTIRILMAZ. Alan-içi/dışı kararı tek otorite olan
+    L1 LLM safety kategorisine aittir (secure_v2 "semantik kapsam kapısı": off_topic →
+    out_of_scope). Bu detector yalnız ALAN-İÇİ niyeti seçer. (Eski keyword-tabanlı oos
+    üretimi + düşük-güven oos emniyet ağı KALDIRILDI — aynı kararın 3 yerde verilmesi
+    her yeni sorguda yeni kenar-durum/bug doğuruyordu.)
+
+    Performans: smalltalk <1ms (pattern); info/action ~5-10ms (TF-IDF ML).
     """
 
-    # Confidence thresholds
-    ML_HIGH_CONFIDENCE = 0.75  # Use ML result directly
-    ML_MED_CONFIDENCE = 0.60   # Use ML but with caution
-    ML_LOW_CONFIDENCE = 0.60   # Fallback to patterns
+    # Tek güven eşiği: ML bundan eminse info/action'ına güven, değilse güvenli default
+    # (info_request). Eski 3-kademeli HIGH/MED/LOW ladder'ı (her kademe farklı override
+    # dalına sapıyordu → whack-a-mole) tek eşiğe indirildi.
+    ML_CONFIDENCE = 0.60
 
     # ═════════════════════════════════════════════
     # SMALLTALK PATTERNS (High precision)
@@ -243,31 +245,20 @@ class HybridIntentDetector:
         }
 
     def detect(self, question: str) -> HybridIntent:
-        """
-        Detect intent using hybrid approach
+        """Alan-içi niyeti tespit et: smalltalk / info_request / action_request.
 
-        Args:
-            question: User input
-
-        Returns:
-            HybridIntent with detection result
+        KAPSAM (out_of_scope) BURADA verilmez — L1 LLM safety kategorisi tek otoritedir
+        (secure_v2 kapsam kapısı). Detaylar için sınıf docstring'ine bak.
         """
         self.stats["total"] += 1
 
         if not question or not question.strip():
-            return HybridIntent(
-                type="smalltalk",
-                subtype="other",
-                confidence=1.0,
-                method="pattern"
-            )
+            return HybridIntent(type="smalltalk", subtype="other",
+                                confidence=1.0, method="pattern")
 
-        q_stripped = question.strip()
-        q_lower = q_stripped.lower()
+        q_lower = question.strip().lower()
 
-        # ─────────────────────────────────────────
-        # Step 1: Smalltalk (pattern + lexicon, ML'siz / deterministik / hızlı)
-        # ─────────────────────────────────────────
+        # ── Adım 1: Smalltalk (deterministik, $0, LLM-öncesi) ──
         st = self._smalltalk_subtype(q_lower)
         if st:
             self.stats["pattern_used"] += 1
@@ -275,153 +266,46 @@ class HybridIntentDetector:
                 print(f"[HybridIntent] Smalltalk: {st}")
             return HybridIntent(type="smalltalk", subtype=st, confidence=1.0, method="pattern")
 
-        # ─────────────────────────────────────────
-        # Step 2: Check out-of-scope keywords (FAST)
-        # ─────────────────────────────────────────
-        out_of_scope_matches = [kw for kw in self.OUT_OF_SCOPE_KEYWORDS if kw in q_lower]
+        # İmperatif kip ("yaz/üret/oluştur...") action'ın en güçlü sinyali — bir kez hesapla.
+        imperative = self._check_imperative_patterns(q_lower)
 
-        if out_of_scope_matches:
-            # Check if security keywords also present
-            has_security = any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
-
-            if not has_security:
-                self.stats["pattern_used"] += 1
-
-                if self.debug:
-                    print(f"[HybridIntent] Out-of-scope keywords: {out_of_scope_matches}")
-
-                return HybridIntent(
-                    type="out_of_scope",
-                    confidence=0.95,
-                    method="pattern"
-                )
-
-        # ─────────────────────────────────────────
-        # Step 3: Use ML for info vs action (PRIMARY)
-        # ─────────────────────────────────────────
+        # ── Adım 2: TF-IDF ML ile info-vs-action (BİRİNCİL) ──
         if self.use_ml and self.ml_detector:
             try:
                 ml_result: MLIntent = self.ml_detector.predict(question)
-
                 if self.debug:
-                    print(f"[HybridIntent] ML result: {ml_result.type} (conf: {ml_result.confidence:.3f})")
+                    print(f"[HybridIntent] ML: {ml_result.type} (conf {ml_result.confidence:.3f})")
 
-                # Map ML intents to our intent types
                 intent_type = self._map_ml_intent(ml_result.type)
                 subtype = self._get_subtype(ml_result.type)
 
-                # GUARD: ML "smalltalk" dese bile sorguda GÜVENLİK sinyali varsa bu yanlıştır.
-                # (Gerçek smalltalk Step-1 pattern/lexicon'da zaten yakalanırdı; buraya geldiyse
-                # ve güvenlik kelimesi varsa TF-IDF "merhaba/selam" token'ına aldanmış demektir →
-                # "merhaba ssh nasıl sıkılaştırılır" greeting DEĞİL.) imperative varsa action, yoksa info.
-                if intent_type == "smalltalk" and any(kw in q_lower for kw in self.SECURITY_KEYWORDS):
-                    if self.debug:
-                        print("[HybridIntent] ML smalltalk + güvenlik sinyali → override (info/action)")
-                    intent_type = "action_request" if self._check_imperative_patterns(q_lower) else "info_request"
-                    subtype = None
+                # TEK, SIRALI override basamağı (eski dağınık guard/ladder/emniyet-ağı yerine):
+                if imperative:
+                    # İmperatif kip → action (ML "info/smalltalk/oos" dese de).
+                    intent_type, subtype = "action_request", None
+                elif intent_type in ("out_of_scope", "smalltalk"):
+                    # Kapsam gate'in işi; gerçek smalltalk Adım-1'de yakalanırdı. ML buraya
+                    # "merhaba ssh..." gibi token'a aldanıp gelmiş olabilir → alan-içi default.
+                    intent_type, subtype = "info_request", None
+                # NOT: ML'in info/action TİPİNE güveniriz (düşük güvende bile) — "ssh root
+                # login'i kapat" gibi imperatif-pattern'e UYMAYAN eylemler ML'de düşük-güvenli
+                # action çıkar; bunu info'ya çevirmek yanlıştı. Güven yalnız method etiketinde.
 
-                # High confidence - use ML directly
-                if ml_result.confidence >= self.ML_HIGH_CONFIDENCE:
-                    self.stats["ml_used"] += 1
-
-                    return HybridIntent(
-                        type=intent_type,
-                        subtype=subtype,
-                        confidence=ml_result.confidence,
-                        method="ml",
-                        ml_probabilities=ml_result.probabilities
-                    )
-
-                # Medium confidence - use ML but check imperative patterns
-                elif ml_result.confidence >= self.ML_MED_CONFIDENCE:
-                    # Check imperative patterns for action requests
-                    imperative_match = self._check_imperative_patterns(q_lower)
-
-                    if imperative_match and intent_type != "action_request":
-                        # Override ML if imperative pattern found
-                        self.stats["hybrid_used"] += 1
-
-                        if self.debug:
-                            print(f"[HybridIntent] Overriding ML with pattern (imperative found)")
-
-                        return HybridIntent(
-                            type="action_request",
-                            confidence=0.90,
-                            method="hybrid",
-                            ml_probabilities=ml_result.probabilities
-                        )
-
-                    # Use ML result
-                    self.stats["ml_used"] += 1
-
-                    return HybridIntent(
-                        type=intent_type,
-                        subtype=subtype,
-                        confidence=ml_result.confidence,
-                        method="ml",
-                        ml_probabilities=ml_result.probabilities
-                    )
-
-                # Low confidence - use pattern fallback
-                else:
-                    if self.debug:
-                        print(f"[HybridIntent] Low ML confidence, using pattern fallback")
-
-                    pattern_result = self._pattern_fallback(q_lower)
-
-                    # DOMAIN-GATE: pattern_fallback imperatif "yaz/üret" görünce action_request
-                    # döndürür ama bu DOMAIN-BAĞIMSIZdır ("bana şiir yaz" → action). Domain-scoped
-                    # asistanda (best practice: ayrı domain gate) güvenlik sinyali yoksa bu girdi
-                    # KAPSAM DIŞIdır. Düşük ML güveni zaten "tanıdık güvenlik sorusu değil" sinyali.
-                    has_security = any(kw in q_lower for kw in self.SECURITY_KEYWORDS)
-                    if pattern_result and has_security:
-                        self.stats["hybrid_used"] += 1
-                        return pattern_result
-
-                    # Emniyet ağı (C): ML çok kararsız VE sorguda güvenlik sinyali yoksa,
-                    # zayıf info/action tahminine GÜVENME → kibar red. ("ne haber" gibi
-                    # tanınmayan chitchat'in güvenlik cevabına sızmasını engeller.)
-                    if intent_type in ("info_request", "action_request") and not has_security:
-                        if self.debug:
-                            print("[HybridIntent] Düşük güven + güvenlik sinyali yok → out_of_scope (emniyet)")
-                        self.stats["ml_used"] += 1
-                        return HybridIntent(
-                            type="out_of_scope",
-                            confidence=ml_result.confidence,
-                            method="lowconf_safety",
-                            ml_probabilities=ml_result.probabilities,
-                        )
-
-                    # Last resort: use ML result anyway but mark as low confidence
-                    self.stats["ml_used"] += 1
-
-                    return HybridIntent(
-                        type=intent_type,
-                        subtype=subtype,
-                        confidence=ml_result.confidence,
-                        method="ml_lowconf",
-                        ml_probabilities=ml_result.probabilities
-                    )
-
+                self.stats["ml_used"] += 1
+                method = "ml" if (imperative or ml_result.confidence >= self.ML_CONFIDENCE) else "ml_lowconf"
+                return HybridIntent(
+                    type=intent_type, subtype=subtype,
+                    confidence=ml_result.confidence, method=method,
+                    ml_probabilities=ml_result.probabilities,
+                )
             except Exception as e:
                 if self.debug:
-                    print(f"[HybridIntent] ML error: {e}, falling back to patterns")
+                    print(f"[HybridIntent] ML error: {e}, pattern fallback")
 
-        # ─────────────────────────────────────────
-        # Step 4: Pattern-only fallback (NO ML)
-        # ─────────────────────────────────────────
+        # ── Adım 3: Pattern-only fallback (ML yok/başarısız) ──
         self.stats["pattern_used"] += 1
-
-        pattern_result = self._pattern_fallback(q_lower)
-        if pattern_result:
-            return pattern_result
-
-        # Default: info_request (safe)
-        return HybridIntent(
-            type="info_request",
-            confidence=0.5,
-            method="default"
-        )
+        return self._pattern_fallback(q_lower) or HybridIntent(
+            type="info_request", confidence=0.5, method="default")
 
     def _smalltalk_subtype(self, q_lower: str) -> Optional[str]:
         """Smalltalk alt-türü (greeting/farewell/thanks/help) ya da None — ML'siz, deterministik.

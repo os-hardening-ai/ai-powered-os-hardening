@@ -119,6 +119,10 @@ class TestGetLLMClients:
         assert not isinstance(small, FallbackLLM)
 
     def test_fallback_enabled_returns_wrapper(self, monkeypatch):
+        # LANE env (.env'de LLM_*_LANES) varsa get_llm_clients LaneLoadBalancer döner;
+        # bu test KLASİK FallbackLLM zincirini doğrular → lane env'i temizle (env-bağımsız).
+        monkeypatch.setenv("LLM_SMALL_LANES", "")
+        monkeypatch.setenv("LLM_LARGE_LANES", "")
         monkeypatch.setattr(clients, "LLM_PROVIDER", "groq")
         monkeypatch.setattr(clients, "_PROVIDER_BUILDERS", {
             "groq": _provider("groq"), "novita": _provider("novita"),

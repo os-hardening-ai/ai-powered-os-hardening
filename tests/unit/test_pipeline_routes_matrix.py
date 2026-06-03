@@ -204,13 +204,15 @@ class TestRouteFidelity:
         "remote desktop protokol soruları",
         "rdp nla nasıl zorunlu kılınır",
     ])
-    def test_security_topic_rescued_from_out_of_scope(self, safe_pipeline, q):
-        # KEYWORD WHACK-A-MOLE DEĞİL: intent detector "rdp"yi tanımayıp out_of_scope
-        # diyebilir, ama Layer-1 safety safe_defensive dediği için SEMANTİK override bunu
-        # kurtarır → 3B (info). RDP ilan edilen kapsamda ("SSH, RDP, Firewall hardening").
+    def test_security_topic_stays_in_domain(self, safe_pipeline, q):
+        # KEYWORD WHACK-A-MOLE DEĞİL: "rdp" SECURITY_KEYWORDS'te olmasa bile alan-DIŞI
+        # sayılmaz. Layer-1 safety safe_defensive der (off_topic DEĞİL) → kapsam kapısı
+        # out_of_scope'a almaz. Niyet detector'ı bunu info VEYA action sayabilir (ikisi de
+        # alan-içi, geçerli güvenlik rotası) — ASIL nokta: oos'a ATILMAZ. (Eski "oos üret →
+        # rescue et" mekanizması kaldırıldı; artık baştan alan-içi sınıflanır.)
         res = safe_pipeline.run(RequestContext(user_question=q))
         assert "OUT_OF_SCOPE" not in res.layer_path, f"{q!r} → {res.layer_path}"
-        assert res.success
+        assert ("3B" in res.layer_path or "3C" in res.layer_path), f"{q!r} → {res.layer_path}"
 
     def test_non_security_forced_out_of_scope_by_off_topic(self, safe_pipeline):
         # safety=off_topic → intent ML yanlışlıkla info_request dese bile secure_v2

@@ -36,10 +36,56 @@ from domain.rule_engine.rule_engine import RuleEngine
 from domain.artifact_generator.generator import ArtifactGenerator, Artifact
 from llm.pipelines.layers.output_validator import OutputValidator
 from llm.agents.task_planner import TaskPlanner, HardeningPlan
+from llm.agents.freeform_generator import FreeformScriptGenerator
 
 logger = logging.getLogger(__name__)
 
 LLMCallable = Callable[[str], str]
+
+
+# Katalogda karşılığı olmayan, kullanıcıya-özel EYLEM sinyalleri (TR + EN). Bunlar CIS
+# benchmark kuralı değil, operasyonel görevdir (grup/kullanıcı oluştur, belirli isimli
+# kaynak ekle). Varlıkları + katalog kurallarının bunu KARŞILAMAMASI → serbest-form.
+# Türkçe ekleri (grubu/grubuna) yakalamak için kök-bazlı: "grup"+"oluştur" AYNI cümlede
+# yeterli (alt-dizge "grup oluştur" eklerde kaçar). Bu yüzden çok-token kontrolü _has_pair ile.
+_FREEFORM_ACTION_MARKERS = (
+    "groupadd", "useradd", "usermod", "adduser", "addgroup",
+    "create group", "add group", "create user", "add user", "create account",
+    "mkdir", "symlink", "crontab",
+)
+# (kök, eylem) çiftleri — ikisi de hedefte geçerse katalog-dışı operasyonel iş.
+_FREEFORM_PAIRS = (
+    ("grup", "oluştur"), ("grub", "oluştur"), ("grup", "ekle"), ("grub", "ekle"),
+    ("kullanıcı", "oluştur"), ("kullanıcı", "ekle"), ("hesap", "oluştur"),
+    ("kullanıc", "ekle"), ("dizin", "oluştur"), ("klasör", "oluştur"),
+)
+
+
+def _is_catalog_miss(goal: str, plan: "HardeningPlan") -> bool:
+    """Hedef CIS kataloğuyla karşılanamayan ÖZEL bir operasyonel iş mi? (deterministik)
+
+    True → serbest-form script üret. Konservatif: yalnız NET katalog-miss'te True
+    (şüphede katalog kalır → mevcut davranış bozulmaz). Sinyal:
+      katalogda-olmayan-eylem sözcüğü (groupadd/useradd/grup oluştur...) VAR ve
+      seçilen kuralların başlık/açıklamaları bu eylemi KARŞILAMIYOR.
+    """
+    g = (goal or "").lower()
+    has_action = (
+        any(m in g for m in _FREEFORM_ACTION_MARKERS)
+        or any(root in g and verb in g for root, verb in _FREEFORM_PAIRS)
+    )
+    if not has_action:
+        return False
+    # Plan kuralları bu eylemi karşılıyor mu? (kural başlık/kategorilerinde grup/kullanıcı
+    # oluşturma geçiyorsa katalog yeterli sayılır → freeform'a gerek yok).
+    catalog_text = " ".join(
+        f"{i.title} {getattr(i, 'rationale', '')}" for i in (plan.items or [])
+    ).lower()
+    catalog_covers = any(
+        kw in catalog_text for kw in ("groupadd", "useradd", "grup oluştur", "kullanıcı oluştur",
+                                      "create group", "create user", "add group", "add user")
+    )
+    return has_action and not catalog_covers
 
 
 @dataclass
@@ -62,6 +108,7 @@ class AgentResult:
     issues: List[str] = field(default_factory=list)
     steps: List[AgentStep] = field(default_factory=list)
     summary: str = ""
+    mode: str = "catalog"   # "catalog" (CIS kural seçimi) | "freeform" (özel script)
 
 
 class HardeningAgent:
@@ -114,6 +161,14 @@ class HardeningAgent:
             f"{len(plan.items)} kural seçildi, {len(plan.conflicts)} olası çakışma",
             ok=bool(plan.items),
         ))
+
+        # ── KATALOG-MISS DALLANMASI ──
+        # Kullanıcı katalogda karşılığı OLMAYAN özel bir iş istediyse (ör. "dev grubu
+        # oluştur") katalog kuralları dökmek yerine SERBEST-FORM script üret. Heuristik
+        # deterministik (LLM'siz); şüphede KATALOG kalır (mevcut davranış bozulmaz).
+        if _is_catalog_miss(goal, plan):
+            return self._run_freeform(goal, os_target, security_level, fmt, plan, steps)
+
         if not plan.items:
             return AgentResult(
                 success=False, goal=goal, os_target=os_target, fmt=fmt,
@@ -254,6 +309,55 @@ class HardeningAgent:
             issues=all_issues,
             steps=steps,
             summary=summary,
+        )
+
+    # ── serbest-form dal (katalog-miss) ──────────────────────────────────────────
+
+    def _run_freeform(self, goal, os_target, security_level, fmt, plan, steps) -> AgentResult:
+        """Katalog-dışı özel istek → LLM ile hedefe-özel script üret + güvenlik kapısı.
+
+        Tehlikeli komut bulunursa REDDEDİLİR (success=False) — güvenli alternatif üretme yok.
+        Üretilen script ayrıca FİİLEN syntax doğrulamasından (bash -n) geçer.
+        """
+        if self.llm is None:
+            steps.append(AgentStep("freeform_generate", "FreeformScriptGenerator",
+                                   "LLM yok — serbest-form üretilemez", ok=False))
+            return AgentResult(success=False, goal=goal, os_target=os_target, fmt=fmt,
+                               plan=plan, steps=steps, mode="freeform",
+                               summary="Özel istek için LLM gerekli (yapılandırılmamış).")
+
+        gen = FreeformScriptGenerator(llm_fn=self.llm, validator=self.validator, debug=self.debug)
+        res = gen.generate(goal, os_target=os_target, security_level=security_level, fmt=fmt)
+        steps.append(AgentStep(
+            "freeform_generate", "FreeformScriptGenerator",
+            f"{res.language} script ({len(res.content)} karakter)" if res.ok
+            else f"reddedildi: {res.issues[:2]}",
+            ok=res.ok,
+        ))
+        if not res.ok:
+            return AgentResult(
+                success=False, goal=goal, os_target=os_target, fmt=fmt, plan=plan,
+                issues=res.issues, steps=steps, mode="freeform",
+                summary="Özel istek için güvenli script üretilemedi "
+                        f"({'; '.join(res.issues[:2]) or 'doğrulama başarısız'}).",
+            )
+
+        # Güvenlik geçti → fiilî sözdizimi doğrulaması (deterministik araç)
+        ok, err = self._syntax_check(res.content, fmt)
+        steps.append(AgentStep("syntax", "bash -n / yaml.load",
+                               "sözdizimi geçerli" if ok else f"sözdizimi hatası: {err[:80]}",
+                               ok=ok))
+
+        artifact = Artifact(format=res.language, content=res.content, rule_count=0,
+                            os_target=os_target, warnings=[])
+        steps.append(AgentStep("summarize", "template",
+                               f"Özel istek için {res.language} script üretildi.", ok=True))
+        return AgentResult(
+            success=ok, goal=goal, os_target=os_target, fmt=fmt, plan=plan,
+            artifact=artifact, issues=([] if ok else [f"sözdizimi: {err}"]),
+            steps=steps, mode="freeform",
+            summary=f"'{goal}' için özel bir {res.language} script üretildi "
+                    f"(katalog-dışı istek; CIS kural dökümü değil).",
         )
 
     # ── internal tools ──────────────────────────────────────────────────────────

@@ -58,34 +58,36 @@ class TestSpecs:
 class TestFreeFirstOrder:
     def test_only_active_free_in_default(self):
         order = free_first_order()
-        # Varsayılan zincir: yalnızca cerebras + sambanova (diğer free'ler deprecated; paid hariç)
-        assert "cerebras" in order and "sambanova" in order
-        assert "novita" not in order and "openai" not in order      # paid (cheap flag yok)
+        # Varsayılan zincir: yalnızca cerebras (sambanova 2026-06 rate-limit → deprecated;
+        # groq/ollama/hf deprecated; paid hariç). Tek aktif ücretsiz sağlayıcı.
+        assert "cerebras" in order
+        assert "sambanova" not in order                             # rate-limit → deprecated
+        assert "novita" not in order and "openai" not in order      # paid/deprecated (cheap flag yok)
         for dep in ("groq", "ollama", "huggingface"):
             assert dep not in order, f"{dep} deprecated → zincirde olmamalı"
 
-    def test_cerebras_first_then_sambanova(self):
+    def test_cerebras_first(self):
         order = free_first_order()
-        assert order[0] == "cerebras"                                # en hızlı + ücretsiz 1M/gün
-        assert order.index("cerebras") < order.index("sambanova")
+        assert order[0] == "cerebras"                                # en hızlı + ücretsiz 1M/gün (tek aktif free)
 
-    def test_include_cheap_adds_gemini_and_novita_not_openai(self):
+    def test_include_cheap_adds_gemini_not_novita_not_openai(self):
         order = free_first_order(include_cheap=True)
-        assert "gemini" in order and "novita" in order               # Gemini Flash Lite + Novita-net
+        assert "gemini" in order                                     # Gemini Flash Lite (OpenRouter) cheap fallback
+        assert "novita" not in order                                 # Novita LLM DEPRECATED (embedding-only) → zincirde yok
         assert "openai" not in order                                 # pahalı hariç
-        assert order.index("sambanova") < order.index("gemini") < order.index("novita")
+        assert order.index("cerebras") < order.index("gemini")       # cerebras primary, gemini fallback
 
     def test_include_paid_adds_openai_last(self):
         order = free_first_order(include_paid=True)
         assert "openai" in order
-        assert order.index("novita") < order.index("openai")         # ucuz, pahalıdan önce
+        assert order.index("gemini") < order.index("openai")         # ucuz gemini, pahalı openai'den önce
 
 
 class TestBuildOrder:
     def test_primary_goes_first(self):
-        order = build_order(primary="cerebras")
+        order = build_order(primary="cerebras", include_cheap=True)
         assert order[0] == "cerebras"
-        assert "sambanova" in order  # diğer aktif sağlayıcılar kalır
+        assert "gemini" in order  # OpenRouter cheap fallback (sambanova/novita deprecated)
 
     def test_no_duplicate_primary(self):
         order = build_order(primary="groq")
@@ -99,11 +101,11 @@ class TestBuildOrder:
         order = build_order(primary="novita")
         assert order[0] == "novita"
 
-    def test_include_cheap_appends_novita_as_safety_net(self):
+    def test_include_cheap_chain_gemini_safety_net_no_novita(self):
         order = build_order(include_cheap=True)
         assert order[0] == "cerebras"   # ücretsiz-first primary (en hızlı)
-        assert "novita" in order        # 429 güvenlik ağı sonda
-        assert order.index("cerebras") < order.index("novita")
+        assert "gemini" in order        # OpenRouter cheap fallback (güvenlik ağı)
+        assert "novita" not in order    # Novita LLM DEPRECATED (embedding-only) → otomatik zincirde yok
         assert "huggingface" not in order   # deprecated hariç
 
     def test_deprecated_hf_still_explicitly_selectable(self):

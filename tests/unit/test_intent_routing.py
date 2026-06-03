@@ -87,17 +87,25 @@ class TestSecurityRouting:
         assert r.type in ("info_request", "action_request"), f"{q!r} → {r.type}"
 
 
-class TestOutOfScopeRouting:
+class TestScopeIsGateOwned:
+    """KAPSAM (out_of_scope) artık detect()'in işi DEĞİL — tek otorite L1 LLM safety gate'idir
+    (secure_v2 "semantik kapsam kapısı"). Bu sınıf detect()'in oos ÜRETMEDİĞİNİ kilitler.
+    Gerçek out_of_scope ROTASI pipeline seviyesinde fake off_topic safety ile doğrulanır:
+    tests/unit/test_pipeline_routes_matrix.py::TestRouteFidelity (test_out_of_scope /
+    test_offdomain_imperative_is_out_of_scope / test_non_security_forced_out_of_scope_by_off_topic)."""
+
     @pytest.mark.parametrize("q", OUT_OF_SCOPE)
-    def test_off_topic_rejected(self, detector, q):
-        r = detector.detect(q)
-        assert r.type == "out_of_scope", f"{q!r} → {r.type}"
+    def test_offtopic_not_produced_by_detect(self, detector, q):
+        # detect() alan-içi niyet döndürür (oos'u gate verir) → burada oos ASLA çıkmamalı.
+        assert detector.detect(q).type != "out_of_scope", \
+            f"{q!r}: detect() oos üretmemeli — kapsam gate'in işi"
 
     @pytest.mark.parametrize("q", OFFDOMAIN_IMPERATIVE)
-    def test_offdomain_imperative_not_action(self, detector, q):
-        # Domain-gate: emir kipi + güvenlik sinyali yok → out_of_scope (action'a kaçmaz)
-        r = detector.detect(q)
-        assert r.type == "out_of_scope", f"{q!r} → {r.type} (out_of_scope bekleniyor)"
+    def test_offdomain_imperative_not_produced_as_oos_by_detect(self, detector, q):
+        # "bana şiir yaz" → detect()'te imperatif kip → action_request; gate off_topic'le
+        # out_of_scope'a alır. detect() bare halinde oos ÜRETMEZ.
+        assert detector.detect(q).type != "out_of_scope", \
+            f"{q!r}: detect() oos üretmemeli — kapsam gate'in işi"
 
 
 class TestRobustSmalltalk:

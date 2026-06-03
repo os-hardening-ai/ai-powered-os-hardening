@@ -1,0 +1,243 @@
+{
+  "backend": "tfidf",
+  "n": 37,
+  "accuracy": 0.973,
+  "correct": 36,
+  "per_category_accuracy": {
+    "action_request": 0.9167,
+    "info_request": 1.0,
+    "smalltalk": 1.0
+  },
+  "per_category_n": {
+    "action_request": 12,
+    "info_request": 11,
+    "smalltalk": 14
+  },
+  "confusion": {
+    "action_request->info_request": 1
+  },
+  "per_example": {
+    "naber": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "nbr": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "n'aber": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "naptın": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "slm kanka": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "selamün aleyküm": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "merhabalar": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "iyi akşamlar": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "eyvallah görüşürüz": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "çok teşekkür ederim": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "sağ ol dostum": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "nasılsın bugün": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "kendine iyi bak": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "bb": {
+      "gold": "smalltalk",
+      "pred": "smalltalk",
+      "ok": true,
+      "method": "pattern"
+    },
+    "ssh root login nedir": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "PermitRootLogin ne işe yarar": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "ufw nedir nasıl çalışır": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "cis benchmark nedir": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "parola politikası neden önemli": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "fail2ban ne yapar": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "selinux ne işe yarar açıkla": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "auditd loglarını nasıl okurum": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "ssh portunu değiştirmek güvenli mi": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "zero trust mimarisi nedir": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "ssh root login'i kapat": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "ufw firewall'ı yapılandır": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "parola politikasını sıkılaştır": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "cramfs modülünü devre dışı bırak": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "ssh için ansible playbook yaz": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "bana bir hardening scripti üret": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "PermitRootLogin no yap ve servisi yeniden başlat": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "selinux'u enforcing moduna al": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "ubuntu 22.04 sunucuyu sıkılaştır": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "audit kurallarını uygula": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    },
+    "merhaba ssh nasıl sıkılaştırılır": {
+      "gold": "info_request",
+      "pred": "info_request",
+      "ok": true,
+      "method": "ml"
+    },
+    "selam ufw kuralı ekler misin": {
+      "gold": "action_request",
+      "pred": "info_request",
+      "ok": false,
+      "method": "ml"
+    },
+    "iyi günler root login'i devre dışı bırak": {
+      "gold": "action_request",
+      "pred": "action_request",
+      "ok": true,
+      "method": "ml_lowconf"
+    }
+  }
+}

@@ -576,7 +576,7 @@ RAG is only invoked for security-relevant queries — approximately 45% of queri
       "enabled": true,
       "use_hybrid": true,
       "use_query_planning": true,
-      "use_claim_verification": false,
+      "use_claim_verification": true,
       "use_filter_agent": true
     }
   },
@@ -585,7 +585,7 @@ RAG is only invoked for security-relevant queries — approximately 45% of queri
 }
 ```
 
-> **`use_claim_verification: false`** — ClaimVerifier devre dışı. Aktif olduğunda RAG-tabanlı claim doğrulaması için 3-5 ekstra LLM call yapıyor ve ~38s ekliyor. Groq free tier'da TPM limitini tüketiyor. Ayrıca confidence skoru 0.00 dönüyor (kalibrasyon problemi). Tekrar açmadan önce `rag/verify/claim_verifier.py` düzeltilmeli.
+> **`use_claim_verification: true`** — ClaimVerifier AKTİF (secure_v2 config'den okuyup InfoPipeline'a enjekte eder; yalnız RAG kullanılan info sorgularında çalışır). Kalibrasyon DOĞRULANDI (2026-06 empirik: grounded cevap → confidence 1.00, ungrounded → 0.00). Claim check'leri paralelleştirildiği için (ThreadPoolExecutor) ek gecikme ~15s (eski sıralı ~38s değil; yine de hot-path'te hissedilir → yalnız RAG'li sorgularda tetiklenir). İP-11 `hardening_rag_verification_confidence` metriği bu yolla populate olur. (Eski not "devre dışı/0.00/38s" idi — DÜZELTİLDİ.)
 
 ---
 
@@ -657,7 +657,7 @@ Her request tipinin toplam LLM API çağrısı (**quota optimizasyonu sonrası**
 **Çağrı azaltma mekanizmaları** (her biri bir PR):
 - **Yerel safety fast-path** (`fast_local_safety`): net güvenlik/alan-dışı → LLM'siz; saldırgan/dual-use/uzun → LLM safety'ye düşer.
 - **QueryPlanner yalnız `complex`**: medium → `retrieve_balanced` (3 paralel call kalkar).
-- **ClaimVerifier kapalı** (`use_claim_verification=false`).
+- **ClaimVerifier** artık AÇIK (`use_claim_verification=true`) — yalnız RAG'li info sorgularında, claim check'leri paralel (~15s ek, İP-5 groundedness + İP-11 metriği için gerekli). Quota etkisi lane round-robin + novita fallback ile karşılanır. (Aşağıdaki tablo eski "kapalı" snapshot'ını yansıtır.)
 - **Action deep-check kapalı** (`use_deep_check=False`): statik regex güvenlik kalır.
 - **Answer cache**: tekrar eden soru → 0 call.
 
