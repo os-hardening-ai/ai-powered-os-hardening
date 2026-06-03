@@ -100,3 +100,25 @@ class TestConvenience:
         res = validate_output(GOOD_INFO, intent="info_request")
         assert isinstance(res, ValidationResult)
         assert res.is_valid
+
+
+class TestSecretScanner:
+    """Çıktı sır/PII sızıntısı tarayıcı (OWASP LLM02/LLM07) — gerçek anahtar GEÇERSİZ, placeholder GEÇERLİ."""
+
+    def test_real_secrets_rejected(self):
+        secrets = [
+            "sk-or-v1-98022b9a6a29686e66b6195e6bca4da6a24bf59a",   # OpenRouter
+            "csk-hrv58kxt25xtd6f8ecmhxjwrp435h443dwt3p6fw29k98w4k", # Cerebras
+            "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",             # GitHub PAT
+            "-----BEGIN PRIVATE KEY-----",                          # private key
+        ]
+        for s in secrets:
+            res = validate_output(GOOD_INFO + f"\n\nAnahtar: {s}", intent="info_request")
+            assert not res.is_valid, f"{s!r} sızıntı olarak yakalanmalı"
+            assert any("sızıntı" in i.lower() for i in res.issues)
+
+    def test_placeholders_allowed(self):
+        # Placeholder/örnekler GERÇEK sır değil → yanlış-pozitif olmamalı
+        for ph in ["sk-...", "<your-api-key>", "gsk_xxx", "API_KEY=changeme"]:
+            res = validate_output(GOOD_INFO + f"\n\n.env örneği: {ph}", intent="info_request")
+            assert not any("sızıntı" in i.lower() for i in res.issues), f"{ph!r} yanlış-pozitif"

@@ -1,0 +1,40 @@
+name: CI — Tests + Eval Gate
+
+# Eval-direksiyonunu OTOMATİKLEŞTİRİR: her PR/push'ta 775 birim testi + intent eval REGRESYON
+# KAPISI koşar. Hepsi OFFLINE (sahte LLM + TF-IDF) → API anahtarı GEREKMEZ, $0, deterministik.
+# "İntent/route doğruluğu düşeren commit merge edilmez" kuralı artık makineyle zorlanır.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONIOENCODING: utf-8
+      INTENT_ROUTER: tfidf          # eval/test deterministik TF-IDF (embedding/ağ yok)
+      ANSWER_CACHE_TTL_S: "0"        # CI'da cache kapalı (deterministik)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-python311.txt
+
+      - name: Unit tests (775, offline — sahte LLM)
+        run: python -m pytest tests/unit/ -q -p no:cacheprovider
+
+      - name: Intent eval REGRESYON KAPISI (offline, $0)
+        # Doğruluk baseline'ın altına düşerse / bir örnek DOĞRU→YANLIŞ olursa exit 1 → CI kırmızı.
+        run: python -m evaluation.intent_eval --check

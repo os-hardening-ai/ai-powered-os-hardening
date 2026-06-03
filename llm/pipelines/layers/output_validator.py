@@ -53,6 +53,22 @@ class OutputValidator:
         r"wget.*\|\s*sh",   # Pipe to sh (security risk)
     ]
 
+    # SIZINTI TARAYICI (OWASP LLM02 Sensitive Data / LLM07 System Prompt Leakage).
+    # Üretilen cevap/script GERÇEK sır içermemeli. Uzunluk eşikleri ({20,}+) placeholder'ları
+    # ("sk-...", "<your-key>", "gsk_xxx") ELER → düşük yanlış-pozitif. Bulunursa cevap GEÇERSİZ
+    # (güvenlik ürününde sır echo'su kabul edilemez; sanitize/redact için sinyal).
+    SECRET_PATTERNS = [
+        (r"\bsk-(?:or-v1-)?[A-Za-z0-9]{24,}", "OpenAI/OpenRouter API anahtarı"),
+        (r"\bcsk-[a-z0-9]{40,}", "Cerebras API anahtarı"),
+        (r"\bgsk_[A-Za-z0-9]{40,}", "Groq API anahtarı"),
+        (r"\bsk_[A-Za-z0-9]{32,}", "Novita/generic secret key"),
+        (r"\bAKIA[0-9A-Z]{16}\b", "AWS access key"),
+        (r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", "özel anahtar (private key)"),
+        (r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", "JWT token"),
+        (r"\bxox[baprs]-[A-Za-z0-9-]{10,}", "Slack token"),
+        (r"\bghp_[A-Za-z0-9]{36}", "GitHub PAT"),
+    ]
+
     # Minimum cevap uzunlugu (cok kisa cevaplar kalitesiz olabilir)
     MIN_ANSWER_LENGTH = 50
 
@@ -113,6 +129,11 @@ class OutputValidator:
         for phrase in error_phrases:
             if phrase in output.lower():
                 issues.append(f"LLM refusal phrase detected: '{phrase}'")
+
+        # Check 5: Sır/PII sızıntısı (OWASP LLM02/LLM07) — cevap gerçek anahtar/token içermemeli
+        for pattern, label in self.SECRET_PATTERNS:
+            if re.search(pattern, output):
+                issues.append(f"Olası sır sızıntısı tespit edildi: {label}")
 
         # ─── STEP 2: LLM-based Validation (OPTIONAL) ───
 

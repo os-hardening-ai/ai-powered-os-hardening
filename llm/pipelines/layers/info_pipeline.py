@@ -334,6 +334,15 @@ class InfoPipeline:
                         "dokümanlarla doğrudan eşleşmedi. Kritik komutları uygulamadan önce "
                         "resmi CIS Benchmark / dağıtım dokümantasyonundan teyit edin."
                     )
+                    # KATMANLI ÇEKİNME (abstention): hiç desteklenen iddia yoksa (confidence 0 +
+                    # ≥3 desteksiz) bu artık gürültü değil, gerçek dayanaksızlıktır → kullanıcıyı
+                    # BAŞTA belirgin uyar (sessizce güvenli-görünen cevap sunma; zero-trust ruhu).
+                    if vr.confidence <= 0.0 and len(vr.unsupported) >= 3:
+                        result = (
+                            "> ⚠️ **DİKKAT — DÜŞÜK DAYANAK:** Aşağıdaki yanıttaki iddialar getirilen "
+                            "CIS kaynaklarıyla doğrulanamadı. Komutları RESMİ dokümantasyondan teyit "
+                            "etmeden UYGULAMAYIN.\n\n"
+                        ) + result
             except Exception as cv_exc:
                 _logger.warning("[InfoPipeline] ClaimVerifier failed: %s", cv_exc)
 
