@@ -1,19 +1,21 @@
 """
-İP-12 + H2 + H4 — Kullanıcı Çalışması Skorlama Aracı
+İP-12 + H2 + H4 — Skorlama Fonksiyonları (deterministik, LLM'siz)
 
-Öneri formundaki ÜÇ maddeyi TEK küçük kullanıcı çalışmasıyla (n~5-10) kapatır:
+Öneri formundaki üç maddenin SAF skorlama mantığı:
 
-  İP-12  Kullanıcı memnuniyeti (Likert ≥4 oranı) > %70
-  H2     Karar süresi: araçla vs araçsız (manuel doküman arama) — anlamlı azalma
-  H4     Öneri kabul oranı: kullanıcılar önerileri ne oranda kabul/uyarlıyor
+  İP-12  Memnuniyet (Likert ≥4 oranı) > %70
+  H2     Karar süresi: araçla vs araçsız — azalma
+  H4     Öneri kabul oranı (accept=1, modify=0.5, reject=0)
 
-Pilot EKİP tarafından koşulur (gerçek kullanıcı gerekir — kodla uydurulamaz). Bu script
-ekibin topladığı yanıtları (JSON) DETERMİNİSTİK metriklere çevirir. LLM YOK → saf,
-unit-test edilebilir (skorlama mantığı güvenilir kısımdır; veri insandan gelir).
+Bu fonksiyonlar (satisfaction_rate/acceptance_rate/decision_times/summarize) saf ve
+unit-test edilebilir; girdi şeması verilirse metriği deterministik üretir.
 
-Veri formatı: evaluation/survey_template.json (örnek satırlarla — kopyalayıp doldurun).
-Protokol:     docs/16_KULLANICI_CALISMASI.md
-Çalıştırma:   python -m evaluation.survey_eval evaluation/results/survey_responses.json
+VERİ KAYNAĞI: İnsan pilotu YERİNE otomatik LLM-judge (evaluation/auto_eval.py) bu şemayı
+üretir — bkz. `main()`. Endüstri-standardı LLM-as-a-judge (MT-Bench/AlpacaEval/RAGAS hattı):
+tekrarlanabilir, objektif, ölçeklenebilir. (İnsan-anketi protokolü docs/16'da arşiv olarak durur.)
+
+Çalıştırma:   python -m evaluation.survey_eval          # auto_eval'i koşar + skorlar
+              python -m evaluation.survey_eval <responses.json>   # hazır JSON'u skorlar
 Çıktı:        evaluation/results/survey_report.md + survey_results.json
 """
 
@@ -146,13 +148,25 @@ def main() -> None:
     from evaluation import force_utf8_output
     force_utf8_output()                       # Türkçe çıktı Windows'ta bozulmasın
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    path = sys.argv[1] if len(sys.argv) > 1 else "evaluation/results/survey_responses.json"
-    p = Path(path)
-    if not p.exists():
-        print(f"[Survey] Yanıt dosyası yok: {path}\n"
-              f"  Şablonu kopyalayıp doldurun: evaluation/survey_template.json")
-        sys.exit(1)
-    data = json.loads(p.read_text(encoding="utf-8"))
+
+    # Argüman verildiyse hazır JSON'u skorla (geriye uyumlu); verilmediyse otomatik
+    # LLM-judge (auto_eval) koş → aynı şemayı üret → skorla.
+    if len(sys.argv) > 1:
+        p = Path(sys.argv[1])
+        if not p.exists():
+            print(f"[Survey] Yanıt dosyası yok: {p}")
+            sys.exit(1)
+        data = json.loads(p.read_text(encoding="utf-8"))
+    else:
+        print("[Survey] Otomatik LLM-judge değerlendirmesi koşuluyor (auto_eval)...")
+        from evaluation.auto_eval import AutoEvalHarness, SCENARIOS
+        from llm.clients import get_llm_clients
+        import os as _os
+        small, large = get_llm_clients()
+        throttle = float(_os.environ.get("AUTO_EVAL_THROTTLE_S", "3"))
+        rep = AutoEvalHarness(llm_fn=large, judge_fn=small, throttle_s=throttle).run(SCENARIOS)
+        data = rep.to_survey_data()
+
     summary = summarize(data)
     out = save_results(summary)
     print(to_markdown(summary))

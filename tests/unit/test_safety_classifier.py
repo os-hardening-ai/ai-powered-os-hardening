@@ -58,6 +58,33 @@ class TestFastLocalSafety:
         # güvenlik terimi yok, alan-dışı işaret yok, saldırgan değil → belirsiz → LLM
         assert fast_local_safety("bana yardımcı olabilir misin acaba") is None
 
+    @pytest.mark.parametrize("q", [
+        "parola politikası scripti yaz", "log rotation nasıl yapılandırılır",
+        "audit kuralı ekle", "dosya izinlerini sıkılaştır", "kullanıcı hesap kilitleme politikası",
+        "ssh için anahtar tabanlı kimlik doğrulama", "kernel parametrelerini sertleştir",
+    ])
+    def test_security_adjacent_never_local_offtopic(self, q):
+        """REGRESYON GUARD: güvenlik-bitişik sorular yerel hızlı-yolda off_topic'e DÜŞMEMELİ.
+
+        (off_topic aşırı agresifliği — tracking-doc'ta bahsedilen — bu girdilerin kapsam-dışı
+        sayılmasıydı. Yerel marker'lar genişlerse bu test kırılır → erken uyarı.)
+        """
+        r = fast_local_safety(q)
+        assert r is None or r.category != "off_topic", f"{q!r} yerel off_topic'e düştü"
+
+
+class TestOfftopicMarkersStayNarrow:
+    """_OFFTOPIC_MARKERS yalnız KESİN konu-dışı (hava/math/yemek/spor) içermeli;
+    IT/güvenlik-bitişik terim (politika/script/log/audit/izin) İÇERMEMELİ → erken uyarı."""
+
+    def test_no_security_adjacent_terms_in_markers(self):
+        from llm.pipelines.layers.safety_classifier import _OFFTOPIC_MARKERS
+        forbidden = ("politika", "script", "log", "audit", "izin", "yapılandır",
+                     "kural", "policy", "rotation", "config", "parola", "password")
+        leaked = [m for m in _OFFTOPIC_MARKERS
+                  if any(f in m.lower() for f in forbidden)]
+        assert leaked == [], f"off_topic marker'larına güvenlik-bitişik terim sızmış: {leaked}"
+
 
 class TestSafetyResult:
     def test_is_safe_flag_for_safe_categories(self):

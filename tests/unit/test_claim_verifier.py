@@ -86,6 +86,74 @@ class TestConfidence:
         assert len(res.claims) == 3
 
 
+class _PartialLLM:
+    """1. çağrı extraction; sonraki çağrılar YENİ formatta {"support": yes|partial|no}."""
+
+    def __init__(self, claims, supports):
+        import threading
+        self._claims_json = "[" + ", ".join(f'"{c}"' for c in claims) + "]"
+        self._supports = list(supports)
+        self._n = 0
+        self._lock = threading.Lock()
+
+    def __call__(self, prompt: str) -> str:
+        with self._lock:
+            self._n += 1
+            if self._n == 1:
+                return self._claims_json
+            val = self._supports.pop(0) if self._supports else "yes"
+        return '{"support": "%s", "reason": "x"}' % val
+
+
+class TestPartialCredit:
+    """Kısmi kredi (0/0.5/1) → kalibre groundedness; yapay-düşük skoru önler."""
+
+    def test_partial_gives_half_credit(self):
+        # tam + kısmi → (1.0 + 0.5)/2 = 0.75 (binary olsaydı 0.5'e düşerdi)
+        llm = _PartialLLM(claims=["ssh permitrootlogin no directive is recommended",
+                                  "ssh maxauthtries should be a low value"],
+                          supports=["yes", "partial"])
+        res = ClaimVerifier(llm_fn=llm, min_confidence=0.6).verify("answer", CHUNKS)
+        assert res.confidence == 0.75
+        assert res.is_valid is True               # 0.75 >= 0.6
+        assert res.unsupported == []              # partial desteksiz SAYILMAZ
+
+    def test_no_support_counts_as_unsupported(self):
+        llm = _PartialLLM(claims=["a real claim about ssh hardening config",
+                                  "another real claim about port settings"],
+                          supports=["yes", "no"])
+        res = ClaimVerifier(llm_fn=llm, min_confidence=0.6).verify("answer", CHUNKS)
+        assert res.confidence == 0.5              # (1.0 + 0.0)/2
+        assert len(res.unsupported) == 1
+
+    def test_all_partial(self):
+        llm = _PartialLLM(claims=["first multiword hardening claim here",
+                                  "second multiword hardening claim here"],
+                          supports=["partial", "partial"])
+        res = ClaimVerifier(llm_fn=llm, min_confidence=0.6).verify("answer", CHUNKS)
+        assert res.confidence == 0.5              # her ikisi 0.5
+        # kısmi → "supported" (score>=0.5) ama unsupported listesinde değil
+        assert res.unsupported == []
+
+    def test_support_score_recorded(self):
+        llm = _PartialLLM(claims=["one genuine multiword claim about config"],
+                          supports=["partial"])
+        res = ClaimVerifier(llm_fn=llm).verify("answer", CHUNKS)
+        assert res.claims[0].support_score == 0.5
+        assert res.claims[0].supported is True    # 0.5 >= 0.5
+
+    def test_support_to_score_helper(self):
+        from rag.verify.claim_verifier import _support_to_score
+        assert _support_to_score({"support": "yes"}) == 1.0
+        assert _support_to_score({"support": "partial"}) == 0.5
+        assert _support_to_score({"support": "no"}) == 0.0
+        # eski format geriye uyumlu
+        assert _support_to_score({"supported": True}) == 1.0
+        assert _support_to_score({"supported": False}) == 0.0
+        # belirsiz → conservative 1.0
+        assert _support_to_score({}) == 1.0
+
+
 class TestFallbacks:
     def test_extraction_failure_returns_valid(self):
         def boom(_):

@@ -1,6 +1,6 @@
-# 16 — Kullanıcı Çalışması Protokolü (İP-12 / H2 / H4)
+# 16 — Değerlendirme: İP-12 / H2 / H4
 
-**Amaç:** Öneri formundaki üç maddeyi **tek** küçük kullanıcı çalışmasıyla kapatmak:
+**Amaç:** Öneri formundaki üç maddeyi ölçmek:
 
 | Madde | İddia | Ölçüm | Eşik/Yön |
 |-------|-------|-------|----------|
@@ -8,9 +8,40 @@
 | **H2** | Sistem karar süresini kısaltır | Araçla vs araçsız ortalama süre | **azalma (>0)** |
 | **H4** | Öneriler kabul görür | accept/modify/reject ağırlıklı oran | yüksek |
 
-> **Neden tek çalışma?** Üçü de aynı oturumda, aynı katılımcıdan toplanabilir →
-> verimli ve tutarlı. Bu çalışma **gerçek kullanıcı** gerektirir (kodla uydurulamaz);
-> enstrüman (form + skorlama) hazırdır, ekip pilotu koşar.
+---
+
+## A. Birincil yöntem — Otomatik LLM-as-a-Judge (varsayılan)
+
+Üç madde de **otomatik** ölçülür — gerçek kullanıcı toplamadan, endüstri-standardı
+**LLM-as-a-judge** (MT-Bench / AlpacaEval / RAGAS hattı) ile. Avantaj: **tekrarlanabilir,
+objektif, ölçeklenebilir**; küçük-örneklem (n<5) istatistiksel güç sorununu ortadan kaldırır.
+
+**Akış** (`evaluation/auto_eval.py`):
+1. Küratörlü senaryolarda **RAG'li** vs **RAG'siz** cevaplar üretilir (aynı LLM — kontrollü A/B).
+2. Kıdemli-sysadmin persona'lı **LLM-judge** her cevabı puanlar:
+   - `verdict` (accept/modify/reject) → **H4** kabul oranı
+   - `actionability` (0-1, ek-araştırmasız uygulanabilirlik) → **H2** karar-süresi proxy'si
+   - Likert 1-5 (faydalılık/güven/açıklık/...) → **İP-12** memnuniyet
+3. Çıktı `evaluation/survey_eval.py`'nin **aynı deterministik skorlama** fonksiyonlarıyla işlenir.
+
+**Çalıştırma:**
+```bash
+LLM_PROVIDER=novita python -m evaluation.auto_eval     # → auto_eval_report.md + .json
+python -m evaluation.survey_eval                       # argümansız → auto_eval koşar + skorlar
+```
+
+**Dürüstlük sınırı:** Bu otomatik **proxy**'dir, gerçek kullanıcı değil. Karar süresi
+actionability'den **türetilir** (mutlak saniye değil; RAG vs RAG'siz **göreli** kıyas anlamlıdır).
+H4/İP-12 aynı judge ile ölçüldüğü için göreli sonuçlar tutarlıdır. İstenirse aşağıdaki insan
+protokolü (B) ile çapraz-doğrulama yapılabilir.
+
+---
+
+## B. Alternatif — İnsan pilotu (opsiyonel çapraz-doğrulama)
+
+> Otomatik yöntem (A) birincildir. Aşağıdaki insan-pilot protokolü, istenirse küçük bir
+> örneklemle otomatik sonuçları **çapraz-doğrulamak** için korunmuştur:
+> `python -m evaluation.survey_eval <responses.json>` ile hazır insan-yanıtı JSON'u skorlanır.
 
 ---
 

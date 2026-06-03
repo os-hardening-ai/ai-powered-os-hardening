@@ -295,6 +295,25 @@ class MLIntentDetector:
         self.vectorizer = joblib.load(self.vectorizer_path)
         self.is_trained = True
 
+        # SÜRÜM-UYUMSUZLUĞU SMOKE-TEST: model FARKLI bir scikit-learn sürümüyle pickle
+        # edilmişse (.joblib eski), predict()/predict_proba() çalışma anında AttributeError
+        # atabilir (ör. LogisticRegression.multi_class kaldırıldı). Bu durumda sessizce
+        # bozuk tahmin döndürmek yerine YÜKLEMEDE net hata ver → çağıran fallback'e düşer
+        # ve "modeli retrain et (scripts/retrain_intent.py)" mesajı loglanır.
+        try:
+            _v = self.vectorizer.transform([self.preprocess_text("ssh nedir")])
+            self.model.predict(_v)
+            self.model.predict_proba(_v)
+        except Exception as exc:
+            self.is_trained = False
+            self.model = None
+            self.vectorizer = None
+            raise RuntimeError(
+                f"Intent modeli yüklenebildi ama tahmin edemiyor "
+                f"({type(exc).__name__}: {exc}). Büyük olasılıkla scikit-learn sürüm "
+                f"uyumsuzluğu — modeli yeniden eğit: python scripts/retrain_intent.py"
+            ) from exc
+
         if self.debug:
             print(f"[MLIntentDetector] Models loaded successfully")
 

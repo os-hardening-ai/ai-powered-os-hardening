@@ -13,8 +13,9 @@ LLMCallable = Callable[[str], str]
 @dataclass
 class ClaimCheck:
     claim: str
-    supported: bool
+    supported: bool          # geriye uyumluluk: support_score >= 0.5 (kısmen+tam destekli)
     reason: str = ""
+    support_score: float = 1.0   # 0.0 (yok) | 0.5 (kısmen) | 1.0 (tam) — kalibre groundedness için
 
 
 @dataclass
@@ -90,12 +91,16 @@ class ClaimVerifier:
             with ThreadPoolExecutor(max_workers=min(self.max_claims, len(to_check))) as pool:
                 results = list(pool.map(lambda c: self._check_claim(c, context), to_check))
         checked: List[ClaimCheck] = [
-            ClaimCheck(claim=claim, supported=supported, reason=reason)
-            for claim, (supported, reason) in zip(to_check, results)
+            ClaimCheck(claim=claim, supported=score >= 0.5, reason=reason, support_score=score)
+            for claim, (score, reason) in zip(to_check, results)
         ]
 
-        unsupported = [c.claim for c in checked if not c.supported]
-        confidence = 1.0 - len(unsupported) / max(len(checked), 1)
+        # Groundedness = ortalama destek skoru (kısmi kredili). Binary 0/1 yerine 0/0.5/1
+        # kullanmak yapay-düşük skoru önler: bir iddia bağlamca KISMEN destekleniyorsa
+        # (ör. doğru direktif ama tam değer yok) "desteksiz" sayılıp groundedness'i
+        # gereksiz düşürmez. unsupported = yalnız HİÇ desteklenmeyenler (score < 0.5).
+        unsupported = [c.claim for c in checked if c.support_score < 0.5]
+        confidence = sum(c.support_score for c in checked) / max(len(checked), 1)
 
         logger.debug(
             "[ClaimVerifier] %d/%d claims supported — confidence=%.2f",
@@ -133,23 +138,52 @@ class ClaimVerifier:
             logger.warning("[ClaimVerifier] claim extraction failed: %s", exc)
             return []
 
-    def _check_claim(self, claim: str, context: str) -> Tuple[bool, str]:
+    def _check_claim(self, claim: str, context: str) -> Tuple[float, str]:
+        """İddianın bağlamca desteklenme SKORU (0.0 yok / 0.5 kısmen / 1.0 tam) + gerekçe.
+
+        Kısmi kredi: bir iddia çoğu zaman bağlamla AYNI direktifi söyler ama küçük bir
+        ayrıntıda (kesin değer, ek koşul) eksik kalır — bunu "desteksiz" saymak groundedness'i
+        yapay düşürür. 'partial' bu durumu yakalar. Talimat yumuşatıldı: yalnız bağlamla
+        AÇIKÇA ÇELİŞEN ya da bağlamda HİÇ İZİ OLMAYAN iddia 'no' sayılır.
+        """
         prompt = (
-            "Is this claim DIRECTLY supported by the context below?\n"
-            'Answer with JSON only: {"supported": true/false, "reason": "one sentence"}\n\n'
-            f"Claim: {claim}\n\n"
-            f"Context (truncated):\n{context[:self.max_context_chars]}"
+            "Does the CONTEXT support this CLAIM? Be fair: a claim is 'yes' if its core "
+            "fact (directive/command/setting) appears in the context, even if minor details "
+            "differ. Use 'partial' if the topic is present but a specific value/condition is "
+            "missing. Use 'no' ONLY if the claim contradicts the context or is entirely absent.\n"
+            'Answer with JSON only: {"support": "yes|partial|no", "reason": "one sentence"}\n\n'
+            f"CLAIM: {claim}\n\n"
+            f"CONTEXT (truncated):\n{context[:self.max_context_chars]}"
         )
         try:
             resp = self._llm(prompt)
             match = re.search(r"\{.*?\}", resp, re.DOTALL)
             if match:
                 obj = json.loads(match.group())
-                return bool(obj.get("supported", True)), str(obj.get("reason", ""))
+                return _support_to_score(obj), str(obj.get("reason", ""))
         except Exception as exc:
             logger.warning("[ClaimVerifier] claim check failed: %s", exc)
-        # Conservative fallback — treat as supported to avoid false negatives
-        return True, "parse_error"
+        # Conservative fallback — treat as fully supported to avoid false negatives
+        return 1.0, "parse_error"
+
+
+def _support_to_score(obj: dict) -> float:
+    """LLM verdict JSON'unu destek skoruna (0.0/0.5/1.0) çevir.
+
+    İki formatı da destekler (geriye uyumluluk):
+      - YENİ:  {"support": "yes"|"partial"|"no"}      → 1.0 / 0.5 / 0.0
+      - ESKİ:  {"supported": true|false}              → 1.0 / 0.0
+    Belirsiz/eksik → 1.0 (conservative, sahte-negatif önler).
+    """
+    if "support" in obj:
+        val = str(obj.get("support", "yes")).strip().lower()
+        if val in ("partial", "partially", "kısmen", "kismen"):
+            return 0.5
+        if val in ("no", "false", "hayır", "hayir"):
+            return 0.0
+        return 1.0
+    # eski binary alan
+    return 1.0 if bool(obj.get("supported", True)) else 0.0
 
 
 def _filter_claims(items: List[str]) -> List[str]:
