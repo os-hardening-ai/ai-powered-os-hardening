@@ -4,7 +4,7 @@
 **AI-Powered OS Hardening - RAG + LLM Tabanlı İşletim Sistemi Güvenlik Sıkılaştırma Asistanı**
 
 *Marmara Üniversitesi - Bilgisayar Mühendisliği Bitirme Projesi*
-**Geliştiriciler:** Engin, Mert, Tankut | **Akademik Yıl:** 2024-2025 | **Tarih:** 2026-05-29
+**Geliştiriciler:** Engin, Mert, Tankut | **Akademik Yıl:** 2025-2026 | **Tarih:** 2026-05-29
 
 ## Proje Amacı
 CIS Benchmark dokümanlarını kullanarak işletim sistemi güvenlik yapılandırmalarını analiz eden ve öneriler sunan yapay zeka asistanı. RAG (Retrieval-Augmented Generation) ve LLM (Large Language Model) teknolojilerini birleştirerek güvenlik uzmanlarına hızlı, doğru ve güvenilir bilgi sağlar.
@@ -25,7 +25,7 @@ Güvenlik odaklı mimari tasarladık:
 ### 2. Makine Öğrenmesi Tabanlı Intent Detection
 - **Dataset**: **5,362 etiketli örnek** (7 intent kategorisi) — Türkçe/İngilizce varyasyonlar
 - **Model**: Logistic Regression + TF-IDF
-- **Hibrit Yaklaşım**: Pattern matching (birincil, %72 kapsama) + ML fallback (%28 kapsama)
+- **Hibrit Yaklaşım**: ML (TF-IDF, birincil) + düşük güvende pattern fallback; smalltalk için pattern ön-geçit
 - **Performans**:
   - Test Accuracy: **%93.48**
   - Cross-Validation Mean: %91.68 (±0.97)
@@ -33,15 +33,15 @@ Güvenlik odaklı mimari tasarladık:
   - Maliyet: **$0**
 - **Model Konumu**: `llm/ml/models/` (intent_model.joblib, intent_vectorizer.joblib)
 
-Intent Kategorileri:
-- `smalltalk_greeting`, `smalltalk_farewell`, `smalltalk_other` → Pattern Responder (3A)
-- `os_hardening`, `conceptual_explanation`, `incident_analysis`, `generic_qna` → Info Pipeline (3B)
-- `script_or_config` → Action Pipeline (3C)
-- `out_of_scope` → Kibarca red
+Intent Kategorileri (7 — `data/intent_training_dataset.csv`):
+- `greeting`, `farewell`, `thanks`, `help` → smalltalk → Pattern Responder (3A)
+- `info_request` → Info Pipeline (3B, RAG + LLM)
+- `action_request` → Action Pipeline (3C, script + CoT)
+- `out_of_scope` → Kibarca red (kapsam kararı L1 safety otoritesinde)
 
 ### 3. Gelişmiş RAG (Retrieval-Augmented Generation) Sistemi
 - **Embedding**: Novita `qwen/qwen3-embedding-8b` (4096 boyut, Qdrant cloud)
-- **Redis Embedding Cache**: SHA256 anahtar, 24 saatlik TTL — tekrar eden sorgularda embedding latency sıfır
+- **Embedding Cache**: opsiyonel, şu an **KAPALI** (`cache_enabled=false`); açılırsa tekrar eden sorgularda embedding latency düşer
 - **Vector Store**: Qdrant Cloud (yönetilen servis, yerel kurulum gerektirmez)
 - **Koleksiyon**: `cis_ubuntu_2404_windows11_winserver2025_with_rules`
 - **Hibrit Retrieval**: BM25 (sparse) + Dense RRF fusion, MMR diversity reranking
@@ -50,7 +50,7 @@ Intent Kategorileri:
   - HyDE (hypothetical answer passage — denser retrieval için)
   - Stepback (daha geniş context için genelleştirilmiş sorgu)
 - **FilterAgent**: OS türü ve kullanıcı rolünü otomatik çıkarır (pattern → LLM fallback)
-- **Session Desteği**: Redis tabanlı oturum saklama, follow-up sorular bağımsız hale getirilir
+- **Session/Geçmiş**: kullanıcı-bazlı **kalıcı SQLite** (`SqliteSessionStore`, owner-scoped; in-memory fallback), follow-up sorular QueryRewriter ile bağımsızlaştırılır
 - Retrieval parametreleri: top_k=3, min_score=0.5, max_results=6
 
 Desteklenen CIS Kaynakları:
@@ -99,14 +99,14 @@ Desteklenen CIS Kaynakları:
 ### Backend
 - **FastAPI** + **Uvicorn**: REST API + SSE streaming
 - **Pydantic v2**: Veri validasyonu
-- **Redis**: Embedding cache + Session store
+- **SQLite**: kullanıcı-bazlı chat history + auth/audit (`data/auth.db`) · **Redis**: opsiyonel (embedding cache kapalı)
 
 ### Machine Learning
 - **scikit-learn**: Logistic Regression, TF-IDF (intent detection)
 - **joblib**: Model persistance
 
 ### LLM & RAG
-- **Cerebras**: Birincil LLM provider (`gpt-oss-120b`, ücretsiz tier, özel donanım ~1.4s) → SambaNova → Gemini 3.1 Flash Lite → Novita (fail-fast fallback)
+- **Cerebras**: Birincil LLM (`gpt-oss-120b`, ücretsiz tier ~1.4s) → **Gemini 3.1 Flash Lite** (fail-fast). SambaNova/Novita LLM deprecated (SambaNova lane'de kullanılır)
 - **Novita**: Embedding provider (qwen3-embedding-8b, 4096 dim)
 - **Qdrant**: Cloud vektör veritabanı
 - **BM25**: Sparse retrieval (hibrit RAG)
@@ -145,13 +145,13 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 ### ML Model Sınıf Bazlı Performans
 | Intent | Precision | Recall | F1-Score |
 |--------|-----------|--------|----------|
-| action_request | 94% | 100% | 97% |
-| info_request | 94% | 92% | 93% |
-| greeting | 97% | 78% | 86% |
-| farewell | 100% | 67% | 80% |
-| thanks | 100% | 85% | 92% |
-| help | 50% | 17% | 25% |
-| out_of_scope | 45% | 96% | 62% |
+| action_request | 90% | 99% | 94% |
+| info_request | 96% | 98% | 97% |
+| greeting | 99% | 91% | 95% |
+| farewell | 97% | 92% | 94% |
+| thanks | 97% | 97% | 97% |
+| help | 100% | 50% | 67% |
+| out_of_scope | 88% | 65% | 75% |
 
 ---
 
@@ -167,8 +167,8 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 | MMR diversity reranking | ✅ |
 | Query Planning (subqueries + HyDE + stepback) | ✅ |
 | FilterAgent (OS/rol inference) | ✅ |
-| Redis embedding cache | ✅ |
-| Redis session store | ✅ |
+| Embedding cache (opsiyonel, kapalı) | ⚪ |
+| Kullanıcı-bazlı SQLite chat history | ✅ |
 | SSE streaming yanıtlar | ✅ |
 | Rule Engine + Artifact Generator | ✅ |
 | Docker Compose (prod + dev override) | ✅ |
@@ -181,9 +181,9 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 | Özellik | Öncelik |
 |---------|---------|
 | ~~Authentication / Authorization~~ → **JWT + RBAC + Audit eklendi ✅** | Tamam |
-| HTTPS/SSL (production) | P0 — Kritik |
+| ~~HTTPS/SSL (production)~~ → **Caddy otomatik TLS ile canlı (hardeningai.site) ✅** | Tamam |
 | Cerebras RPM rate limit (ücretsiz tier, 30 RPM) — fallback zinciri telafi eder | P1 — Önemli |
-| ClaimVerifier kalibrasyonu (İP-5 groundedness 0.81→0.90) | P2 |
+| ClaimVerifier ile İP-5 groundedness iyileştirme (0.70→0.90) | P2 |
 | Windows Server 2025 YAML kuralları (şu an boş) | P2 |
 
 ---
@@ -194,6 +194,9 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 |----------|----------|
 | `POST /api/chat` | Ana chat endpoint (RAG + LLM + 4-layer pipeline) |
 | `POST /api/chat/stream` | Streaming versiyonu (SSE) |
+| `GET /api/chat/sessions` | Kullanıcının sohbet oturumları (JWT — kullanıcıya izole) |
+| `GET /api/chat/history?session_id=` | Oturumun mesajları — yalnız sahibi (JWT) |
+| `DELETE /api/chat/history?session_id=` | Oturumu sil (JWT) |
 | `GET /api/rules` | CIS kural listesi |
 | `POST /api/artifacts/generate` | Script üretimi (bash/powershell/ansible/reg/gpo) |
 | `POST /v1/chat/completions` | OpenAI-compatible endpoint |
@@ -228,7 +231,7 @@ ai-powered-os-hardening/
 │   ├── query/                 # QueryPlanner, FilterAgent, QueryRewriter
 │   ├── retrieval/             # HybridRetriever, MMRReranker
 │   ├── embeddings/            # NovitaEmbeddingClient
-│   ├── verify/                # ClaimVerifier (şu an devre dışı)
+│   ├── verify/                # ClaimVerifier (aktif — use_claim_verification=true)
 │   └── (cache/                # Redis embedding cache — disabled: cache_enabled=false in config.json)
 ├── domain/
 │   ├── rule_engine/           # Çakışma tespiti, execution plan
