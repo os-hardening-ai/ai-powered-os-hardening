@@ -32,14 +32,16 @@ class RedisSessionStore:
     def available(self) -> bool:
         return self._client is not None
 
-    def _key(self, session_id: str) -> str:
-        return f"session:{session_id}"
+    def _key(self, session_id: str, owner: Optional[str] = None) -> str:
+        # owner ile namespace → kullanıcı izolasyonu (eskiden global "session:{id}" idi).
+        o = (owner or "").strip() or "anon"
+        return f"session:{o}:{session_id}"
 
-    def get_history(self, session_id: str) -> List[Turn]:
+    def get_history(self, session_id: str, *, owner: Optional[str] = None) -> List[Turn]:
         if not session_id or self._client is None:
             return []
         try:
-            raw = self._client.lrange(self._key(session_id), -(self._max_history * 2), -1)
+            raw = self._client.lrange(self._key(session_id, owner), -(self._max_history * 2), -1)
             return [
                 Turn(
                     role=d["role"],
@@ -60,11 +62,13 @@ class RedisSessionStore:
         content: str,
         intent: Optional[str] = None,
         safety: Optional[str] = None,
+        *,
+        owner: Optional[str] = None,
     ) -> None:
         if not session_id or self._client is None:
             return
         try:
-            key = self._key(session_id)
+            key = self._key(session_id, owner)
             payload = json.dumps(
                 {"role": role, "content": content, "intent": intent, "safety": safety}
             )
@@ -74,10 +78,10 @@ class RedisSessionStore:
         except Exception as exc:
             _logger.warning("[RedisSessionStore] add_turn error: %s", exc)
 
-    def reset_session(self, session_id: str) -> None:
+    def reset_session(self, session_id: str, *, owner: Optional[str] = None) -> None:
         if not session_id or self._client is None:
             return
         try:
-            self._client.delete(self._key(session_id))
+            self._client.delete(self._key(session_id, owner))
         except Exception as exc:
             _logger.warning("[RedisSessionStore] reset_session error: %s", exc)

@@ -3,19 +3,23 @@ from __future__ import annotations
 import asyncio
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from llm.core.context import RequestContext
 from llm.core.session_store import SessionStore
 from llm.core.redis_session_store import RedisSessionStore
+from llm.core.sqlite_session_store import SqliteSessionStore
 from llm.pipelines.secure_v2 import SecurePipelineV2
 from llm.clients import get_llm_clients
 from llm.rag.integration import RAGContextBuilder
 
 # Import security utilities
 from api.security import validate_chat_input, sanitize_output
+
+# Auth — chat geçmişi endpoint'leri için (kullanıcı bazlı izolasyon)
+from api.auth import get_current_user
 
 # Import error handling
 from api.errors import APIError, ErrorCode, raise_internal_error
@@ -53,19 +57,21 @@ _OUT_OF_SCOPE_MESSAGE = (
 )
 
 def _init_session_store():
-    """Use Redis session store when available; fall back to in-memory."""
+    """Chat history için KULLANICI-İZOLE, KALICI SQLite store (data/auth.db · chat_history).
+
+    Eskiden Redis (global `session:{id}`, kullanıcı ayrımı YOK, 1s TTL) kullanılıyordu →
+    herkes birbirinin geçmişini görebiliyordu. Artık (owner, session_id) ile izole + kalıcı.
+    SQLite kurulamazsa in-memory'ye düşülür (her ikisi de owner-scoped'tır)."""
     try:
-        import os
-        from config.config_loader import get_config
-        cfg = get_config()
-        # REDIS_URL env var overrides config.json (set by docker-compose)
-        redis_url = os.environ.get("REDIS_URL") or cfg.redis.url
-        store = RedisSessionStore(
-            url=redis_url,
-            ttl_seconds=cfg.redis.session_ttl_seconds,
-            max_history=10,
-        )
+        store = SqliteSessionStore(max_history=10)
         if store.available:
+            # Açılışta eski turları temizle (retention_days; 0 = süresiz).
+            try:
+                from config.config_loader import get_config
+                days = getattr(get_config().auth, "chat_history_retention_days", 30)
+                store.cleanup(days)
+            except Exception:
+                pass
             return store
     except Exception:
         pass
@@ -73,6 +79,19 @@ def _init_session_store():
 
 
 _session_store = _init_session_store()
+
+
+def _owner_of(request: Request) -> str:
+    """History izolasyon anahtarı = JWT kullanıcı adı (best-effort) veya 'anon'.
+
+    peek_username auth ZORLAMAZ (token yoksa None) → /chat açık kalır; ama token
+    gönderilmişse geçmiş o kullanıcıya izole edilir. İki farklı kullanıcı aynı
+    session_id'yi kullansa bile geçmişleri AYRIDIR (owner farklı)."""
+    try:
+        from api.auth import peek_username
+        return peek_username(request) or "anon"
+    except Exception:
+        return "anon"
 
 
 # ──────────────────────────────────────────────
@@ -247,7 +266,7 @@ def _set_llm_request_metrics(request: Request, result) -> None:
 
 
 async def _run_pipeline(
-    payload: "ChatRequest", timeout_seconds: int
+    payload: "ChatRequest", timeout_seconds: int, owner: str = "anon"
 ) -> tuple["PipelineResult", str, Optional[str], List[Dict[str, str]]]:
     """
     /chat ve /chat/stream için ORTAK yol — tek bir SecurePipelineV2 koşumu.
@@ -270,7 +289,7 @@ async def _run_pipeline(
     history: List[Dict[str, str]] = []
     turns: List = []
     if session_id:
-        turns = _session_store.get_history(session_id)
+        turns = _session_store.get_history(session_id, owner=owner)
         history = [{"role": t.role, "content": t.content} for t in turns]
 
     effective_question = payload.question
@@ -409,10 +428,11 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     # Set timeout (default: 60s for complex RAG queries)
     timeout_seconds = payload.timeout or 60
 
+    owner = _owner_of(request)  # history izolasyon anahtarı (JWT kullanıcısı / anon)
     try:
         # /chat ve /chat/stream ORTAK yol — tek SecurePipelineV2 koşumu
         result, effective_question, _inferred_os, history = await _run_pipeline(
-            payload, timeout_seconds
+            payload, timeout_seconds, owner=owner
         )
         session_id = payload.session_id or ""
 
@@ -422,12 +442,12 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         # Sanitize output (remove any leaked prompts/instructions)
         sanitized_answer = sanitize_output(result.answer or "Cevap uretilemedi.")
 
-        # Session history'ye kaydet
+        # Session history'ye kaydet — soru/cevap geldiği AN, kullanıcıya İZOLE (owner)
         if session_id:
-            _session_store.add_turn(session_id, "user", effective_question)
+            _session_store.add_turn(session_id, "user", effective_question, owner=owner)
             _session_store.add_turn(
                 session_id, "assistant", sanitized_answer[:500],
-                intent=_assistant_turn_intent(result),
+                intent=_assistant_turn_intent(result), owner=owner,
             )
 
         # Log conversation (question + answer)
@@ -490,6 +510,7 @@ async def chat_stream(payload: ChatRequest, request: Request):
     """
     timeout_seconds = payload.timeout or 60
 
+    owner = _owner_of(request)  # history izolasyon anahtarı (JWT kullanıcısı / anon)
     try:
         llm_small, llm_large = _get_llm_clients()
 
@@ -498,7 +519,7 @@ async def chat_stream(payload: ChatRequest, request: Request):
         history: List[Dict[str, str]] = []
         turns: List = []
         if session_id:
-            turns = _session_store.get_history(session_id)
+            turns = _session_store.get_history(session_id, owner=owner)
             history = [{"role": t.role, "content": t.content} for t in turns]
 
         effective_question = payload.question
@@ -633,10 +654,10 @@ async def chat_stream(payload: ChatRequest, request: Request):
                         if session_id and not _session_saved:
                             try:
                                 full_answer = sanitize_output("".join(_collected))
-                                _session_store.add_turn(session_id, "user", effective_question)
+                                _session_store.add_turn(session_id, "user", effective_question, owner=owner)
                                 _session_store.add_turn(
                                     session_id, "assistant", full_answer[:500],
-                                    intent=_assistant_turn_intent(result),
+                                    intent=_assistant_turn_intent(result), owner=owner,
                                 )
                                 _session_saved = True
                             except Exception:
@@ -672,6 +693,41 @@ async def chat_stream(payload: ChatRequest, request: Request):
         raise
     except Exception as e:
         raise_internal_error("streaming", e, error_code=ErrorCode.PIPELINE_ERROR)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CHAT GEÇMİŞİ — KULLANICI BAZLI (auth ZORUNLU → doğal olarak o kullanıcıya scoped)
+# Bu endpoint'ler sızıntıyı kökten çözer: frontend geçmişi artık global session
+# yerine BURADAN, giriş yapan kullanıcının JWT'siyle çeker → başkasının geçmişi GELMEZ.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _history_store_or_none():
+    """SQLite store (GET-API metodları var) ise döndür; in-memory fallback'te None."""
+    return _session_store if hasattr(_session_store, "list_sessions") else None
+
+
+@router.get("/chat/sessions")
+async def list_chat_sessions(user=Depends(get_current_user)) -> Dict[str, Any]:
+    """Giriş yapan kullanıcının sohbet oturumları (yeni→eski; son mesaj + tur sayısı)."""
+    store = _history_store_or_none()
+    sessions = store.list_sessions(user.username) if store else []
+    return {"owner": user.username, "sessions": sessions}
+
+
+@router.get("/chat/history")
+async def get_chat_history(session_id: str, user=Depends(get_current_user)) -> Dict[str, Any]:
+    """Bir oturumun TÜM turları — YALNIZ sahibinin (owner=JWT kullanıcısı) erişebildiği."""
+    store = _history_store_or_none()
+    turns = store.get_turns(user.username, session_id) if store else []
+    return {"owner": user.username, "session_id": session_id, "turns": turns}
+
+
+@router.delete("/chat/history")
+async def delete_chat_history(session_id: str, user=Depends(get_current_user)) -> Dict[str, Any]:
+    """Kullanıcının kendi oturumunu siler (başka kullanıcının oturumuna dokunamaz)."""
+    store = _history_store_or_none()
+    deleted = store.delete_session(user.username, session_id) if store else 0
+    return {"owner": user.username, "session_id": session_id, "deleted_turns": deleted}
 
 
 _FAST_REFUSAL = (

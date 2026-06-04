@@ -47,11 +47,18 @@ class SessionStore:
     max_history: int = 5
     _sessions: Dict[str, List[Turn]] = field(default_factory=dict)
 
-    def get_history(self, session_id: str) -> List[Turn]:
+    @staticmethod
+    def _scoped(session_id: str, owner: Optional[str]) -> str:
+        """Owner verilirse anahtarı namespace'le → kullanıcı izolasyonu. Owner yoksa
+        DÜZ session_id (geriye dönük uyum — owner geçmeyen eski çağrılar aynı davranır)."""
+        o = (owner or "").strip()
+        return f"{o}\x1f{session_id}" if o else session_id
+
+    def get_history(self, session_id: str, *, owner: Optional[str] = None) -> List[Turn]:
         """
-        Verilen session_id için son max_history adımı döndürür.
+        Verilen (owner, session_id) için son max_history adımı döndürür.
         """
-        turns = self._sessions.get(session_id, [])
+        turns = self._sessions.get(self._scoped(session_id, owner), [])
         if len(turns) <= self.max_history:
             return list(turns)
         return turns[-self.max_history :]
@@ -63,27 +70,31 @@ class SessionStore:
         content: str,
         intent: Optional[str] = None,
         safety: Optional[str] = None,
+        *,
+        owner: Optional[str] = None,
     ) -> None:
         """
         Yeni bir turn (mesaj) ekler.
         """
-        if session_id not in self._sessions:
-            self._sessions[session_id] = []
+        key = self._scoped(session_id, owner)
+        if key not in self._sessions:
+            self._sessions[key] = []
 
-        self._sessions[session_id].append(
+        self._sessions[key].append(
             Turn(role=role, content=content, intent=intent, safety=safety)
         )
 
         # Max history sınırını koru (memory leak önlemi)
-        if len(self._sessions[session_id]) > self.max_history * 4:
-            self._sessions[session_id] = self._sessions[session_id][-self.max_history :]
+        if len(self._sessions[key]) > self.max_history * 4:
+            self._sessions[key] = self._sessions[key][-self.max_history :]
 
-    def reset_session(self, session_id: str) -> None:
+    def reset_session(self, session_id: str, *, owner: Optional[str] = None) -> None:
         """
-        Belirli bir session'ı sıfırlar.
+        Belirli bir (owner, session_id) session'ını sıfırlar.
         """
-        if session_id in self._sessions:
-            del self._sessions[session_id]
+        key = self._scoped(session_id, owner)
+        if key in self._sessions:
+            del self._sessions[key]
 
 
 # Opsiyonel global instance (küçük projeler / demo için)
