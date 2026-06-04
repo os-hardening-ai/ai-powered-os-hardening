@@ -233,7 +233,6 @@ python -c "import qdrant_client; print('Qdrant: OK')"
 | **scikit-learn** | 1.8+ | ML intent detection | 🔴 Kritik |
 | **torch** | 2.x | Embeddings (transformers) | 🟡 Yüksek |
 | **transformers** | 4.x | NLP models | 🟡 Yüksek |
-| **langchain** | 0.1+ | LLM orchestration | 🟡 Yüksek |
 | **qdrant-client** | 1.12+ | Vector DB | 🟡 Yüksek |
 | **openai** | 1.55+ | OpenAI-uyumlu istemci (Cerebras/SambaNova/Gemini) | 🟡 Yüksek |
 | **PyJWT** | 2.8+ | JWT auth | 🟡 Yüksek |

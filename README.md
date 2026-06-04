@@ -38,7 +38,7 @@ denetlenebilir bilgi sunar.
 | **Maliyet** | ~$0 | Cerebras ücretsiz tier (1M token/gün) |
 | **Quota optimizasyonu** | **~4× hız, 0 timeout** | Eval v1→v3: ort 21.7s→**7.0s**, p95 75s→**23s**, %73→**%100** başarı ([docs/18](docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md)) |
 | **Hot-path LLM call** | **6 → ~1** | Yerel safety + verify-off + QueryPlanner-complex-only + answer cache |
-| **Birim test** | **726 geçiyor** | + service-free integration |
+| **Birim test** | **790 geçiyor** | + CI eval-regresyon kapısı (intent baseline) |
 
 > H1/H3 ölçüm detayları: [docs/14_DEGERLENDIRME.md](docs/14_DEGERLENDIRME.md)
 
