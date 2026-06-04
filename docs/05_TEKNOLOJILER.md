@@ -334,48 +334,30 @@ D, I = index.search(query_vector, k=5)
 
 ## 5. LLM Orchestration
 
-### LangChain
-**Versiyon**: 0.1+
-**Neden Seçtik?**
-- LLM workflow orchestration
-- Prompt management
-- Chain of Thought (CoT) desteği
-- Multi-LLM support
+### Custom Orchestration (LangChain KULLANILMIYOR)
 
-**Kullandığımız Modüller:**
+> **Karar:** LangChain/LlamaIndex gibi orchestration framework'leri **kaldırıldı** (proje kodunda
+> sıfır import; Dependabot'taki 1 kritik + ~10 high açığın kaynağıydı — bkz. [13_GUVENLIK](13_GUVENLIK.md)).
+> Yerine **hafif, şeffaf, bağımlılıksız** kendi katmanımız kullanılır. Gerekçe: tam kontrol,
+> daha az saldırı yüzeyi, sağlayıcı-bağımsızlık.
 
-#### PromptTemplate
+**Kullandığımız bileşenler:**
+
+#### Prompt yönetimi — düz Python (`llm/prompts/`)
+f-string/şablon tabanlı promptlar; framework yok. Örn. `simple_prompts.py` (GROUNDING_DIRECTIVE).
+
+#### OpenAI-uyumlu istemci (`llm/clients/openai_compatible_client.py`)
+Tek `OpenAICompatibleClient` ile Cerebras / SambaNova / Gemini(OpenRouter) / Novita — hepsi
+OpenAI-uyumlu `/chat/completions` API'si konuşur (preset'lerle model/base_url/key).
+
+#### FallbackLLM + LaneLoadBalancer (`llm/clients/__init__.py`, `registry.py`)
 ```python
-from langchain.prompts import PromptTemplate
-
-prompt = PromptTemplate(
-    input_variables=["context", "question"],
-    template="""Sen bir siber güvenlik uzmanısın.
-
-Context (CIS Benchmark):
-{context}
-
-User Question:
-{question}
-
-Answer (Türkçe, detaylı):"""
-)
-
-formatted = prompt.format(context=rag_context, question=user_q)
+from llm.clients import get_llm_clients
+llm_small, llm_large = get_llm_clients()   # zincir: Cerebras → SambaNova → Gemini → Novita
+answer = llm_large(prompt)                  # bir sağlayıcı patlarsa otomatik sıradakine düşer
 ```
-
-#### ChatGroq
-```python
-from langchain_groq import ChatGroq
-
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0.1,
-    api_key=os.getenv("GROQ_API_KEY")
-)
-
-response = llm.invoke(messages)
-```
+`LLM_SMALL_LANES`/`LLM_LARGE_LANES` verilirse round-robin yük dengeleme (kota optimizasyonu —
+bkz. [18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md](18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md)).
 
 ---
 
@@ -579,11 +561,11 @@ gunicorn main:app \
 | Kriter | Seçim | Alternatif | Neden Tercih? |
 |--------|-------|------------|---------------|
 | **Backend** | FastAPI | Flask, Django | Modern, async, auto docs |
-| **LLM** | Groq | OpenAI | ÜCRETSİZ, hızlı |
+| **LLM** | Cerebras (gpt-oss-120b) | Groq, SambaNova, OpenAI | ÜCRETSİZ, çok hızlı; fallback zinciri |
 | **ML** | scikit-learn | PyTorch, TF | Basit task, hızlı |
-| **Embeddings** | Cohere | OpenAI | Çok dilli, ücretsiz trial |
+| **Embeddings** | Novita qwen3-embedding-8b | OpenAI, Cohere | Çok dilli, 4096-dim |
 | **Vector DB** | Qdrant | Pinecone, Weaviate | Open-source, Docker |
-| **Orchestration** | LangChain | Custom | Prompt management |
+| **Orchestration** | Custom (FallbackLLM + lane) | LangChain, LlamaIndex | Tam kontrol, az bağımlılık, sağlayıcı-bağımsız |
 | **Testing** | pytest | unittest | Fixtures, parametrize |
 
 ---
@@ -603,15 +585,13 @@ numpy==1.24.0
 pandas==2.1.0
 joblib==1.3.0
 
-# LLM
-groq==0.4.0
-langchain==0.1.0
-langchain-groq==0.0.1
+# LLM (OpenAI-uyumlu istemci; langchain KALDIRILDI)
+openai>=1.55.0          # Cerebras/SambaNova/Gemini/Novita — OpenAI-uyumlu /chat/completions
+tiktoken>=0.8.0
 
 # RAG
-cohere==4.37
-qdrant-client==1.7.0
-# faiss-cpu==1.7.4  # Alternative
+cohere>=5.20.0
+qdrant-client>=1.12.0
 
 # Security
 slowapi==0.1.9
