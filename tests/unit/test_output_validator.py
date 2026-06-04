@@ -106,11 +106,13 @@ class TestSecretScanner:
     """Çıktı sır/PII sızıntısı tarayıcı (OWASP LLM02/LLM07) — gerçek anahtar GEÇERSİZ, placeholder GEÇERLİ."""
 
     def test_real_secrets_rejected(self):
+        # NOT: Aşağıdakiler SAHTE/sentetik — yalnız regex desenine uyar (scanner'ı test eder).
+        # Gerçek anahtar repoda bulunmamalı (public güvenlik); değerler bilinçli olarak dummy'dir.
         secrets = [
-            "sk-or-v1-98022b9a6a29686e66b6195e6bca4da6a24bf59a",   # OpenRouter
-            "csk-hrv58kxt25xtd6f8ecmhxjwrp435h443dwt3p6fw29k98w4k", # Cerebras
-            "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",             # GitHub PAT
-            "-----BEGIN PRIVATE KEY-----",                          # private key
+            "sk-or-v1-0000000000000000000000000000000000000000",   # OpenRouter (sahte)
+            "csk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",     # Cerebras (sahte)
+            "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",             # GitHub PAT (sahte)
+            "-----BEGIN PRIVATE KEY-----",                          # private key işareti
         ]
         for s in secrets:
             res = validate_output(GOOD_INFO + f"\n\nAnahtar: {s}", intent="info_request")
