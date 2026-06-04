@@ -103,14 +103,30 @@ def main() -> None:
     # JUDGE'ı ÜRETİCİden ayır: 100 soru × ~4 metrik = ~400 judge çağrısı small lane'i (cerebras/
     # sambanova burst) RateLimitError'a sokuyordu. RAGAS_JUDGE_PROVIDER verilirse judge AYRI,
     # tek-sağlayıcı (kotasız novita) client olur → üretim hızlı/free kalır, judge rate-limit yemez.
+    # İki override yolu (öncelik: LANES > PROVIDER):
+    #  • RAGAS_JUDGE_LANES="openrouter:modelA,openrouter:modelB,..." → ÇOKLU-MODEL ROUND-ROBIN
+    #    judge. Paralı ≠ kotasız: ~400 judge çağrısı tek modelde rate-limit'e girer. Havuz yükü
+    #    1/N'e indirir + bir lane patlarsa diğerine düşer (LaneLoadBalancer hem dağıtım hem fallback).
+    #  • RAGAS_JUDGE_PROVIDER=novita/gemini/... → tek ayrı sağlayıcı judge.
+    # Her iki durumda da ÜRETİM (large) hızlı/free kalır → judge üretimden bağımsız.
     judge = small
+    judge_lanes = os.environ.get("RAGAS_JUDGE_LANES", "").strip()
     judge_provider = os.environ.get("RAGAS_JUDGE_PROVIDER", "").strip().lower()
-    if judge_provider:
+    if judge_lanes:
+        from llm.clients import _build_lane_balancer
+        stats = {"total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {}}
+        lb = _build_lane_balancer("small", judge_lanes, stats)
+        if lb is not None:
+            judge = lb
+            print(f"[judge] ROUND-ROBIN havuz ({len(lb.lanes)} lane): {[l for l, _ in lb.lanes]}")
+        else:
+            print("[judge] lane kurulamadı (key/format?) → küçük modele düşüldü")
+    elif judge_provider:
         from llm.clients import _PROVIDER_BUILDERS  # tek-sağlayıcı builder
         j_small, _ = _PROVIDER_BUILDERS[judge_provider]()
         judge = j_small
-        print(f"[judge] ayrı sağlayıcı: {judge_provider} (kotasız) — üretimden bağımsız")
-    evaluator = RAGASEvaluator(llm_fn=judge)   # judge = ayrı/kotasız (override) veya küçük model
+        print(f"[judge] ayrı sağlayıcı: {judge_provider} — üretimden bağımsız")
+    evaluator = RAGASEvaluator(llm_fn=judge)   # judge = round-robin havuz / ayrı sağlayıcı / küçük model
 
     all_q = _eval_questions()  # A3 — paylaşımlı 53-soruluk dataset
     sample_n = int(os.environ.get("RAGAS_SAMPLE", "0")) or len(all_q)
