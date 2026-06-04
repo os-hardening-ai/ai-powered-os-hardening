@@ -54,6 +54,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_ts   ON audit_log(ts);
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(username);
+
+-- Chat geçmişi — KULLANICI BAZLI izole (owner sütunu). Eskiden Redis'te global
+-- `session:{id}` altında tutuluyordu → kullanıcı ayrımı yoktu (herkes birbirinin
+-- geçmişini görebiliyordu). Artık (owner, session_id) çiftiyle izole + KALICI.
+-- owner = JWT kullanıcı adı (peek_username) veya kimliksizse "anon".
+CREATE TABLE IF NOT EXISTS chat_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner       TEXT NOT NULL,
+    session_id  TEXT NOT NULL,
+    role        TEXT NOT NULL,     -- user | assistant
+    content     TEXT NOT NULL,
+    intent      TEXT,
+    safety      TEXT,
+    created_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_owner_sess ON chat_history(owner, session_id, id);
+CREATE INDEX IF NOT EXISTS idx_chat_created    ON chat_history(created_at);
 """
 
 

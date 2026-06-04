@@ -135,6 +135,7 @@ class AuthConfig:
     db_path: str = "data/auth.db"
     audit_enabled: bool = True
     jwt_secret: str = ""
+    chat_history_retention_days: int = 30  # 0 = süresiz; >0 ise eski turlar startup'ta silinir
 
     def __post_init__(self) -> None:
         if self.access_token_expiry_minutes < 5:
