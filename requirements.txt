@@ -35,11 +35,11 @@ groq>=0.14.0
 openai>=1.55.0
 tiktoken>=0.8.0
 cohere>=5.20.0
-langchain>=0.3.30
-langchain-community>=0.3.27
-langchain-core>=0.3.85
-langchain-text-splitters>=0.3.9
-langgraph>=0.2.55
+# NOT: langchain/langchain-community/langchain-core/langchain-text-splitters/langgraph
+# KALDIRILDI — proje kodunda sıfır import (grep doğrulandı). Ölü bağımlılıklardı ve
+# Dependabot'taki 1 kritik + ~10 high + birkaç medium açığın TEK kaynağıydı (deserialization
+# injection, path traversal, XXE, msgpack vb.). RAG kendi splitter'ını kullanır, langchain'e
+# bağımlı değil. Tekrar ihtiyaç olursa son güvenli sürümle geri eklenir.
 
 # --- Embeddings ---
 # sentence-transformers: lokal model kullanılmıyor, provider=novita (API-based)
