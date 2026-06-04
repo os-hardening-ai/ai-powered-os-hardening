@@ -73,7 +73,7 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 - **Pattern Match**: <1ms (API çağrısı yok)
 - **ML Inference**: ~5-10ms (yerel scikit-learn model)
 - **Kapsama**: Pattern %72, ML %28
-- **Accuracy**: %90.48 (test seti)
+- **Accuracy**: %93.48 (test seti)
 - **Performans**: ✅ MÜKEMMEL
 
 ### 3. RAG System
@@ -317,7 +317,7 @@ Simple sorgu (QueryPlanner atlanıyor):
 
 | Sistem | Accuracy | Latency |
 |--------|----------|---------|
-| Bizim (LR + TF-IDF) | %90.48 | 5-10ms |
+| Bizim (LR + TF-IDF) | %93.48 | 5-10ms |
 | Sektör standardı | %85-95 | 10-50ms |
 | Durum | ✅ Sektör ortalamasının üstünde | |
 
@@ -335,7 +335,7 @@ Simple sorgu (QueryPlanner atlanıyor):
 ## Sonuç
 
 ### Güçlü Yönler
-- ✅ ML intent detection hızlı (5-10ms) ve doğru (%90.48)
+- ✅ ML intent detection hızlı (5-10ms) ve doğru (%93.48)
 - ✅ Groq free tier ile sıfır LLM maliyeti
 - ✅ Redis embedding cache ile tekrar eden sorgular hızlı
 - ✅ Paralel QueryPlanner ile 3 LLM çağrısı 500ms'de tamamlanıyor

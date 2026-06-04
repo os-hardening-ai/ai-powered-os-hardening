@@ -23,12 +23,12 @@ Güvenlik odaklı mimari tasarladık:
 - Provider fallback zinciri (fail-fast): Cerebras → SambaNova → Gemini 3.1 Flash Lite → Novita
 
 ### 2. Makine Öğrenmesi Tabanlı Intent Detection
-- **Dataset**: **1,677 etiketli örnek** (7 intent kategorisi) — Türkçe/İngilizce varyasyonlar
+- **Dataset**: **5,362 etiketli örnek** (7 intent kategorisi) — Türkçe/İngilizce varyasyonlar
 - **Model**: Logistic Regression + TF-IDF
 - **Hibrit Yaklaşım**: Pattern matching (birincil, %72 kapsama) + ML fallback (%28 kapsama)
 - **Performans**:
-  - Test Accuracy: **%90.48**
-  - Cross-Validation Mean: %82.10 (±3.46)
+  - Test Accuracy: **%93.48**
+  - Cross-Validation Mean: %91.68 (±0.97)
   - Latency: ~5-10ms (API çağrısı yok, yerel inference)
   - Maliyet: **$0**
 - **Model Konumu**: `llm/ml/models/` (intent_model.joblib, intent_vectorizer.joblib)
@@ -122,7 +122,7 @@ Desteklenen CIS Kaynakları:
 
 | Metrik | Değer |
 |--------|-------|
-| ML Intent Accuracy | %90.48 |
+| ML Intent Accuracy | %93.48 |
 | Ortalama Yanıt (info + RAG) | ~3-4s (Cerebras; eski Groq ~8s) |
 | Tek LLM çağrısı | ~1.36s (Cerebras gpt-oss-120b) |
 | Agent plan / harden (medyan) | ~3.55s / ~4.62s (H3 <5sn ✓) |
@@ -160,7 +160,7 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 | Özellik | Durum |
 |---------|-------|
 | 4-katmanlı güvenlik pipeline | ✅ |
-| ML tabanlı intent detection (%90.48) | ✅ |
+| ML tabanlı intent detection (%93.48) | ✅ |
 | RAG — CIS Benchmark PDF indeksleme | ✅ |
 | RAG — YAML kural indeksleme (312 kural) | ✅ |
 | Hibrit retrieval (BM25 + Dense) | ✅ |

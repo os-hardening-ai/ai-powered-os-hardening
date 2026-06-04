@@ -218,7 +218,7 @@ python -c "import qdrant_client; print('Qdrant: OK')"
 
 # Expected output:
 # FastAPI: 0.109.x
-# scikit-learn: 1.8.x (NOT 1.4 - updated for Python 3.12)
+# scikit-learn: 1.5.x
 # PyTorch: 2.x.x
 # Qdrant: OK
 ```
@@ -230,7 +230,7 @@ python -c "import qdrant_client; print('Qdrant: OK')"
 | **fastapi** | 0.109+ | Web API framework | 🔴 Kritik |
 | **uvicorn** | 0.27+ | ASGI server | 🔴 Kritik |
 | **pydantic** | 2.6+ | Data validation | 🔴 Kritik |
-| **scikit-learn** | 1.8+ | ML intent detection | 🔴 Kritik |
+| **scikit-learn** | 1.5+ | ML intent detection | 🔴 Kritik |
 | **torch** | 2.x | Embeddings (transformers) | 🟡 Yüksek |
 | **transformers** | 4.x | NLP models | 🟡 Yüksek |
 | **qdrant-client** | 1.12+ | Vector DB | 🟡 Yüksek |
@@ -345,10 +345,10 @@ python -m llm.ml.intent_detector
 **Çıktı (yaklaşık):**
 ```
 Training ML Intent Detector...
-Dataset loaded: 1677 samples
+Dataset loaded: 5362 samples
 Training Logistic Regression + TF-IDF...
-Cross-validation: 82.10% ± 3.46%   (5-fold)
-Test accuracy: 90.48%
+Cross-validation: 91.68% ± 0.97%   (5-fold)
+Test accuracy: 93.48%
 Model saved: models/intent_model.joblib
 Vectorizer saved: models/intent_vectorizer.joblib
 ✓ Training complete!
@@ -547,7 +547,7 @@ print(f"Layer Path: {result.layer_path}")
 ### 1. Birim Testleri (pytest)
 ```bash
 python -m pytest tests/unit/ -q
-# → 516 test geçiyor (auth, RAG, pipeline, refinement, rule engine, ...)
+# → 791 test geçiyor (auth, RAG, pipeline, refinement, rule engine, ...)
 ```
 
 ### 2. Coverage ile

@@ -16,7 +16,7 @@ AI-Powered OS Hardening sistemi, **4 katmanlı güvenlik odaklı mimari** kullan
 flowchart TD
     Q([Kullanıcı sorusu]) --> L1[Katman 1: Safety<br/>LLM tehdit tespiti]
     L1 -->|unsafe| REJ([Kibar ret])
-    L1 -->|safe| L2[Katman 2: Intent<br/>pattern <1ms + ML %90.48]
+    L1 -->|safe| L2[Katman 2: Intent<br/>pattern <1ms + ML %93.48]
     L2 --> L3{Katman 3: Routing}
     L3 -->|smalltalk| P3A[3A Pattern Responder<br/>&lt;20ms, LLM yok]
     L3 -->|info_request| P3B[3B Info Pipeline]
@@ -179,8 +179,8 @@ Güvenli olduğu tespit edilen sorunun **niyetini** belirlemek. Kullanıcı ne i
 
 ### Teknoloji
 - **Hybrid approach**: Pattern matching (önce, <1ms) + ML fallback (28% kapsam, 5-10ms)
-- **ML Model**: Logistic Regression + TF-IDF (1.677 örnekle eğitilmiş, 7 kategori)
-- **Performans**: %90.48 test doğruluğu, %82.10 5-fold CV, <10ms inference
+- **ML Model**: Logistic Regression + TF-IDF (5.362 örnekle eğitilmiş, 7 kategori)
+- **Performans**: %93.48 test doğruluğu, %91.68 5-fold CV, <10ms inference
 
 ### Intent Kategorileri
 
@@ -252,7 +252,7 @@ ML + Pattern kombinasyonu ile final karar:
 ### Performans
 - **Süre**: <10ms (ML), <1ms (pattern)
 - **Maliyet**: $0
-- **Doğruluk**: %90.48 test (ML), %82.10 5-fold CV (±3.46), %100 (pattern for smalltalk)
+- **Doğruluk**: %93.48 test (ML), %91.68 5-fold CV (±0.97), %100 (pattern for smalltalk)
 
 ### Layer Path'ler
 - **Smalltalk**: `1→2→3A`
@@ -707,7 +707,7 @@ Her katmanın ne aldığını, nasıl işlediğini ve ne ürettiğini adım adı
    - Match var mı? → Anında karar (1ms)
 
 2. **ML Prediction** (pattern match yoksa):
-   - TF-IDF vektörizasyon (677 features)
+   - TF-IDF vektörizasyon (3356 features)
    - Logistic Regression model inference
    - Confidence threshold check (0.75 high, 0.60 medium)
 

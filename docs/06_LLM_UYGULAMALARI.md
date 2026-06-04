@@ -70,18 +70,18 @@ elif "nedir" in soru or "açıkla" in soru:
 
 **Dosya**: [data/intent_training_dataset.csv](../data/intent_training_dataset.csv)
 
-**Toplam**: 1,677 etiketli örnek
+**Toplam**: 5,362 etiketli örnek
 
 **Kategoriler ve Dağılımlar**:
 | Intent | Örnekler | Açıklama |
 |--------|----------|----------|
-| `greeting` | 200 | "Merhaba", "Selam", "Hi" |
-| `farewell` | 150 | "Görüşürüz", "Bye", "Hoşça kal" |
-| `thanks` | 100 | "Teşekkürler", "Sağol", "Thanks" |
-| `help` | 92 | "Yardım", "Nasıl kullanılır", "Help" |
-| `info_request` | 325 | "SSH nedir?", "Firewall nasıl çalışır?" |
-| `action_request` | 231 | "Script oluştur", "Yapılandır", "Harden et" |
-| `out_of_scope` | 132 | "Hava durumu", "Film öner", "Matematik" |
+| `action_request` | 1993 | "Script oluştur", "Yapılandır", "Harden et" |
+| `info_request` | 1618 | "SSH nedir?", "Firewall nasıl çalışır?" |
+| `greeting` | 521 | "Merhaba", "Selam", "Hi" |
+| `out_of_scope` | 388 | "Hava durumu", "Film öner", "Matematik" |
+| `farewell` | 324 | "Görüşürüz", "Bye", "Hoşça kal" |
+| `thanks` | 317 | "Teşekkürler", "Sağol", "Thanks" |
+| `help` | 201 | "Yardım", "Nasıl kullanılır", "Help" |
 
 **Dataset Formatı:**
 ```csv
@@ -167,9 +167,9 @@ TfidfVectorizer(
 )
 ```
 
-**Çıktı** (güncel: 1.677 örnek):
+**Çıktı** (güncel: 5.362 örnek):
 - TF-IDF feature matrix (örnek × vocabulary)
-- Eğitim/test bölünmesi → test accuracy %90.48, 5-fold CV %82.10 (±3.46)
+- Eğitim/test bölünmesi → test accuracy %93.48, 5-fold CV %91.68 (±0.97)
 
 ---
 
@@ -192,8 +192,8 @@ X_train, X_test, y_train, y_test = train_test_split(
 #### 2. TF-IDF Fitting
 ```python
 vectorizer = TfidfVectorizer(...)
-X_train_vec = vectorizer.fit_transform(X_train)  # (984, 544)
-X_test_vec = vectorizer.transform(X_test)        # (246, 544)
+X_train_vec = vectorizer.fit_transform(X_train)  # (4289, 3356)
+X_test_vec = vectorizer.transform(X_test)        # (1073, 3356)
 ```
 
 #### 3. Model Training
@@ -209,13 +209,13 @@ model.fit(X_train_vec, y_train)
 
 #### 4. Evaluation
 ```python
-# Test accuracy (güncel model — 1677 örnek)
+# Test accuracy (güncel model — 5362 örnek)
 test_acc = model.score(X_test_vec, y_test)
-# 90.48%
+# 93.48%
 
 # Cross-validation (5-fold)
 cv_scores = cross_val_score(model, X_train_vec, y_train, cv=5)
-# Mean: 82.10%, Std: 3.46%
+# Mean: 91.68%, Std: 0.97%
 ```
 
 #### 5. Model Persistence
@@ -232,8 +232,8 @@ joblib.dump(vectorizer, 'models/intent_vectorizer.joblib')
 
 | Metrik | Değer |
 |--------|-------|
-| Test Accuracy | **90.48%** |
-| Cross-Validation Mean | 82.10% (±3.46%) |
+| Test Accuracy | **93.48%** |
+| Cross-Validation Mean | 91.68% (±0.97%) |
 
 **Class-wise Performance:**
 
