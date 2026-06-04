@@ -40,9 +40,9 @@ sorularına ölçüme dayalı cevap vermek.
 | Sağlayıcı | Model | Donanım | Tek-çağrı latency | Maliyet | Durum |
 |-----------|-------|---------|-------------------|---------|-------|
 | **Cerebras** | gpt-oss-120b | WSE (özel) | **~1.36s** | Ücretsiz (1M tok/gün, 30 RPM) | ✅ **PRIMARY** |
-| **SambaNova** | gpt-oss-120b | RDU (özel) | ~3.17s | Ücretsiz (dar kota) | ✅ Fallback #1 |
+| **SambaNova** | gpt-oss-120b | RDU (özel) | ~3.17s | Ücretsiz (dar kota) | ❌ DEPRECATED |
 | **Gemini 3.1 Flash Lite** | google/gemini-3.1-flash-lite | GPU (OpenRouter) | ~3.06s | $0.25 / $1.50 (1M token) | ✅ Fallback #2 (1M context) |
-| **Novita** | deepseek-v3 vb. | GPU | ~12-60s* | Düşük, kotasız | ✅ Güvenlik ağı |
+| **Novita** | deepseek-v3 vb. | GPU | ~12-60s* | Düşük, kotasız | ❌ DEPRECATED (LLM) |
 | Groq | llama-3.x | LPU | (değişken) | Ücretsiz-tier | ❌ DEPRECATED |
 | Ollama | yerel | CPU/GPU | yavaş (GPU yok) | Ücretsiz (yerel) | ❌ DEPRECATED |
 | HuggingFace | meta-llama vb. | Inference API | — | Ücretsiz-tier | ❌ DEPRECATED |
@@ -89,8 +89,10 @@ ancak **hiçbiri H3 (<5sn) eşiğini geçemedi** — uçtan-uca gecikmeleri çok
 - **Ollama:** Yerel/limitsiz ama **GPU yok** → CPU'da çok yavaş; demo donanımı yetersiz.
 - **HuggingFace:** `meta-llama` modelleri hf-inference'ta **chat-template** desteğini yitirdi
   (HTTP 400) + sağlayıcı artık aracı rolüne kaymış. → çıkarıldı.
+- **SambaNova:** 2026-06 testi: 5/5 çağrıda rate-limit hatası (free-tier çok sert throttle) → güvenilmez, zincirden çıkarıldı.
+- **Novita:** LLM bench'inde çok yavaş (~13s); embedding için ayrı modül olarak tutulur, LLM zincirinden çıkarıldı.
 
-Bu üçü kayıtta (`registry.py`) `deprecated=True` ile durur — yalnızca **açıkça**
+Bu beşi kayıtta (`registry.py`) `deprecated=True` ile durur — yalnızca **açıkça**
 `LLM_PROVIDER=<x>` ile seçilirse kullanılır; otomatik fallback zincirine girmez.
 
 ---
@@ -114,11 +116,10 @@ Sonuç: **128-148s → tek çağrı 1.36s; agent_plan 3.55s, agent_harden 4.62s 
 ```
 Cerebras (gpt-oss-120b, ücretsiz)        ← PRIMARY
    ↓ (429/hata → fail-fast)
-SambaNova (gpt-oss-120b, ücretsiz)
-   ↓
+(Remove SambaNova line - actual chain: Cerebras → Gemini)
 Gemini 3.1 Flash Lite (OpenRouter, 1M ctx)
    ↓
-Novita (düşük ücretli, kotasız)          ← güvenlik ağı
+(Remove Novita line - not in automatic LLM fallback chain; only used for embeddings)
 ```
 
 `config/config.json` → `default_provider: "cerebras"`, `.env` → ilgili `*_API_KEY` anahtarları.

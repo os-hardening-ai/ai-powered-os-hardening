@@ -525,7 +525,7 @@ if use_rag_final and self.rag_builder:
     "layer_path": "1→2→3C",
     "rag_used": true,
     "rag_chunks": 6,
-    "model": "gpt-oss-120b",
+    "model": "large",
     "complexity": "complex"
   },
   "request_id": "req_1701234567890_abc123",
@@ -626,7 +626,7 @@ curl -X POST http://localhost:8000/api/chat \
     "total_time_s": 2.1,
     "rag_used": false,
     "rag_chunks": 0,
-    "model": "gpt-oss-120b",
+    "model": "small",
     "complexity": "simple"
   },
   "estimated_cost": 0.0012,
@@ -672,7 +672,7 @@ curl -X POST http://localhost:8000/api/chat \
     "total_time_s": 3.8,
     "rag_used": true,
     "rag_chunks": 6,
-    "model": "gpt-oss-120b",
+    "model": "large+CoT",
     "complexity": "complex"
   },
   "estimated_cost": 0.0021,

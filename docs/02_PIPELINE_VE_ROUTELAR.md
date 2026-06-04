@@ -345,7 +345,7 @@ answer = llm_large(prompt)  # Cerebras gpt-oss-120b (FallbackLLM)
 
 Sistem, her soruyu analiz ederek RAG'in gerekli olup olmadığına **otomatik** karar verir:
 
-#### Karar Mantığı (`llm/pipelines/layers/info_pipeline.py:199`)
+#### Karar Mantığı (`llm/pipelines/layers/info_pipeline.py:374`)
 
 ```python
 def _should_use_rag(question, complexity):

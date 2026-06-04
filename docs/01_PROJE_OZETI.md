@@ -20,7 +20,7 @@ Güvenlik odaklı mimari tasarladık:
   - **3B Info Pipeline**: Bilgi soruları RAG + LLM ile yanıtlanır (~3-4s)
   - **3C Action Pipeline**: Script/hardening istekleri CoT ile üretilir (~4-5s)
 - Gerçek SSE token-streaming yanıtlar desteklenir
-- Provider fallback zinciri (fail-fast): Cerebras → SambaNova → Gemini 3.1 Flash Lite → Novita
+- Provider fallback zinciri (fail-fast): Cerebras → Gemini 3.1 Flash Lite (SambaNova ve Novita LLM deprecated ve zincirden çıkarıldı)
 
 ### 2. Makine Öğrenmesi Tabanlı Intent Detection
 - **Dataset**: **5,362 etiketli örnek** (7 intent kategorisi) — Türkçe/İngilizce varyasyonlar
@@ -65,7 +65,7 @@ Desteklenen CIS Kaynakları:
 ### 4. LLM Provider Entegrasyonu
 - **Primary Provider: Cerebras** (ücretsiz tier, 1M token/gün, `gpt-oss-120b`, özel donanım ~1.4s)
   - Small + Large: `gpt-oss-120b` (Safety/QueryPlanner ve yanıt üretimi)
-- **Fallback zinciri (fail-fast, `max_retries=0`):** Cerebras → SambaNova (`gpt-oss-120b`) → Gemini 3.1 Flash Lite (OpenRouter, 1M context) → Novita (düşük ücretli güvenlik ağı)
+- **Fallback zinciri (fail-fast, chain `max_retries=0`):** Cerebras (`gpt-oss-120b`) → Gemini 3.1 Flash Lite (OpenRouter, 1M context). SambaNova ve Novita LLM `deprecated` (otomatik zincirden çıkık); SambaNova `LLM_SMALL_LANES` lane yapılandırmasında round-robin için kullanılır. Novita yalnız embedding.
 - **Embedding Provider: Novita** — `qwen/qwen3-embedding-8b` (4096 dim; LLM için değil, embedding için)
 - *Groq / Ollama / HuggingFace — DEPRECATED (otomatik zincirden çıkarıldı; yalnız açıkça seçilirse)*
 - Tüm ayarlar `config/config.json` + `.env` üzerinden yapılandırılabilir
@@ -229,7 +229,7 @@ ai-powered-os-hardening/
 │   ├── retrieval/             # HybridRetriever, MMRReranker
 │   ├── embeddings/            # NovitaEmbeddingClient
 │   ├── verify/                # ClaimVerifier (şu an devre dışı)
-│   └── cache/                 # Redis embedding cache
+│   └── (cache/                # Redis embedding cache — disabled: cache_enabled=false in config.json)
 ├── domain/
 │   ├── rule_engine/           # Çakışma tespiti, execution plan
 │   └── artifact_generator/    # Script üretimi

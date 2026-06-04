@@ -40,7 +40,7 @@ Not: test_health_ok yalnız canlı Qdrant erişilemediğinde "degraded" verir (e
 - **Python Version:** 3.11+ (Docker) / 3.12+ (manual)
 - **API Framework:** FastAPI 0.127+
 - **Vector Store:** Qdrant Cloud
-- **LLM Providers:** Novita (Qwen3.5 — default), Groq (Llama — fallback)
+- **LLM Providers:** Cerebras gpt-oss-120b (primary, ~1.4s), SambaNova (deprecated), Gemini 3.1 Flash Lite/OpenRouter (fallback)
 - **Embeddings:** Novita qwen3-embedding-8b (4096 dims)
 - **Intent Detection:** Local ML — Logistic Regression + TF-IDF (93.48% accuracy, 5–10ms)
 
@@ -72,7 +72,7 @@ python llm/tests/test_security_features.py
 
 ```
 ✅ ALL TESTS PASSED (5/5)
-- Groq Llama 8B safety classifier çalışıyor
+- Cerebras gpt-oss-120b safety classifier çalışıyor
 - Average response time: ~200ms
 - Cost per classification: $0.0001
 - Accuracy: 100% on test dataset
@@ -603,7 +603,7 @@ bandit -r llm/ api/ core/
 
 2. **Safety Classification**
    - ✅ Offensive query rejection: 100% başarılı
-   - ✅ Groq Llama 8B performansı mükemmel (~200ms)
+   - ✅ Cerebras gpt-oss-120b performansı mükemmel (~1.4s, fastest free-tier)
 
 3. **Hybrid Intent Detection**
    - ✅ Pattern matching: 72% coverage
@@ -616,7 +616,7 @@ bandit -r llm/ api/ core/
    - ✅ RAG retrieval performansı iyi
 
 5. **Complexity-Based Model Selection**
-   - ✅ Simple → Groq (fast, cheap)
+   - ✅ Simple → Cerebras gpt-oss-120b (fast, ~1.4s, free-tier)
    - ✅ Medium → GPT-4o-mini (balanced)
    - ✅ Complex → GPT-4o + CoT (powerful)
 

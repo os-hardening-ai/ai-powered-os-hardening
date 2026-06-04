@@ -183,7 +183,7 @@ en fazla `max_syntax_fix` kez LLM'e başvurur. Cerebras **5 istek/dk** darboğaz
 
 ## 7. Test kapsamı
 
-`tests/integration/test_hardening_agent.py` (18 test):
+`tests/integration/test_hardening_agent.py` (22 test):
 
 - **TestHappyPath** — uçtan uca doğrulanmış script, ansible formatı.
 - **TestRefineLoop** — tehlikeli kural çıkarılır, çift `verify` adımı.
@@ -196,7 +196,7 @@ en fazla `max_syntax_fix` kez LLM'e başvurur. Cerebras **5 istek/dk** darboğaz
   bozuk YAML tespiti.
 
 ```bash
-python -m pytest tests/integration/test_hardening_agent.py -q   # 18 passed
+python -m pytest tests/integration/test_hardening_agent.py -q   # 22 passed
 ```
 
 ---

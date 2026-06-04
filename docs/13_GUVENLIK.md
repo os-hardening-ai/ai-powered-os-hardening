@@ -90,7 +90,7 @@ isteği düşürmez. Sorgu: `GET /api/audit` (yalnız sysadmin/security).
 - **Timeout + retry:** Groq/OpenAI SDK çağrıları `timeout` ve `max_retries` ile;
   429/5xx'te exponential backoff + `Retry-After` başlığına uyum.
 - **Fallback zinciri:** birincil sağlayıcı düşerse sırayla diğerlerine geçilir
-  (Groq → Novita → OpenAI → Ollama); hepsi düşerse anlamlı hata yükseltilir
+  (Cerebras → Gemini (OpenRouter) → [OpenAI]); hepsi düşerse anlamlı hata yükseltilir
   (sessiz boş cevap dönmez).
 
 ## CORS / Trusted Host

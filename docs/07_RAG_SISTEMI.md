@@ -45,7 +45,7 @@ RAG, **LLM'lerin bilgi tabanını genişletmek** için kullanılan bir tekniktir
 │     "CIS Ubuntu 24.04 Section 5.2.4: PermitRootLogin no..."     │
 │                      │                                             │
 │                      ▼                                             │
-│  8. LLM GENERATION (Groq Llama 70B / Novita Qwen)               │
+│  8. LLM GENERATION (Cerebras gpt-oss-120b)               │
 │     Prompt: Context + User Question                               │
 │                      │                                             │
 │                      ▼                                             │
