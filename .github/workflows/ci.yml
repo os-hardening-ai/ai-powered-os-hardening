@@ -17,7 +17,7 @@ jobs:
     env:
       PYTHONIOENCODING: utf-8
       INTENT_ROUTER: tfidf          # eval/test deterministik TF-IDF (embedding/ağ yok)
-      ANSWER_CACHE_TTL_S: "0"        # CI'da cache kapalı (deterministik)
+      # NOT: ANSWER_CACHE_TTL_S set ETME — cache-hit testi cache'in AÇIK olmasını bekler.
       # Config loader birincil sağlayıcı için NON-EMPTY anahtar ister (import-time validasyon).
       # Testler SAHTE LLM kullanır → bu dummy'ler GERÇEK çağrıda KULLANILMAZ, sadece config geçsin diye.
       CEREBRAS_API_KEY: ci-dummy-not-used
