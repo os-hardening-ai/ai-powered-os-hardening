@@ -172,12 +172,26 @@ vectorizer = joblib.load('models/intent_vectorizer.joblib')
 
 ## 3. LLM (Large Language Models)
 
-### Groq
+### Cerebras (Aktif / Primary)
 **Neden Seçtik?**
-- **ÜCRETSİZ** (no credit card required)
-- **Çok hızlı** (500+ tokens/second)
-- Llama 3.3 70B ve Llama 3.1 8B desteği
-- API rate limits: 30 requests/minute (free tier)
+- **ÜCRETSİZ** (1M token/gün)
+- **Çok hızlı** (gpt-oss-120b ~1.4s latency)
+- OpenAI-uyumlu API
+- En iyi ücretsiz-first tercih (free_priority=5)
+
+**Kullandığımız Model:**
+
+#### gpt-oss-120b
+**Use Case**: Tüm LLM işlemleri (Info, Action pipelines)
+**Özellikler**:
+- 120 billion parameters
+- Yüksek kalite yanıtlar
+- Hız: ~1.4s
+
+### Groq (DEPRECATED — Fallback zincirinden çıkarıldı)
+**Durum**: Riskli/flaky free-tier rate-limit nedeniyle otomatik fallback'ten çıkarıldı.
+Eski kodda yer almakla birlikte, varsayılan LLM sıralamasında artık kullanılmaz.
+(Açıkça LLM_PROVIDER=groq seçilirse hâlâ çalışır.)
 
 **Kullandığımız Modeller:**
 
@@ -282,7 +296,7 @@ client = QdrantClient(url="http://localhost:6333")
 # Search
 results = client.search(
     collection_name="cis_benchmarks",
-    query_vector=embedding,  # 1024-dim
+    query_vector=embedding,  # 4096-dim
     limit=5,
     score_threshold=0.7
 )
@@ -292,7 +306,7 @@ results = client.search(
 ```python
 {
     "id": "chunk_ubuntu_22_04_ssh_001",
-    "vector": [0.123, -0.456, ...],  # 1024-dim
+    "vector": [0.123, -0.456, ...],  # 4096-dim
     "payload": {
         "source": "CIS_Ubuntu_22.04_Benchmark_v2.0.0",
         "section": "5.2.3 Ensure SSH access is limited",
@@ -517,9 +531,9 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
 
 ```python
 class Config:
-    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq")
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
-    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "cohere")
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "cerebras")
+    CEREBRAS_API_KEY: str = os.getenv("CEREBRAS_API_KEY")
+    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "novita")
     VECTOR_STORE: str = os.getenv("VECTOR_STORE_PROVIDER", "qdrant")
 ```
 
@@ -615,7 +629,7 @@ pip install -r requirements.txt
 | ML Intent Detection | <10ms | $0 | Çok hızlı, ücretsiz |
 | Groq Llama 8B | ~200ms | $0 | Ücretsiz, hızlı |
 | Groq Llama 70B | ~500ms | $0 | Ücretsiz, kaliteli |
-| Cohere Embeddings | ~100ms | $0* | Çok dilli (*free tier) |
+| Novita Embeddings | ~100ms | $0* | Çok dilli (Qwen3 4096-dim) |
 | Qdrant Search | ~50ms | $0 | Open-source, hızlı |
 
 **Toplam Pipeline (Action Request)**: ~3s, ~$0

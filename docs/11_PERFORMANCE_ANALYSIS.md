@@ -63,8 +63,8 @@ total=8.018s rag=True chunks=7 cost=$0.0006
 
 ### 1. Safety Classification (Layer 1)
 
-- **Model**: Groq `llama-3.1-8b-instant`
-- **Ortalama Latency**: ~250ms
+- **Model**: Cerebras gpt-oss-120b (primary) → SambaNova → Gemini 3.1 Flash Lite (fallback)
+- **Ortalama Latency**: ~200-300ms (Cerebras faster than Groq)
 - **Performans**: ✅ İYİ
 
 ### 2. Intent Detection (Layer 2)
@@ -349,4 +349,4 @@ Simple sorgu (QueryPlanner atlanıyor):
 ---
 
 **Son Güncelleme**: 2026-05-29
-**Versiyon**: v1.1.0
+**Versiyon**: v1.3.0

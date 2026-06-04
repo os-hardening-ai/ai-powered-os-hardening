@@ -127,7 +127,7 @@ LLM_PROVIDER=novita H1_SAMPLE=6 H1_MAX_CLAIMS=3 python -m evaluation.h1_rag_vs_l
 
 # Ücretsiz alternatifler:
 LLM_PROVIDER=ollama  python -m evaluation.h1_rag_vs_llm     # yerel (önce: ollama pull)
-LLM_INCLUDE_CHEAP=1  python -m evaluation.h1_rag_vs_llm     # groq→…→novita fallback
+LLM_INCLUDE_CHEAP=1  python -m evaluation.h1_rag_vs_llm     # cerebras→gemini→novita fallback
 ```
 Çıktı: `evaluation/results/h1_report.md` + `h1_results.json`.
 
@@ -229,9 +229,9 @@ sağlayıcılar-arası retry katmanı):
   takılmadan serve ederse net <5s; takılırsa fail-fast SambaNova'ya düşer (~7s tail). Kesin <5s için:
   tek-kullanıcı Cerebras-fast-path (RPM sorunu yok) veya bağımsız agent adımlarını paralelleştir.
 - **Yerel mimari zaten hızlı (retrieval P50 ~1s):** gecikme LLM katmanındaydı; doğru sağlayıcı +
-  fail-fast ile çözüldü. Üretim stack: **Cerebras (ücretsiz 1M/gün) → SambaNova → Novita-net → Ollama**.
+  fail-fast ile çözüldü. Üretim stack: **Cerebras (ücretsiz 1M/gün) → Gemini 3.1 Flash Lite → Novita → Ollama**.
 
 > **429 / Kota notu:** Harness yoğun LLM çağrısı yapar; Groq ücretsiz-tier kotası dar gelir
 > (dolunca uzun `Retry-After` → backoff). `LOAD_THROTTLE_S` global hız tavanı bu backoff
-> fırtınasını sınırlar; rapor sağlayıcı/modeli kaydeder. Sağlayıcı mimarisi: [13_GUVENLIK.md](13_GUVENLIK.md),
+> fırtınasını sınırlar; rapor sağlayıcı/modeli kaydeder. Sağlayıcı mimarisi: [17_LLM_SAGLAYICI_SECIMI.md](17_LLM_SAGLAYICI_SECIMI.md),
 > `llm/clients/registry.py`.

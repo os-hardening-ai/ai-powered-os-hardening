@@ -42,9 +42,9 @@ Date: 2026-05-29 (güncellendi: 2025-12-24 orijinal)
 │           ├─ 3C: Action Pipeline (script generation)        │
 │           └─ 3D: Out-of-Scope Handler                       │
 │                                                              │
-│  Layer 4: Adaptive Generation (Groq LLMs)                   │
-│           ├─ Small: Llama 3.1 8B (fast)                     │
-│           └─ Large: Llama 3.3 70B (complex)                 │
+│  Layer 4: Adaptive Generation (Cerebras gpt-oss-120b)       │
+│           ├─ Small: gpt-oss-120b (helper)                   │
+│           └─ Large: gpt-oss-120b (üretim)                   │
 └─────────────────────────────────────────────────────────────┘
                             │
               ┌─────────────┴──────────────┐
@@ -52,7 +52,7 @@ Date: 2026-05-29 (güncellendi: 2025-12-24 orijinal)
     ┌──────────────────┐        ┌──────────────────┐
     │   RAG System     │        │   LLM Clients    │
     │                  │        │                  │
-    │ • NovitaEmbed    │        │ • GroqClient     │
+    │ • NovitaEmbed    │        │ • Cerebras(OAI)  │
     │ • QdrantStore    │        │ • OpenAIClient   │
     │ • Late Chunking  │        │ • OllamaClient   │
     └──────────────────┘        └──────────────────┘
@@ -100,7 +100,7 @@ Tekrar eden sorgularda embedding latency ~0ms (Redis'ten).
 **Current State**: Single LLM provider failure = total failure
 **Impact**: MODERATE - Reliability issues
 **Recommendation**:
-- Implement provider fallback chain (Groq → OpenAI → Ollama)
+- Provider fallback chain (Cerebras → Gemini → [OpenAI]) — UYGULANDI
 - Add circuit breaker pattern
 - Exponential backoff for retries
 
@@ -309,10 +309,10 @@ class HybridSafetyClassifier:
 
 ### Current Costs (per 1000 requests)
 
-#### Using Groq (Current)
+#### Using Cerebras (Current)
 - Embeddings: $0 (Novita free tier)
 - Vector Store: $0 (self-hosted Qdrant)
-- LLM: $0 (Groq free tier)
+- LLM: $0 (Cerebras free tier, 1M token/gün)
 - **Total: $0/1000 requests** ✅
 
 #### If Scaling to OpenAI
@@ -325,7 +325,7 @@ class HybridSafetyClassifier:
 1. **Caching**: Reduce redundant API calls by 95%
 2. **Model Selection**: Use cheaper models for simple queries
 3. **Batching**: Process multiple queries per API call
-4. **Fallback Chain**: Groq (free) → OpenAI (paid)
+4. **Fallback Chain**: Cerebras (free) → Gemini 3.1 Flash Lite (OpenRouter)
 
 **Estimated Cost with Optimizations**: $0.20/1000 requests (90% savings)
 

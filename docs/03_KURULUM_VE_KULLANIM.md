@@ -339,7 +339,7 @@ REDIS_URL=redis://localhost:6379/0       # session + JWT blacklist + rate limit 
 Intent detection modeli henüz eğitilmemişse:
 
 ```bash
-python -m llm.ml.intent_detector
+python scripts/retrain_intent.py
 ```
 
 **Çıktı (yaklaşık):**
@@ -701,7 +701,7 @@ FileNotFoundError: models/intent_model.joblib not found
 
 **Çözüm:**
 ```bash
-python llm/ml_intent_detector.py
+python scripts/retrain_intent.py
 ```
 
 Bu komut modelleri eğitip `models/` klasörüne kaydedecektir.

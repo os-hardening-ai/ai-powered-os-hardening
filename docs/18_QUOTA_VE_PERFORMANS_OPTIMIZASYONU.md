@@ -61,11 +61,11 @@ Best-practice: **kritik yolda tek üretim çağrısı**; guardrail ucuz/yerel, k
 
 | Değişiklik | Etki | Nerede |
 |-----------|------|--------|
-| **ClaimVerifier kapatıldı** (`use_claim_verification=false`) | −1 call; kalibrasyon bug'ı da gitti | `config.json` |
+| **ClaimVerifier açık** (`use_claim_verification=true`) | varsayılan olarak etkin; konfigürasyonda kapalı değil | `config.json` |
 | **Yerel safety fast-path** (`fast_local_safety`) | net güvenlik-savunma / net alan-dışı → LLM'siz; saldırgan/dual-use/uzun girdi → LLM'e düşer | `safety_classifier.py` |
 | **QueryPlanner yalnız `complex`** | `medium` artık `retrieve_balanced` → 3 paralel call kalkar | `info_pipeline.py` |
 | **Action judge/correction kapatıldı** (`use_deep_check=False`) | statik regex güvenlik kalır, 1–2 LLM call gider | `action_pipeline.py` |
-| **`max_verification_claims` 4→1→(off)** | verify burst'ü kaldırıldı | `config.json` |
+| **`max_verification_claims` 3** | varsayılan: 3 iddia doğrulaması | `config.json` |
 | **Answer cache** (exact-match, TTL, LRU) | tekrar eden soru → **0 call** | `info_pipeline.py` |
 
 **Sonuç:** medium info **6 call → ~1 call** (yalnız generation); tekrar **0 call**.
@@ -109,14 +109,14 @@ round-robin dağıtılır → her lane'in **ayrı limiti** → agregat throughpu
 
 ```jsonc
 // config/config.json → rag.enhanced
-"use_query_planning": true,        // ama yalnız complexity=="complex"te koşar
-"use_claim_verification": false,   // kapalı (kalibrasyon + quota); ">=2 desteksiz" disclaimer kapısı
+"use_query_planning": true,        // her zaman etkindir (config.json'da koşulsuz)
+"use_claim_verification": true,   // açık (config.json'da varsayılan: true); sorguya bağlı doğrulama
 ```
 
 ```bash
 # .env (opsiyonel lane yük dengeleme)
-LLM_SMALL_LANES=openrouter:meta-llama/llama-3.2-1b-instruct,openrouter:liquid/lfm-2-24b-a2b,openrouter:mistralai/codestral-2508,openrouter:amazon/nova-micro-v1,sambanova:gemma-3-12b-it
-LLM_LARGE_LANES=cerebras:gpt-oss-120b,openrouter:deepseek/deepseek-v4-flash,sambanova:gemma-3-12b-it
+LLM_SMALL_LANES=cerebras:gpt-oss-120b,openrouter:openai/gpt-oss-120b,sambanova:gpt-oss-120b
+LLM_LARGE_LANES=openrouter:qwen/qwen3-next-80b-a3b-instruct,openrouter:google/gemini-3.1-flash-lite
 OPENROUTER_API_KEY=...   # kredi gerektirir (free değilse) — bkz. 402 notu
 SAMBANOVA_API_KEY=...
 CHAIN_LLM_TIMEOUT=30     # lane başına timeout (s)

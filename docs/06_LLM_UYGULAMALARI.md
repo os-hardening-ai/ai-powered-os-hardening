@@ -411,8 +411,8 @@ Classification:"""
 
 **LLM Call:**
 ```python
-response = groq_client.chat.completions.create(
-    model="llama-3.1-8b-instant",
+response = llm_client.chat.completions.create(  # OpenAI-uyumlu (Cerebras)
+    model="gpt-oss-120b",
     messages=[{"role": "user", "content": prompt}],
     temperature=0.1,  # Deterministic
     max_tokens=100
@@ -431,7 +431,7 @@ response = groq_client.chat.completions.create(
 **Performans:**
 - Latency: ~500-800ms
 - Doğruluk: ~99%
-- Maliyet: $0 (Groq ücretsiz)
+- Maliyet: $0 (Cerebras ücretsiz tier, 1M token/gün)
 
 ---
 
@@ -524,8 +524,8 @@ Script:"""
 
 **LLM Call:**
 ```python
-response = groq_client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
+response = llm_client.chat.completions.create(  # OpenAI-uyumlu (Cerebras)
+    model="gpt-oss-120b",
     messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}
@@ -540,7 +540,7 @@ answer = response.choices[0].message.content
 **Performans:**
 - Info: ~1.5-2.5s
 - Action: ~2-4s
-- Maliyet: ~$0.001-0.002 (Groq ücretsiz, ama tahmin)
+- Maliyet: $0 (Cerebras ücretsiz tier; Gemini fallback $0.25/$1.50 per 1M/10M tokens if used)
 
 ---
 
@@ -660,11 +660,7 @@ Answer with JSON:
 
 Analysis:"""
 
-response = groq_client.chat.completions.create(
-    model="llama-3.1-8b-instant",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.1
-)
+response = llm_small(prompt)  # FallbackLLM via Cerebras (or fallback chain)
 ```
 
 **Decision Tree:**
@@ -794,7 +790,7 @@ out_scope   |   0    1     0     0      0     0    24  |
 
 ### Inference Maliyeti (Per Request)
 
-| Pipeline Path | LLM Calls | Tokens | Cost (Groq) |
+| Pipeline Path | LLM Calls | Tokens | Cost (Cerebras) |
 |---------------|-----------|--------|-------------|
 | 1→REJECT | 1 (safety) | ~100 | $0 (ücretsiz) |
 | 1→2→3A | 1 (safety) | ~100 | $0 |
@@ -802,15 +798,15 @@ out_scope   |   0    1     0     0      0     0    24  |
 | 1→2→3B→4 | 2 (safety+gen) | ~1500 | $0 (ücretsiz) |
 | 1→2→3C→4 | 2-3 (safety+gen+val) | ~2500 | $0 (ücretsiz) |
 
-**Not**: Groq ücretsiz olduğu için maliyet $0. Eğer OpenAI kullansaydık:
+**Not**: Cerebras ücretsiz (1M token/gün) olduğu için maliyet $0. Eğer OpenAI kullansaydık:
 - Safety (8B equivalent): ~$0.0001
 - Generation (70B equivalent): ~$0.0015
 - **Total per action request**: ~$0.0016
 
 **Maliyet Karşılaştırması:**
-- **Groq**: $0
+- **Cerebras**: $0
 - **OpenAI (GPT-4)**: ~$0.03 (18x daha pahalı)
-- **Maliyet Tasarrufu**: %100 (Groq ile)
+- **Maliyet Tasarrufu**: %100 (Cerebras ile)
 
 ---
 
@@ -880,14 +876,14 @@ results = await asyncio.gather(
 | Component | Technology | Latency | Cost | Purpose |
 |-----------|------------|---------|------|---------|
 | Intent Detection | Logistic Regression + TF-IDF | <10ms | $0 | Route to handler |
-| Safety Classification | Groq llama-3.1-8b-instant | ~250ms | $0 | Detect unsafe |
-| QueryPlanner (3 paralel) | Groq llama-3.1-8b-instant | ~566ms | $0 | Query genişletme |
+| Safety Classification | Cerebras gpt-oss-120b (Groq deprecated) | ~250ms | $0 | Detect unsafe |
+| QueryPlanner (3 paralel) | Cerebras gpt-oss-120b | ~566ms | $0 | Query genişletme |
 | RAG Retrieval | Novita embed + Qdrant Cloud | ~4,044ms | $0 | Context alma |
-| Info Generation | Groq llama-3.3-70b-versatile | ~3,405ms | $0 | Yanıt üretimi |
-| Script Generation | Groq llama-3.3-70b + RAG + ZT | ~5-7s | $0 | Script üretimi |
-| Output Validation | Regex + Groq llama-3.1-8b | <200ms | $0 | Dangerous cmd tespiti |
+| Info Generation | Cerebras gpt-oss-120b | ~3,405ms | $0 | Yanıt üretimi |
+| Script Generation | Cerebras gpt-oss-120b + RAG + ZT | ~5-7s | $0 | Script üretimi |
+| Output Validation | Regex + Cerebras gpt-oss-120b | <200ms | $0 | Dangerous cmd tespiti |
 
-**Total Pipeline (Info + RAG)**: ~8s, $0 (Groq + Novita ücretsiz tier)  
+**Total Pipeline (Info + RAG)**: ~8s, $0 (Cerebras + Novita embedding ücretsiz tier)  
 **Total Pipeline (Script)**: ~5-7s, $0
 
 ---
