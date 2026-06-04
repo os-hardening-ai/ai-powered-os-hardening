@@ -100,7 +100,17 @@ def main() -> None:
     from evaluation.ragas_evaluator import RAGASEvaluator
 
     small, large = get_llm_clients()
-    evaluator = RAGASEvaluator(llm_fn=small)   # judge = küçük/hızlı model
+    # JUDGE'ı ÜRETİCİden ayır: 100 soru × ~4 metrik = ~400 judge çağrısı small lane'i (cerebras/
+    # sambanova burst) RateLimitError'a sokuyordu. RAGAS_JUDGE_PROVIDER verilirse judge AYRI,
+    # tek-sağlayıcı (kotasız novita) client olur → üretim hızlı/free kalır, judge rate-limit yemez.
+    judge = small
+    judge_provider = os.environ.get("RAGAS_JUDGE_PROVIDER", "").strip().lower()
+    if judge_provider:
+        from llm.clients import _PROVIDER_BUILDERS  # tek-sağlayıcı builder
+        j_small, _ = _PROVIDER_BUILDERS[judge_provider]()
+        judge = j_small
+        print(f"[judge] ayrı sağlayıcı: {judge_provider} (kotasız) — üretimden bağımsız")
+    evaluator = RAGASEvaluator(llm_fn=judge)   # judge = ayrı/kotasız (override) veya küçük model
 
     all_q = _eval_questions()  # A3 — paylaşımlı 53-soruluk dataset
     sample_n = int(os.environ.get("RAGAS_SAMPLE", "0")) or len(all_q)
