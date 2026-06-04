@@ -16,7 +16,7 @@ Bu projede **modern AI/ML teknolojileri** kullanarak production-ready bir güven
 │  Vector Store: Qdrant Cloud                                 │
 │  Cache/Session: Redis (session + JWT blacklist + rate limit)│
 │  Auth: JWT (PyJWT) + bcrypt + RBAC + SQLite (users/audit)   │
-│  Testing: pytest (516 unit) + custom evaluators             │
+│  Testing: pytest (791 unit) + custom evaluators             │
 │  Security: JWT auth, RBAC, audit log, rate limit, HSTS/CSP  │
 │  Container: Docker + Docker Compose                         │
 └─────────────────────────────────────────────────────────────┘
@@ -90,7 +90,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ## 2. Machine Learning
 
 ### scikit-learn
-**Versiyon**: 1.4+
+**Versiyon**: 1.5+
 **Neden Seçtik?**
 - Industry-standard ML library
 - Hızlı training ve inference
@@ -113,7 +113,7 @@ TfidfVectorizer(
 )
 ```
 
-**Çıktı**: TF-IDF özellik matrisi (1.677 örnekli `intent_training_dataset.csv`'den)
+**Çıktı**: TF-IDF özellik matrisi (5.362 örnekli `intent_training_dataset.csv`'den)
 
 #### LogisticRegression
 **Amaç**: Intent classification (ana model)
@@ -129,9 +129,9 @@ LogisticRegression(
 )
 ```
 
-**Performans** (güncel model, 1.677 örnek):
-- Test accuracy: 90.48%
-- CV accuracy: 82.10% ± 3.46% (5-fold)
+**Performans** (güncel model, 5.362 örnek):
+- Test accuracy: 93.48%
+- CV accuracy: 91.68% ± 0.97% (5-fold)
 
 #### LinearSVC (Secondary Model)
 **Amaç**: Alternative classifier (currently not used in hybrid, but available)
@@ -580,7 +580,7 @@ uvicorn[standard]==0.27.0
 pydantic==2.6.0
 
 # ML
-scikit-learn==1.4.0
+scikit-learn==1.5.0
 numpy==1.24.0
 pandas==2.1.0
 joblib==1.3.0

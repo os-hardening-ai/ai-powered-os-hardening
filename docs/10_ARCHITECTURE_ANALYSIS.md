@@ -34,7 +34,7 @@ Date: 2026-05-29 (güncellendi: 2025-12-24 orijinal)
 │           └─ safe_defensive / unsafe_offensive               │
 │                                                              │
 │  Layer 2: Intent Detection (Hybrid ML + Pattern)            │
-│           └─ 90.48% accuracy, 7 categories                   │
+│           └─ 93.48% accuracy, 7 categories                   │
 │                                                              │
 │  Layer 3: Intelligent Routing                               │
 │           ├─ 3A: Pattern Responder (greetings/thanks)       │
@@ -402,7 +402,7 @@ class HybridSafetyClassifier:
 
 **Strengths**:
 1. ✅ Solid architecture with clear separation of concerns
-2. ✅ High accuracy ML intent detection (90.48%)
+2. ✅ High accuracy ML intent detection (93.48%)
 3. ✅ Modern API design with industry best practices
 4. ✅ Good security foundations (needs auth)
 5. ✅ Cost-effective (free tier usage)

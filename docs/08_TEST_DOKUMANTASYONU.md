@@ -25,7 +25,7 @@
 ### Test Kapsamı
 
 ```
-Birim Test (tests/unit): 516 test GEÇİYOR
+Birim Test (tests/unit): 791 test GEÇİYOR
 Service-free Integration (router): 18 test GEÇİYOR
 Test Kategorileri: unit / integration / api / llm / rag
 Kapsam: auth (JWT/RBAC/blacklist/audit), refinement loop, RAG, pipeline,
@@ -42,7 +42,7 @@ Not: test_health_ok yalnız canlı Qdrant erişilemediğinde "degraded" verir (e
 - **Vector Store:** Qdrant Cloud
 - **LLM Providers:** Novita (Qwen3.5 — default), Groq (Llama — fallback)
 - **Embeddings:** Novita qwen3-embedding-8b (4096 dims)
-- **Intent Detection:** Local ML — Logistic Regression + TF-IDF (90.48% accuracy, 5–10ms)
+- **Intent Detection:** Local ML — Logistic Regression + TF-IDF (93.48% accuracy, 5–10ms)
 
 ---
 
@@ -100,7 +100,7 @@ python llm/tests/test_security_features.py
 ```
 Pattern Match Başarı Oranı: 72% (36/50 test case)
 ML Fallback Kullanımı: 28% (14/50 test case)
-Combined Accuracy: 90.48% (local ML model)
+Combined Accuracy: 93.48% (local ML model)
 Average Latency:
   - Pattern match: <1ms
   - ML inference: 5–10ms (local Logistic Regression, $0 cost)

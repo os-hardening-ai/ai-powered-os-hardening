@@ -62,7 +62,7 @@ projeye **belirgin değer katmayan** maddeler iptal edildi (docs/09 dosyası kal
 | Redis **Response** Cache | Formda yok; H3 latency zaten hedefte. |
 | RAG Pre-warming (hot query) | Mikro-optimizasyon, düşük değer. |
 | Error Retry Logic (tenacity) | Zaten kapalı: SDK `max_retries` + sağlayıcı fallback zinciri mevcut. |
-| Fine-tuned Intent (%95) | %90.48 yeterli; yüksek emek/düşük getiri. |
+| Fine-tuned Intent (%95) | %93.48 yeterli; yüksek emek/düşük getiri. |
 | Multi-agent (coordinator+uzman) | Form İP-6/7 = tek-ajan agentic (zaten var); çok yüksek emek, sadece araştırma. |
 | A/B Testing Framework | Akademik kapsam için gereksiz. |
 | Kubernetes Horizontal Scaling | Tek-instance demo yeterli. |
