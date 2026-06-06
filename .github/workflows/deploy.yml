@@ -1,0 +1,35 @@
+name: Deploy (prod)
+
+# Compose-native CD: CI gecince main'e push -> VPS'e SSH -> git pull + docker compose up.
+# Kubernetes/ArgoCD GEREKMEZ. Gerekli GitHub Secrets:
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY (private key), VPS_SSH_PORT
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: VPS'e SSH ile deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: |
+            set -e
+            cd ~/hardening/ai-powered-os-hardening
+            git pull --ff-only
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api
+            docker compose ps

@@ -26,6 +26,13 @@ services:
     networks:
       - default        # redis ile aynı (proje) ağ
       - hardening_net   # frontend + prometheus + jaeger erişimi (paylaşılan)
+    # Kaynak limiti (2 core / 8 GB VPS; monitoring + redis ile paylaşımlı) — OOM/komşu-kirası önler.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2G
+    mem_swappiness: 0
 
   redis:
     # Redis'i host'a hiç açma — yalnız api + redis-exporter erişir.
@@ -36,6 +43,11 @@ services:
     networks:
       - default
       - hardening_net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
 
 networks:
   hardening_net:

@@ -62,6 +62,15 @@ async def health_check() -> dict:
     return {"status": overall, "rag_available": rag_available, "dependencies": dependencies}
 
 
+@router.get("/ready", tags=["health"])
+async def readiness() -> dict:
+    """Hafif hazır-olma kontrolü (load balancer / k8s readiness probe için).
+
+    Ağır bağımlılık I/O'su YOK — süreç ayağa kalktıysa hızlıca 200 döner.
+    Derin bağımlılık kontrolü için /health veya /health/detailed kullanın."""
+    return {"status": "ready"}
+
+
 @router.get("/health/detailed", tags=["health"])
 async def health_detailed() -> dict:
     """Bileşen bazlı sağlık durumu (embedding dahil)."""
