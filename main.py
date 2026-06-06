@@ -80,7 +80,7 @@ import uvicorn
 # API Documentation metadata
 DESCRIPTION = """
 **Marmara Üniversitesi - Bilgisayar Mühendisliği Bitirme Projesi**
-Geliştiriciler: Engin, Mert, Tankut | Akademik Yıl: 2024-2025
+Geliştiriciler: Engin, Mert, Tankut | Akademik Yıl: 2025-2026
 
 AI destekli OS sıkılaştırma sistemi. CIS Benchmark PDF'lerini RAG ile semantik olarak arar,
 LLM ile güvenlik önerileri ve hardening scriptleri üretir.
@@ -89,7 +89,7 @@ LLM ile güvenlik önerileri ve hardening scriptleri üretir.
 
 **RAG:** Novita qwen3-embedding-8b (4096 dim) + Qdrant cloud vector store
 
-**LLM:** Groq (primary) → OpenAI → Ollama fallback zinciri
+**LLM:** Cerebras gpt-oss-120b (primary) → Gemini/OpenRouter (dayanıklı fallback zinciri + lane yük dengeleme)
 """
 
 TAGS_METADATA = [
@@ -99,6 +99,8 @@ TAGS_METADATA = [
     {"name": "domain", "description": "Rule Engine (bağımlılık çözümü + çakışma tespiti) ve Artifact Generator (Bash/PowerShell/Ansible/REG/GPO)."},
     {"name": "health", "description": "Servis sağlık durumu ve bileşen diagnostiği."},
     {"name": "monitoring", "description": "İstek metrikleri, hata logları ve performans istatistikleri."},
+    {"name": "auth", "description": "JWT kimlik doğrulama (login/register/logout/me) + partner API-key (M2M)."},
+    {"name": "agents", "description": "Agentic: Görev Planlayıcı (İP-6) ve Hardening Agent (İP-7, self-verify)."},
 ]
 
 def create_app() -> FastAPI:
@@ -214,6 +216,16 @@ def create_app() -> FastAPI:
 
     # Health check — PUBLIC (liveness/readiness probe'ları için)
     app.include_router(health_router)
+
+    # API sürümü — PUBLIC (entegrasyon istemcileri sürüm/sözleşmeyi sorgulayabilsin).
+    @app.get("/version", tags=["health"])
+    async def api_version():
+        """API sürümü ve desteklenen yüzeyler (versiyonlama sözleşmesi)."""
+        return {
+            "api_version": cfg.app.version,
+            "openai_compatible_endpoint": "/v1",
+            "policy": "Geriye-uyumsuz değişiklikte yeni ana sürüm açılır; /v1 stabildir.",
+        }
 
     # Advanced analytics — sysadmin/security
     app.include_router(analytics_router, prefix="/api", tags=["monitoring"], dependencies=_role_sec)

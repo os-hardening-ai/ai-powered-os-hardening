@@ -41,12 +41,13 @@ def _accepts_system(fn) -> bool:
         return False
 
 
-def _metric_provider_call(role: str, provider: str, was_fallback: bool) -> None:
+def _metric_provider_call(role: str, provider: str, was_fallback: bool,
+                          duration_s: Optional[float] = None) -> None:
     """Prometheus'a sağlayıcı çağrısını kaydet — best-effort (metrik yoksa sessiz geç).
-    Gözlemlenebilirlik asla LLM akışını bozmamalı."""
+    Gözlemlenebilirlik asla LLM akışını bozmamalı. duration_s → model-bazlı gecikme paneli."""
     try:
         from prometheus_metrics import record_llm_provider_call
-        record_llm_provider_call(role, provider, was_fallback=was_fallback)
+        record_llm_provider_call(role, provider, was_fallback=was_fallback, duration_s=duration_s)
     except Exception:
         pass
 
@@ -235,12 +236,13 @@ class FallbackLLM:
             try:
                 _t0 = time.perf_counter()
                 result = client(prompt, system=system) if (system and _accepts_system(client)) else client(prompt)
-                _record_latency(self.stats, provider, (time.perf_counter() - _t0) * 1000.0)
+                _elapsed = time.perf_counter() - _t0
+                _record_latency(self.stats, provider, _elapsed * 1000.0)
                 self.stats["by_provider"][provider] = self.stats["by_provider"].get(provider, 0) + 1
                 if idx > 0:  # birincil değil → fallback gerçekleşti
                     self.stats["fallback_count"] += 1
                     logger.info("[FallbackLLM] '%s' ile kurtarıldı (fallback)", provider)
-                _metric_provider_call(self.role, provider, idx > 0)
+                _metric_provider_call(self.role, provider, idx > 0, duration_s=_elapsed)
                 return result
             except Exception as exc:
                 last_exc = classify_error(exc, provider)
@@ -358,11 +360,12 @@ class LaneLoadBalancer:
             try:
                 _t0 = time.perf_counter()
                 result = client(prompt, system=system) if (system and _accepts_system(client)) else client(prompt)
-                _record_latency(self.stats, label, (time.perf_counter() - _t0) * 1000.0)
+                _elapsed = time.perf_counter() - _t0
+                _record_latency(self.stats, label, _elapsed * 1000.0)
                 self.stats["by_provider"][label] = self.stats["by_provider"].get(label, 0) + 1
                 if idx > 0:
                     self.stats["fallback_count"] += 1
-                _metric_provider_call(self.role, label.split(":")[0], idx > 0)
+                _metric_provider_call(self.role, label.split(":")[0], idx > 0, duration_s=_elapsed)
                 return result
             except Exception as exc:
                 last_exc = classify_error(exc, label)

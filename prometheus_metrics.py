@@ -139,6 +139,15 @@ llm_chain_failure_total = Counter(
     ["role"],
 )
 
+# Model/sağlayıcı bazlı LLM çağrı gecikmesi (saniye) → "hangi model ne kadar hızlı"
+# panelinin temeli. role: small|large, provider: cerebras/gemini/sambanova/...
+llm_call_duration = Histogram(
+    "hardening_llm_call_duration_seconds",
+    "LLM call latency by role and provider",
+    ["role", "provider"],
+    buckets=[0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 15.0, 30.0],
+)
+
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 
@@ -299,11 +308,18 @@ def record_query_outcome(
         rag_verification_confidence.observe(verification_confidence)
 
 
-def record_llm_provider_call(role: str, provider: str, *, was_fallback: bool) -> None:
-    """Record a successful LLM call served by `provider` for `role` (small|large)."""
+def record_llm_provider_call(
+    role: str, provider: str, *, was_fallback: bool, duration_s: float | None = None
+) -> None:
+    """Record a successful LLM call served by `provider` for `role` (small|large).
+
+    `duration_s` verilirse model/sağlayıcı bazlı gecikme histogramına da işlenir.
+    """
     llm_provider_calls_total.labels(role=role, provider=provider).inc()
     if was_fallback:
         llm_fallback_total.labels(role=role).inc()
+    if duration_s is not None and duration_s >= 0:
+        llm_call_duration.labels(role=role, provider=provider).observe(duration_s)
 
 
 def record_llm_chain_failure(role: str) -> None:
