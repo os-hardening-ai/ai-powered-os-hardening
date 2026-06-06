@@ -19,6 +19,8 @@ test_venv/
 # IDE & Editors
 # ====================================
 .claude/
+CLAUDE.md
+AGENTS.md
 .vscode/
 .idea/
 *.swp

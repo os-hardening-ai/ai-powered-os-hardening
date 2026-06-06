@@ -45,6 +45,7 @@ class StreamingAwareGZipMiddleware:
 from api.router_rag import router as rag_router
 from api.router_chat import router as chat_router
 from api.router_health import router as health_router
+from api.router_contact import router as contact_router
 from api.router_analytics import router as analytics_router
 from api.router_openai import router as openai_router
 from api.router_artifacts import router as artifacts_router
@@ -216,6 +217,9 @@ def create_app() -> FastAPI:
 
     # Health check — PUBLIC (liveness/readiness probe'ları için)
     app.include_router(health_router)
+
+    # İletişim formu — PUBLIC (öneri/görüş → e-posta ile ekibe iletilir)
+    app.include_router(contact_router, prefix="/api", tags=["chat"])
 
     # API sürümü — PUBLIC (entegrasyon istemcileri sürüm/sözleşmeyi sorgulayabilsin).
     @app.get("/version", tags=["health"])
