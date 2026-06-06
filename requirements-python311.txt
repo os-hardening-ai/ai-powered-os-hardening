@@ -30,7 +30,7 @@ cohere==5.20.1
 
 # --- Vector DB clients ---
 qdrant-client==1.12.1
-faiss-cpu==1.9.0.post1
+faiss-cpu==1.14.2
 
 # --- Hybrid Retrieval ---
 rank-bm25>=0.2.2  # In-context BM25 scoring for exact keyword/path matching (enhanced RAG)
