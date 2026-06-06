@@ -4,6 +4,13 @@
 
 *Marmara Üniversitesi — Bilgisayar Mühendisliği Bitirme Projesi*
 
+![CI](https://github.com/os-hardening-ai/ai-powered-os-hardening/actions/workflows/ci.yml/badge.svg)
+![Security Scan](https://github.com/os-hardening-ai/ai-powered-os-hardening/actions/workflows/security.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.127-009688)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-1.4.0-blueviolet)
+
 ---
 
 ## Executive Summary
@@ -20,7 +27,7 @@ denetlenebilir bilgi sunar.
 - **Çok-sağlayıcılı LLM + lane yük dengeleme**: **Cerebras** `gpt-oss-120b` + SambaNova + OpenRouter (deepseek/codestral/llama/nova/lfm) + Gemini + Novita. **Round-robin lane load-balancer** (`LLM_SMALL_LANES`/`LLM_LARGE_LANES`) → her lane'in ayrı rate-limit'i, agregat throughput katlanır; **fail-fast fallback** (`max_retries=0`) + per-call timeout. → [docs/18](docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md)
 - **Gelişmiş RAG**: Hybrid BM25+Dense (RRF), MMR reranking, QueryPlanner (HyDE + subquery + stepback — yalnız `complex`'te), FilterAgent (OS/rol çıkarımı), **hafif refinement** (mevcut kaynaklara tek küçük-model düzeltme), **answer cache** (tekrar eden soru → 0 LLM call)
 - **Embedding**: Novita `qwen/qwen3-embedding-8b` (4096 dim)
-- **ML Intent Detection**: 1.677 örnek, %90.48 accuracy, <10ms, yerel inference ($0)
+- **ML Intent Detection**: 5.362 örnek, %93.48 accuracy, <10ms, yerel inference ($0)
 - **Rule Engine + Artifact Generator**: Ubuntu 24.04 (312 kural) + Windows 11 (516 kural); bash/PowerShell/Ansible/REG/GPO üretimi
 - **Gerçek SSE Streaming**: Token-bazlı canlı akış
 - **Monitoring**: Prometheus `/metrics/prometheus`, OpenTelemetry/Jaeger, per-step timing
@@ -29,8 +36,8 @@ denetlenebilir bilgi sunar.
 
 | Metric | Value | Details |
 |--------|-------|---------|
-| **ML Intent Detection** | **%90.48** test accuracy | 1.677 örnek, 7 kategori |
-| **Cross-Validation** | %82.10 (±3.46%) | 5-fold CV |
+| **ML Intent Detection** | **%93.48** test accuracy | 5.362 örnek, 7 kategori |
+| **Cross-Validation** | %91.68 (±0.97%) | 5-fold CV |
 | **Tek LLM çağrısı** | **~1.36s** | Cerebras gpt-oss-120b (özel donanım) |
 | **Agent plan / harden (medyan)** | **~3.55s / ~4.62s** | H3 hedefi <5sn — çözüldü (eski ~128-148s) |
 | **RAG retrieval** | ~1-2.5s | Qdrant embed + hybrid + MMR |
@@ -38,7 +45,7 @@ denetlenebilir bilgi sunar.
 | **Maliyet** | ~$0 | Cerebras ücretsiz tier (1M token/gün) |
 | **Quota optimizasyonu** | **~4× hız, 0 timeout** | Eval v1→v3: ort 21.7s→**7.0s**, p95 75s→**23s**, %73→**%100** başarı ([docs/18](docs/18_QUOTA_VE_PERFORMANS_OPTIMIZASYONU.md)) |
 | **Hot-path LLM call** | **6 → ~1** | Yerel safety + verify-off + QueryPlanner-complex-only + answer cache |
-| **Birim test** | **790 geçiyor** | + CI eval-regresyon kapısı (intent baseline) |
+| **Birim test** | **791 geçiyor** | + CI eval-regresyon kapısı (intent baseline) |
 
 > H1/H3 ölçüm detayları: [docs/14_DEGERLENDIRME.md](docs/14_DEGERLENDIRME.md)
 
@@ -250,7 +257,7 @@ ai-powered-os-hardening/
 
 **Auth / Security**: JWT (PyJWT, HS256) · bcrypt · RBAC (4 rol) · SQLite (users + audit_log) · kullanıcı-bazlı rate limit · güvenlik header'ları · input validation
 
-**ML**: Logistic Regression + TF-IDF, %90.48 accuracy, 5-10ms, $0
+**ML**: Logistic Regression + TF-IDF, %93.48 accuracy, 5-10ms, $0
 
 **Test**: pytest — 516 unit test + integration
 
@@ -315,6 +322,14 @@ Detay: [docs/13_GUVENLIK.md](docs/13_GUVENLIK.md)
 
 ## Changelog
 
+> Tam ve kanonik changelog: [CHANGELOG.md](CHANGELOG.md)
+
+### v1.4.0 — Ürünleşme & Entegrasyon (2026-06-06)
+- ✅ **Partner API-key (M2M)** + `/version` ucu + OpenAI-uyumlu sözleşme + onboarding script (`scripts/gen_partner_key.py`)
+- ✅ **CI/CD**: testler + niyet eval-gate · güvenlik taraması (pip-audit/Trivy/gitleaks) · Compose-native SSH deploy · Dependabot
+- ✅ **Gözlemlenebilirlik**: model-bazlı LLM dashboard + RAG kalite panelleri; Disk/CPU panel + alarm düzeltmeleri; e-posta alarm
+- ✅ **Güvenlik/Sağlamlık**: bağımlılık bump (requests≥2.33 / pytest≥9.0.3 / aiohttp≥3.14), SECURITY.md, ADR, `/ready` probe, docker kaynak limitleri
+
 ### v1.3.0 — Security & Refinement (2026-05-31)
 - ✅ **JWT Authentication + RBAC** (4 rol) + **Audit Log** (SQLite) + **kullanıcı-bazlı rate limit**; X-API-Key kaldırıldı
 - ✅ **Cevap-groundedness refinement loop** (düşük confidence → genişlet + yeniden üret)
@@ -334,4 +349,4 @@ Detay: [docs/13_GUVENLIK.md](docs/13_GUVENLIK.md)
 ---
 
 **Marmara Üniversitesi — Bilgisayar Mühendisliği Bitirme Projesi**
-**Last Updated**: 2026-05-31 · **Version**: v1.3.0 · **Status**: Demo-Ready (production için HTTPS + JWT_SECRET)
+**Last Updated**: 2026-06-06 · **Version**: v1.4.0 · **Status**: Production (canlı: hardeningai.site · CI + güvenlik taraması aktif)

@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "AI-Powered OS Hardening",
-    "version": "1.0.0",
+    "version": "1.4.0",
     "env": "dev",
     "language": "tr",
     "debug": true,
