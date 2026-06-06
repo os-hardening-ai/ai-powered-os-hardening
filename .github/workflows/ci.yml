@@ -1,8 +1,8 @@
-name: CI — Tests + Eval Gate
+name: CI
 
-# Eval-direksiyonunu OTOMATİKLEŞTİRİR: her PR/push'ta 775 birim testi + intent eval REGRESYON
-# KAPISI koşar. Hepsi OFFLINE (sahte LLM + TF-IDF) → API anahtarı GEREKMEZ, $0, deterministik.
-# "İntent/route doğruluğu düşeren commit merge edilmez" kuralı artık makineyle zorlanır.
+# Her push ve PR'da: cevrimdisi birim testleri + niyet regresyon kapisi.
+# Gercek API cagrisi YAPILMAZ (fake LLM + TF-IDF intent); dummy key'ler yalniz
+# config dogrulamasini (non-empty) gecmek icindir.
 
 on:
   push:
@@ -11,40 +11,27 @@ on:
     branches: [main]
 
 jobs:
-  test-and-eval:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     env:
+      INTENT_ROUTER: tfidf
+      LLM_PROVIDER: cerebras
+      CEREBRAS_API_KEY: ci-dummy
+      NOVITA_API_KEY: ci-dummy
+      OTEL_SDK_DISABLED: "1"
+      JWT_SECRET: ci-test-secret-min-32-characters-long-xx
       PYTHONIOENCODING: utf-8
-      INTENT_ROUTER: tfidf          # eval/test deterministik TF-IDF (embedding/ağ yok)
-      # NOT: ANSWER_CACHE_TTL_S set ETME — cache-hit testi cache'in AÇIK olmasını bekler.
-      # Config loader birincil sağlayıcı için NON-EMPTY anahtar ister (import-time validasyon).
-      # Testler SAHTE LLM kullanır → bu dummy'ler GERÇEK çağrıda KULLANILMAZ, sadece config geçsin diye.
-      CEREBRAS_API_KEY: ci-dummy-not-used
-      SAMBANOVA_API_KEY: ci-dummy-not-used
-      OPENROUTER_API_KEY: ci-dummy-not-used
-      NOVITA_API_KEY: ci-dummy-not-used
-      QDRANT_API_KEY: ci-dummy-not-used
-      QDRANT_URL: http://localhost:6333
-      LLM_SMALL_LANES: ""            # CI'da lane balancer kapalı (gerçek client kurma) → fake LLM
-      LLM_LARGE_LANES: ""
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
-
-      - name: Install dependencies
+      - name: Bagimliliklari kur
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-python311.txt
-
-      - name: Unit tests (775, offline — sahte LLM)
-        run: python -m pytest tests/unit/ -q -p no:cacheprovider
-
-      - name: Intent eval REGRESYON KAPISI (offline, $0)
-        # Doğruluk baseline'ın altına düşerse / bir örnek DOĞRU→YANLIŞ olursa exit 1 → CI kırmızı.
+          pip install -r requirements.txt
+      - name: Birim testleri (cevrimdisi)
+        run: pytest tests/unit -q
+      - name: Niyet regresyon kapisi (eval-gate)
         run: python -m evaluation.intent_eval --check
