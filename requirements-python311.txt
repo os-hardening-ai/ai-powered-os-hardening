@@ -6,7 +6,7 @@ pydantic-settings==2.6.1
 python-dotenv==1.2.2
 
 # --- HTTP / Utils ---
-requests==2.32.4
+requests==2.33.0  # Dependabot: <2.33.0 güvenlik açığı
 httpx==0.27.2
 orjson==3.11.6
 tenacity==8.5.0
@@ -44,8 +44,8 @@ redis>=5.0.0  # Embedding cache (embedding_cache.py)
 # --- PDF read (tekini seç: PyMuPDF yeter) ---
 PyMuPDF==1.24.14
 pymupdf4llm
-pytest==8.3.3
-pytest-asyncio==0.24.0
+pytest==9.0.3  # Dependabot: <9.0.3 güvenlik açığı
+pytest-asyncio>=1.0.0  # pytest 9 uyumu
 rich==13.9.4
 
 # opsiyonel görselleştirme

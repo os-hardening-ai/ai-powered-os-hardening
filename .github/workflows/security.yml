@@ -1,0 +1,57 @@
+name: Security Scan
+
+# Bagimlilik / secret / imaj guvenlik taramasi. Ilk asama RAPOR-ONLY (continue-on-error)
+# — tarihsel/transitive bulgular PR'lari bloklamasin; olgunlasinca exit-code'lari sikilastirin.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"   # haftalik (Pazartesi 06:00 UTC)
+
+permissions:
+  contents: read
+
+jobs:
+  deps:
+    name: Bagimlilik aciklari (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - name: pip-audit (requirements.txt)
+        continue-on-error: true
+        run: pip-audit -r requirements.txt --desc
+
+  secrets:
+    name: Secret taramasi (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  image:
+    name: Imaj taramasi (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Imaji derle
+        run: docker build -t hardening-api:scan .
+      - name: Trivy
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          image-ref: hardening-api:scan
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"
