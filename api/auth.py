@@ -132,6 +132,14 @@ async def get_current_user(
     token = _extract_token(request, creds)
     if not token:
         raise _unauthorized("Kimlik doğrulama gerekli: 'Authorization: Bearer <token>'.")
+
+    # Partner (M2M) API anahtarı — JWT'den önce dene (sunucudan-sunucuya servis hesabı).
+    from api.api_keys import resolve_api_key
+    svc_user = resolve_api_key(token)
+    if svc_user is not None:
+        request.state.user = svc_user
+        return svc_user
+
     payload = decode_token(token)
 
     jti = payload.get("jti")
