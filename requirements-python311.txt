@@ -45,7 +45,7 @@ redis>=5.0.0  # Embedding cache (embedding_cache.py)
 PyMuPDF==1.24.14
 pymupdf4llm
 pytest==9.0.3  # Dependabot: <9.0.3 güvenlik açığı
-pytest-asyncio>=1.0.0  # pytest 9 uyumu
+pytest-asyncio>=1.4.0  # pytest 9 uyumu
 rich==13.9.4
 
 # opsiyonel görselleştirme
