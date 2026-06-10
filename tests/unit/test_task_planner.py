@@ -173,6 +173,38 @@ class TestRelevanceRanking:
         assert "1.1.3" in captured["prompt"]
 
 
+class TestRelevanceFloor:
+    """Katalog-miss (relevance floor): hedefe uygun CIS kuralı yoksa ALAKASIZ kural
+    üretme. LLM '[]' + leksik örtüşme yok → boş plan + 'no_relevant_rules' (HardeningAgent
+    bunu görüp serbest-form üretime yönlendirir). Regresyon: in-catalog/jenerik bozulmaz."""
+
+    def test_out_of_catalog_with_llm_empty_returns_no_relevant(self, engine):
+        # "apache www html" katalogda yok + LLM '[]' (hiç ilgili kural yok) → katalog-miss
+        planner = TaskPlanner(rule_engine=engine, llm_fn=lambda _p: "[]")
+        plan = planner.plan("apache www html dosyalarını sıkılaştır", security_level="balanced")
+        assert plan.items == []
+        assert "no_relevant_rules" in plan.warnings
+
+    def test_in_catalog_goal_not_flagged_even_if_llm_empty(self, engine):
+        # "ssh" katalogda VAR (leksik örtüşme) → LLM '[]' dese bile katalog-miss DEĞİL
+        planner = TaskPlanner(rule_engine=engine, llm_fn=lambda _p: "[]")
+        plan = planner.plan("ssh sıkılaştır", security_level="balanced")
+        assert "no_relevant_rules" not in plan.warnings
+        assert plan.items  # ssh kuralları döner (recall korunur)
+
+    def test_out_of_catalog_without_llm_keeps_old_recall(self, engine):
+        # LLM yok → katalog-miss tespiti YAPILMAZ (offline/jenerik güvenli) → eski davranış
+        planner = TaskPlanner(rule_engine=engine, llm_fn=None)
+        plan = planner.plan("apache www html sıkılaştır", security_level="balanced")
+        assert "no_relevant_rules" not in plan.warnings
+
+    def test_rule_relevance_scores(self):
+        from llm.agents.task_planner import _rule_relevance, _expand, _tokenize
+        toks = _expand(_tokenize("ssh sıkılaştır"))
+        assert _rule_relevance(toks, {"title": "Disable SSH root login", "category": "ssh"}) > 0
+        assert _rule_relevance(toks, {"title": "Disable unused filesystem", "category": "filesystem"}) == 0
+
+
 class TestSerialization:
     def test_to_dict(self, engine):
         plan = TaskPlanner(rule_engine=engine, llm_fn=None).plan("ssh", security_level="balanced")

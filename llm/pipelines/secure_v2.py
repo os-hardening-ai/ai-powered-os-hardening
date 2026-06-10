@@ -294,6 +294,22 @@ class SecurePipelineV2:
             intent.type = "out_of_scope"
             intent.metadata["scope_override"] = "safety_off_topic"
 
+        # ─── GÜVENLİK MATRİSİ (Layer-3 dal izni) ────────────────────────────────────
+        # Script üretimi (3C) yalnız AÇIKÇA SAVUNMACI niyete (safe_defensive) açıktır.
+        # Net savunma olmayan bir action_request:
+        #   • safe_educational → bilgi hattına (3B) düşür (açıkla, ÜRETME).
+        #   • ambiguous vb.     → 'needs_clarification' → niyeti netleştirmesini iste.
+        # Whack-a-mole DEĞİL: kelimeye bakmaz, "net savunma değilse script üretme" der →
+        # "hacking?", "yetkisiz giriş?" gibi muğlak/saldırı-bitişik action'lar 3C'ye giremez.
+        # (Açık saldırgan niyet zaten Layer-1'de unsafe_offensive ile reddedilir.)
+        if intent.type == "action_request" and safety_result.category != "safe_defensive":
+            if safety_result.category == "safe_educational":
+                intent.type = "info_request"
+                intent.metadata["action_downgraded"] = "educational_to_info"
+            else:
+                intent.type = "needs_clarification"
+                intent.metadata["action_downgraded"] = "ambiguous_needs_clarification"
+
         # ─────────────────────────────────────────────
         # LAYER 3: ROUTING
         # ─────────────────────────────────────────────
@@ -305,6 +321,11 @@ class SecurePipelineV2:
                 # Out-of-scope: Polite rejection
                 result = self._handle_out_of_scope(ctx, safety_result, intent)
                 self.stats["pattern_responses"] += 1  # No cost, like pattern responses
+
+            elif intent.type == "needs_clarification":
+                # Güvenlik matrisi: net-savunma olmayan action → netleştirme iste (3C YOK)
+                result = self._handle_needs_clarification(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1
 
             elif intent.type == "smalltalk":
                 # Layer 3A: Pattern Responder
@@ -579,6 +600,38 @@ Lutfen guvenlik veya sistem sikilaştirma ile ilgili bir soru sorun."""
             }
         )
 
+    def _handle_needs_clarification(
+        self,
+        ctx: RequestContext,
+        safety: SafetyResult,
+        intent: Intent
+    ) -> PipelineResult:
+        """Güvenlik matrisi: action niyeti AMA güvenlik kategorisi 'net savunma' DEĞİL
+        (ambiguous vb.). Script ÜRETMEZ → kullanıcıdan niyeti netleştirmesini ister.
+        (3C yalnız safe_defensive'e açıktır; açık saldırgan niyet zaten Layer-1'de reddedilir.)"""
+        message = """NIYET NETLESTIRME GEREKIYOR
+
+Isteginiz savunma amacli bir sikilastirma talebi olarak net degil; bu nedenle script uretmiyorum.
+Bu sistem yalnizca SAVUNMA amacli guvenlik sikilastirma icin script uretir.
+
+Lutfen ne yapmak istediginizi acik ve savunma-odakli belirtin, ornek:
+- "Ubuntu 24.04'te SSH'i CIS'e gore sikilastiran bir script uret"
+- "Windows 11 parola politikasini sertlestir"
+- "ufw firewall kurallarini CIS Level 1'e gore uygula\""""
+        return PipelineResult(
+            success=True,  # hata degil — kullanicidan netlik isteniyor
+            answer=message,
+            layer_path="1→2→CLARIFY",
+            safety=safety,
+            intent=intent,
+            total_time_s=0.0,
+            estimated_cost=0.0001,
+            metadata={
+                "reason": "needs_clarification",
+                "downgraded": intent.metadata.get("action_downgraded", ""),
+            }
+        )
+
     def _build_rejection_message(self, safety: SafetyResult) -> str:
         """Build user-friendly rejection message for unsafe queries"""
         # Fail-closed (classifier unavailable) → honest "service" message, not a
@@ -678,6 +731,16 @@ Lutfen sorunuzu savunma odakli olacak sekilde yeniden ifade edin.
             intent.type = "info_request"
             intent.metadata["scope_override"] = "safety_semantic"
 
+        # Güvenlik matrisi (run() ile aynı): script üretimi (3C) yalnız safe_defensive'e açık.
+        # Net savunma değilse action → safe_educational ise 3B, değilse netleştirme.
+        if intent.type == "action_request" and safety_result.category != "safe_defensive":
+            if safety_result.category == "safe_educational":
+                intent.type = "info_request"
+                intent.metadata["action_downgraded"] = "educational_to_info"
+            else:
+                intent.type = "needs_clarification"
+                intent.metadata["action_downgraded"] = "ambiguous_needs_clarification"
+
         # ── Layer 3: Routing ─────────────────────────────────────────────────────
         layer3_start = datetime.now()
 
@@ -706,6 +769,14 @@ Lutfen sorunuzu savunma odakli olacak sekilde yeniden ifade edin.
         with layer_timer("3"):
             if intent.type == "out_of_scope":
                 r = self._handle_out_of_scope(ctx, safety_result, intent)
+                self.stats["pattern_responses"] += 1
+                yield {"type": "pre_gen", "meta": _base_meta(r.layer_path), "sources": None}
+                yield {"type": "token", "content": r.answer}
+                result = r
+
+            elif intent.type == "needs_clarification":
+                # Güvenlik matrisi: net-savunma olmayan action → netleştirme (3C YOK)
+                r = self._handle_needs_clarification(ctx, safety_result, intent)
                 self.stats["pattern_responses"] += 1
                 yield {"type": "pre_gen", "meta": _base_meta(r.layer_path), "sources": None}
                 yield {"type": "token", "content": r.answer}

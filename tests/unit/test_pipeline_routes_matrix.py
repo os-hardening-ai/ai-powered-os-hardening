@@ -26,6 +26,7 @@ pytestmark = pytest.mark.unit
 SAFE = '{"category": "safe_defensive", "confidence": 0.95, "reason": "hardening"}'
 UNSAFE = '{"category": "unsafe_offensive", "confidence": 0.93, "reason": "exploit/attack"}'
 AMBIGUOUS = '{"category": "ambiguous", "confidence": 0.55, "reason": "unclear/non-security"}'
+SAFE_EDU = '{"category": "safe_educational", "confidence": 0.8, "reason": "security learning"}'
 OFF_TOPIC = '{"category": "off_topic", "confidence": 0.9, "reason": "alan-dışı genel soru"}'
 
 # Gerçek Layer-1 LLM gibi davranan fake: net güvenlik-DIŞI konular (hava/math/eğlence) →
@@ -220,6 +221,51 @@ class TestRouteFidelity:
         # sızıyordu; off_topic kapısı bunu kapatır.)
         res = safe_pipeline.run(RequestContext(user_question="2+2 kaç eder"))
         assert "OUT_OF_SCOPE" in res.layer_path, f"→ {res.layer_path}"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# A2) GÜVENLİK MATRİSİ — script üretimi (3C) yalnız safe_defensive'e açık
+# ════════════════════════════════════════════════════════════════════════════
+class TestSafetyMatrix:
+    """Net savunma olmayan action_request 3C'ye GİREMEZ: safe_educational → 3B (açıkla),
+    ambiguous vb. → CLARIFY (netleştir). Açık saldırgan zaten 1→REJECT."""
+
+    def _pipe(self, verdict):
+        return SecurePipelineV2(
+            llm_ultra_fast=fake_ultra(verdict), llm_small=fake_small,
+            llm_large=fake_large, rag_builder=None, debug=False,
+        )
+
+    def _force_action(self, pipe):
+        # intent'i action_request'e sabitle → matris kararını izole test et (fast_local'i de
+        # atlamak için güvenlik-terimsiz sorgu kullanılır → fake safety verdict devreye girer)
+        import types
+        pipe.intent_detector = types.SimpleNamespace(
+            detect=lambda q: types.SimpleNamespace(
+                type="action_request", subtype="", confidence=0.9, metadata={}))
+
+    def test_ambiguous_action_to_clarify_not_3c(self):
+        pipe = self._pipe(AMBIGUOUS)
+        self._force_action(pipe)
+        res = pipe.run(RequestContext(user_question="bana sunu yap",
+                                      os="ubuntu_24_04", role="sysadmin", security_level="balanced"))
+        assert "CLARIFY" in res.layer_path, res.layer_path
+        assert "3C" not in res.layer_path
+
+    def test_educational_action_downgraded_to_3b(self):
+        pipe = self._pipe(SAFE_EDU)
+        self._force_action(pipe)
+        res = pipe.run(RequestContext(user_question="bana sunu anlat",
+                                      os="ubuntu_24_04", role="sysadmin", security_level="balanced"))
+        assert "3B" in res.layer_path, res.layer_path
+        assert "3C" not in res.layer_path
+
+    def test_defensive_action_still_to_3c(self):
+        pipe = self._pipe(SAFE)
+        self._force_action(pipe)
+        res = pipe.run(RequestContext(user_question="ssh hardening",
+                                      os="ubuntu_24_04", role="sysadmin", security_level="balanced"))
+        assert "3C" in res.layer_path, res.layer_path
 
 
 # ════════════════════════════════════════════════════════════════════════════

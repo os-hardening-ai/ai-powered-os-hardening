@@ -208,6 +208,30 @@ def _get_llm_clients():
     return _llm_small, _llm_large
 
 
+# İndekste yalnız şu OS sürümleri var: ubuntu_24_04, windows_11, windows_server_2025
+# (YAML kuralları + CIS chunk'ları). Kullanıcı indekslenmemiş bir sürüm seçerse (ör.
+# ubuntu_22_04), RAG os_version filtresi 0 sonuç verir → soft-fallback filtreyi düşürür →
+# YANLIŞ OS (ör. Windows) içeriği sızar. Önlem: seçimi EN YAKIN İNDEKSLİ AYNI-AİLE sürüme
+# eşliyoruz (api-katmanı girdi normalizasyonu; rag/ değişmez). ctx.os kullanıcının seçimi
+# olarak KALIR — yalnız RAG retrieval filtresi normalize edilir.
+_INDEXED_OS = {"ubuntu_24_04", "windows_11", "windows_server_2025"}
+
+
+def _normalize_os_for_index(os_value: Optional[str]) -> Optional[str]:
+    """OS seçimini RAG için en yakın İNDEKSLİ aynı-aile sürüme eşle (cross-OS sızıntısını
+    önler). İndeksli değer aynen; tanınmayan değer de aynen (RAG kendi fallback'ini yapar)."""
+    if not os_value or os_value in _INDEXED_OS:
+        return os_value
+    v = os_value.lower()
+    if "windows" in v and "server" in v:
+        return "windows_server_2025"
+    if "windows" in v or v.startswith("win"):
+        return "windows_11"
+    if "ubuntu" in v or "debian" in v or "linux" in v:
+        return "ubuntu_24_04"
+    return os_value  # tanınmayan (ör. macos) → aynen
+
+
 def get_llm_client_provider_stats() -> dict:
     """Cached singleton LLM balancer'ın GERÇEK kümülatif provider/lane dağılımı.
 
@@ -359,7 +383,7 @@ async def _run_pipeline(
     rag_builder = None
     if payload.use_rag:
         try:
-            _os_for_rag = payload.os or inferred_os or None
+            _os_for_rag = _normalize_os_for_index(payload.os or inferred_os or None)
             rag_builder = RAGContextBuilder(
                 top_k=payload.rag_top_k,
                 min_score=payload.rag_min_score,
@@ -568,7 +592,7 @@ async def chat_stream(payload: ChatRequest, request: Request):
                 rag_builder = RAGContextBuilder(
                     top_k=payload.rag_top_k,
                     min_score=payload.rag_min_score,
-                    os_version=payload.os or inferred_os or None,
+                    os_version=_normalize_os_for_index(payload.os or inferred_os or None),
                 )
             except Exception as e:
                 _conv_logger.warning("[stream] RAG builder failed: %s", e)
@@ -794,7 +818,7 @@ async def _prepare_fast(payload: "ChatRequest") -> dict:
             rag_builder = RAGContextBuilder(
                 top_k=payload.rag_top_k,
                 min_score=payload.rag_min_score,
-                os_version=payload.os or inferred_os or None,
+                os_version=_normalize_os_for_index(payload.os or inferred_os or None),
             )
         except Exception as e:
             _conv_logger.warning("[ChatAPI][fast] RAG init failed: %s", e)

@@ -100,6 +100,17 @@ def _expand(tokens: set) -> set:
     return expanded
 
 
+def _rule_relevance(goal_tokens: set, rule: dict) -> int:
+    """Kuralın hedefle leksik örtüşme skoru (ortak token sayısı). 0 = alakasız."""
+    hay = _tokenize(" ".join([
+        str(rule.get("title", "")),
+        str(rule.get("category", "")),
+        " ".join(rule.get("tags", []) or []),
+        str(rule.get("description", "")),
+    ]))
+    return len(goal_tokens & hay)
+
+
 @dataclass
 class PlanItem:
     rule_id: str
@@ -174,12 +185,34 @@ class TaskPlanner:
         # 0) Adayları hedefe göre alaka sırasına diz ve LLM prompt'u için kıs.
         #    (Tüm level kuralları sıralanır → bölüm-sırası kaynaklı "ilk 60" hatası
         #     ortadan kalkar; SSH gibi geç bölümdeki kurallar da aday olabilir.)
+        goal_tokens = _expand(_tokenize(goal))
         llm_pool = self._rank_candidates(goal, candidates)[:_LLM_CANDIDATES]
 
-        # 1) LLM ile seçim + önceliklendirme (varsa)
-        selections = self._llm_select(goal, llm_pool) if self.llm else {}
+        # 1) LLM ile seçim + önceliklendirme (varsa). parsed_ok = LLM geçerli JSON üretti mi.
+        selections, llm_parsed_ok = (
+            self._llm_select(goal, llm_pool) if self.llm else ({}, False)
+        )
 
-        # 2) Seçilen kural id'leri (LLM boşsa → alaka-sıralı havuz)
+        # ── ALAKA TABANI (relevance floor) — katalog-miss tespiti ───────────────────
+        # Katalog-miss = LLM VAR + "hiç ilgili kural yok" ([]) dedi + hedef katalogla
+        # leksik olarak da örtüşmüyor (apache/nginx/docker gibi katalog-DIŞI iş). Bu durumda
+        # ALAKASIZ kural dökmek yerine boş plan + 'no_relevant_rules' dön; HardeningAgent bunu
+        # görüp serbest-form (LLM) üretime yönlendirir ("CIS kuralı yoksa LLM'den üret").
+        # NOT: self.llm yoksa (offline/test) eski recall davranışı korunur → jenerik hedefler
+        # ("tüm sıkılaştırma", "hepsi") yanlışlıkla katalog-dışı sayılmaz.
+        catalog_relevant = (
+            any(_rule_relevance(goal_tokens, r) > 0 for r in candidates) if goal_tokens else True
+        )
+        if self.llm and llm_parsed_ok and not selections and not catalog_relevant:
+            return HardeningPlan(
+                goal=goal, os_target=os_target, security_level=security_level,
+                summary=f"'{goal}' için katalogda uygun CIS kuralı bulunamadı "
+                        "(katalog OS-seviyesi sıkılaştırmayı kapsar; katalog-dışı istek "
+                        "serbest-form üretilir).",
+                warnings=["no_relevant_rules"],
+            )
+
+        # 2) Seçilen kural id'leri (LLM boşsa → alaka-sıralı havuz, recall korunur).
         if selections:
             selected_ids = [rid for rid in selections if self.rule_engine.get_rule(rid)]
         else:
@@ -243,22 +276,14 @@ class TaskPlanner:
         if not goal_tokens:
             return list(candidates)
 
-        def _score(rule: dict) -> int:
-            hay = _tokenize(" ".join([
-                str(rule.get("title", "")),
-                str(rule.get("category", "")),
-                " ".join(rule.get("tags", []) or []),
-                str(rule.get("description", "")),
-            ]))
-            return len(goal_tokens & hay)
-
         # Stabil sıralama: yüksek skor önce, eşitlikte orijinal sıra (CIS bölüm no).
         indexed = list(enumerate(candidates))
-        indexed.sort(key=lambda pair: (-_score(pair[1]), pair[0]))
+        indexed.sort(key=lambda pair: (-_rule_relevance(goal_tokens, pair[1]), pair[0]))
         return [rule for _, rule in indexed]
 
-    def _llm_select(self, goal: str, candidates: List[dict]) -> Dict[str, dict]:
-        """LLM'e adayları verir; hedefe uygun seçim + önceliklendirme JSON'u alır."""
+    def _llm_select(self, goal: str, candidates: List[dict]) -> "tuple[Dict[str, dict], bool]":
+        """LLM'e adayları verir; (seçim_dict, parsed_ok) döndürür. parsed_ok=True →
+        LLM geçerli JSON dizisi üretti (boş [] = 'hiç ilgili kural yok')."""
         catalog = "\n".join(
             f"- {r['id']}: {r.get('title', '')}" for r in candidates
         )
@@ -270,11 +295,13 @@ class TaskPlanner:
             "Sadece geçerli JSON dizisi döndür (markdown yok). Her öğe:\n"
             '{"rule_id": "<id>", "priority": 1-5, "risk": "low|medium|high", '
             '"rationale": "tek cümle gerekçe"}\n'
-            "priority 1 = en kritik/önce uygulanmalı. Yalnızca hedefle ilgili kuralları dahil et."
+            "priority 1 = en kritik/önce uygulanmalı. Yalnızca hedefle ilgili kuralları dahil et.\n"
+            "Hedefle ilgili HİÇBİR kural yoksa (ör. katalog-dışı bir konu) BOŞ dizi [] döndür; "
+            "ASLA alakasız kural ekleme."
         )
         try:
             raw = self.llm(prompt)  # type: ignore[misc]
-            items = _parse_json_array(raw)
+            items, parsed_ok = _parse_json_array(raw)
             result: Dict[str, dict] = {}
             for it in items:
                 rid = str(it.get("rule_id", "")).strip()
@@ -282,18 +309,21 @@ class TaskPlanner:
                     result[rid] = it
             if self.debug:
                 logger.info("[TaskPlanner] LLM %d kural seçti", len(result))
-            return result
+            return result, parsed_ok
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("[TaskPlanner] LLM seçimi başarısız, deterministik fallback: %s", exc)
-            return {}
+            return {}, False
 
 
-def _parse_json_array(text: str) -> List[dict]:
+def _parse_json_array(text: str) -> "tuple[List[dict], bool]":
+    """(öğeler, parsed_ok) döndürür. parsed_ok=True → metin GEÇERLİ bir JSON dizisi
+    içeriyordu (boş [] olsa bile = LLM bilerek 'hiç kural yok' dedi). False → dizi
+    bulunamadı / JSON bozuk (LLM seçim formatı üretmedi → katalog-miss SAYILMAZ)."""
     match = re.search(r"\[.*\]", text, re.DOTALL)
     if not match:
-        return []
+        return [], False
     try:
         data = json.loads(match.group())
-        return [d for d in data if isinstance(d, dict)]
+        return [d for d in data if isinstance(d, dict)], True
     except (json.JSONDecodeError, TypeError):
-        return []
+        return [], False
