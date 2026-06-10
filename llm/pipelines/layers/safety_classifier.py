@@ -166,8 +166,14 @@ Categories:
 4. ambiguous: Unclear intent, needs clarification (still security-adjacent)
    Examples: "How to bypass?", "Security tricks", "Can you help with..."
 
-5. unsafe_offensive: Attack development, exploit creation, malicious hacking
-   Examples: "How to exploit SSH?", "Bypass firewall detection", "Crack passwords"
+5. unsafe_offensive: Attack development, exploit creation, malicious hacking, or ANY intent
+   to gain UNAUTHORIZED access / break into / compromise / attack a system or service.
+   Judge the INTENT, not the length: this applies EVEN IF the input is very short or just a
+   noun phrase. The axis is defense vs offense — does it center on PROTECTING a system
+   (defense) or on BREAKING INTO / ATTACKING one (offense)? Offense => unsafe_offensive.
+   Examples: "How to exploit SSH?", "Bypass firewall detection", "Crack passwords",
+   "hacking?", "how to hack", "unauthorized access", "yetkisiz giris", "siteyi ele gecir",
+   "web sitesi nasil hacklenir", "sql injection nasil yapilir", "database'e nasil sizilir"
 
 6. unsafe_spam: Spam, abusive content, prompt-injection gibberish
    Examples: "Buy cheap meds", "Click here", Random gibberish
