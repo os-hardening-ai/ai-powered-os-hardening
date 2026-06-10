@@ -166,7 +166,12 @@ class HardeningAgent:
         # Kullanıcı katalogda karşılığı OLMAYAN özel bir iş istediyse (ör. "dev grubu
         # oluştur") katalog kuralları dökmek yerine SERBEST-FORM script üret. Heuristik
         # deterministik (LLM'siz); şüphede KATALOG kalır (mevcut davranış bozulmaz).
-        if _is_catalog_miss(goal, plan):
+        # Katalog-miss → serbest-form (LLM) üretim. İki sinyal:
+        #  (a) operasyonel iş heuristiği (grup/kullanıcı oluştur vb.), VEYA
+        #  (b) TaskPlanner alaka tabanı: hedefe uygun CIS kuralı yok ('no_relevant_rules').
+        #      (apache/nginx/docker gibi katalog-dışı talepler → alakasız kural dökmek yerine
+        #       hedefe-özel script LLM'den üretilir; güvenlik kapısı + bash -n yine uygulanır.)
+        if _is_catalog_miss(goal, plan) or "no_relevant_rules" in (plan.warnings or []):
             return self._run_freeform(goal, os_target, security_level, fmt, plan, steps)
 
         if not plan.items:
