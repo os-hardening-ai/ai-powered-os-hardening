@@ -273,7 +273,9 @@ class ActionPipeline:
         validation = self.validator.validate(
             output=script,
             intent="action_request",
-            use_deep_check=_USE_DEEP_CHECK,  # (c) judge+correction config-flag'le
+            # (c) judge+correction: env (ENABLE_JUDGE_STEP) VE per-request opt-in (deep_validate,
+            # default KAPALI) birlikte. Statik güvenlik regex'i validate() içinde HER ZAMAN çalışır.
+            use_deep_check=_USE_DEEP_CHECK and getattr(ctx, "deep_validate", False),
         )
 
         if not validation.is_valid:
@@ -692,8 +694,12 @@ class ActionPipeline:
         except Exception:
             pass
 
-        # Step 2D: Output doğrulama (c) — judge+correction _USE_DEEP_CHECK ile (statik regex her zaman)
-        validation = self.validator.validate(output=script, intent="action_request", use_deep_check=_USE_DEEP_CHECK)
+        # Step 2D: Output doğrulama — judge+correction env VE per-request opt-in (deep_validate)
+        # birlikte; statik güvenlik regex'i HER ZAMAN. Default KAPALI (deep_validate=False).
+        validation = self.validator.validate(
+            output=script, intent="action_request",
+            use_deep_check=_USE_DEEP_CHECK and getattr(ctx, "deep_validate", False),
+        )
         if not validation.is_valid:
             if validation.corrected_output:
                 script = validation.corrected_output

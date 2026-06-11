@@ -294,10 +294,11 @@ class InfoPipeline:
             estimated_cost = 0.0
         _t["llm_gen_s"] = (datetime.now() - _t0).total_seconds()
 
-        # Claim verification + REFINEMENT LOOP (only when RAG was used)
+        # Claim verification + REFINEMENT LOOP (only when RAG was used AND opt-in açıksa).
+        # verify_claims default KAPALI — açıldığında ~15s ekler (hız↔groundedness tradeoff).
         verification_confidence: float | None = None
         unsupported_claims: list = []
-        if self.claim_verifier is not None and raw_results_for_verify:
+        if self.claim_verifier is not None and raw_results_for_verify and getattr(ctx, "verify_claims", False):
             try:
                 _t0 = datetime.now()
                 vr = self.claim_verifier.verify(result, raw_results_for_verify)

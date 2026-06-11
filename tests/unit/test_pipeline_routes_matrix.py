@@ -367,6 +367,8 @@ class TestInfoRagDecision:
 # B3) INFO ALT-YOLU — groundedness refinement (gerekli İYİLEŞTİRME alıyor mu?)
 # ════════════════════════════════════════════════════════════════════════════
 class TestInfoRefinement:
+    # NOT: ClaimVerifier artık OPT-IN (ctx.verify_claims, default kapalı — hız↔groundedness
+    # tradeoff). Bu testler özelliği test ettiğinden ctx'lerinde verify_claims=True geçer.
     def _ip(self, verifier, **kw):
         return InfoPipeline(
             llm_small=fake_small, llm_large=fake_large, rag_builder=FakeRAG(n=3),
@@ -377,7 +379,7 @@ class TestInfoRefinement:
         # İlk doğrulama 0.30 (<0.55) → refine → ikinci 0.80 → daha iyiyi tut
         v = FakeVerifier([0.30, 0.80])
         ip = self._ip(v)
-        r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır"))
+        r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır", verify_claims=True))
         assert ip.stats["refine_count"] == 1
         assert v.calls == 2  # ilk + refine sonrası yeniden doğrulama
         assert r.verification_confidence == pytest.approx(0.80)
@@ -385,7 +387,7 @@ class TestInfoRefinement:
     def test_high_confidence_no_refine(self):
         v = FakeVerifier([0.90])
         ip = self._ip(v)
-        r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır"))
+        r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır", verify_claims=True))
         assert ip.stats["refine_count"] == 0
         assert r.verification_confidence == pytest.approx(0.90)
 
@@ -394,7 +396,7 @@ class TestInfoRefinement:
         # (Yeni: korkutucu "%0 güven" yerine niteliksel "teyit edin" notu; yalnız ≥2 desteksizde.)
         v = FakeVerifier([0.30, 0.40])
         ip = self._ip(v)
-        r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır"))
+        r = ip.handle(RequestContext(user_question="ubuntu sshd_config nasıl sıkılaştırılır", verify_claims=True))
         assert "teyit edin" in r.answer  # groundedness notu eklendi (yüzde basılmaz)
 
 
