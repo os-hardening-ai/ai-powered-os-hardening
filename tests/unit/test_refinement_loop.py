@@ -80,13 +80,16 @@ _Q = "ubuntu 24.04 ssh sshd_config sıkılaştırma adımları neler"
 
 
 class TestLightweightRefinement:
+    # NOT: ClaimVerifier/refinement artık OPT-IN (ctx.verify_claims, default kapalı —
+    # hız↔groundedness tradeoff, PR #83). Bu testler refinement'i test ettiğinden
+    # ctx'lerinde verify_claims=True geçer.
     def test_low_confidence_triggers_correction_and_keeps_better(self):
         # İlk üretim (large) ungrounded → 0.3 → düzeltme (small) GROUNDED → 0.9 → tut.
         rag = FakeRag()
         p = _pipeline(rag, FakeVerifier(),
                       large_text="INITIAL ungrounded answer",
                       small_text="GROUNDED corrected answer")
-        res = p.handle(RequestContext(user_question=_Q))
+        res = p.handle(RequestContext(user_question=_Q, verify_claims=True))
         assert p.stats["refine_count"] == 1
         assert p.llm_small.calls == 1                 # TEK düzeltme çağrısı
         assert len(rag.calls) == 1                    # YENİDEN retrieval YOK
@@ -99,7 +102,7 @@ class TestLightweightRefinement:
         p = _pipeline(rag, FakeVerifier(),
                       large_text="GROUNDED initial answer",
                       small_text="should-not-be-called")
-        res = p.handle(RequestContext(user_question=_Q))
+        res = p.handle(RequestContext(user_question=_Q, verify_claims=True))
         assert p.stats["refine_count"] == 0
         assert p.llm_small.calls == 0
         assert res.verification_confidence == 0.9
@@ -110,7 +113,7 @@ class TestLightweightRefinement:
                       large_text="INITIAL ungrounded answer",
                       small_text="GROUNDED corrected answer",
                       enable_refinement=False)
-        res = p.handle(RequestContext(user_question=_Q))
+        res = p.handle(RequestContext(user_question=_Q, verify_claims=True))
         assert p.stats["refine_count"] == 0
         assert p.llm_small.calls == 0
         assert res.verification_confidence == 0.3     # düşük kaldı
@@ -121,7 +124,7 @@ class TestLightweightRefinement:
         p = _pipeline(rag, FakeVerifier(),
                       large_text="INITIAL ungrounded answer",
                       small_text="still ungrounded text")
-        res = p.handle(RequestContext(user_question=_Q))
+        res = p.handle(RequestContext(user_question=_Q, verify_claims=True))
         assert p.stats["refine_count"] == 1
         assert p.llm_small.calls == 1                 # düzeltme denendi
         assert len(rag.calls) == 1                    # ama YENİDEN retrieval YOK
