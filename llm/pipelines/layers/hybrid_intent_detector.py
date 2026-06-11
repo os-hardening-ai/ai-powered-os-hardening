@@ -204,6 +204,19 @@ class HybridIntentDetector:
         r'\b(create|write|generate|make|build)\s+(script|config)',
     ]
 
+    # ═════════════════════════════════════════════
+    # SAF BİLGİ-SORU KELİMELERİ (action DEĞİL, açıklama ister)
+    # ═════════════════════════════════════════════
+    # "nerede/nedir/hangi" gibi EVRENSEL soru kelimeleri → script TALEBİ değildir. imperative
+    # YOKKEN, ML "konfigürasyon dosyası nerede" gibi bir soruyu yanlışlıkla action sanarsa
+    # bunu bilgi'ye çeker. (Domain keyword listesi DEĞİL → whack-a-mole değil; dilbilgisel.)
+    # 'nasıl' BİLEREK YOK — "nasıl yaparım" gerçek bir script talebi olabilir (action kalsın).
+    INFO_QUESTION_PATTERNS = [
+        r'\b(nerede|nedir|ne\s*demek|hangi|kaç|ne\s*zaman|kim|neden|niçin|niye)\b',
+        r'\bne\s*işe\s*yar',  # "ne işe yarar/yarıyor" — ek alabilir → trailing \b YOK
+        r'\b(where\s+(is|are|can|do)|what\s+(is|are|does)|which|when\s+(is|do|to)|how\s+many|who)\b',
+    ]
+
     def __init__(
         self,
         ml_detector: Optional[MLIntentDetector] = None,
@@ -308,6 +321,11 @@ class HybridIntentDetector:
                     # Kapsam gate'in işi; gerçek smalltalk Adım-1'de yakalanırdı. ML buraya
                     # "merhaba ssh..." gibi token'a aldanıp gelmiş olabilir → alan-içi default.
                     intent_type, subtype = "info_request", None
+                elif intent_type == "action_request" and self._is_info_question(q_lower):
+                    # SAF BİLGİ sorusu ("konfigürasyon dosyası NEREDE", "X NEDİR") action
+                    # sanıldı → bilgi'ye çek. imperative YOK (varsa yukarıda action olurdu) →
+                    # kullanıcı script değil AÇIKLAMA istiyor. (Canlı bug: "...nerede?" → 3C.)
+                    intent_type, subtype = "info_request", None
                 # NOT: ML'in info/action TİPİNE güveniriz (düşük güvende bile) — "ssh root
                 # login'i kapat" gibi imperatif-pattern'e UYMAYAN eylemler ML'de düşük-güvenli
                 # action çıkar; bunu info'ya çevirmek yanlıştı. Güven yalnız method etiketinde.
@@ -369,6 +387,14 @@ class HybridIntentDetector:
     def _check_imperative_patterns(self, text: str) -> bool:
         """Check for Turkish/English imperative patterns"""
         for pattern in self.ACTION_IMPERATIVE_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
+        return False
+
+    def _is_info_question(self, text: str) -> bool:
+        """Saf bilgi-soru kelimesi (nerede/nedir/hangi/where/what...) içeriyor mu?
+        → action değil AÇIKLAMA isteyen soru. imperative override'ının simetriği."""
+        for pattern in self.INFO_QUESTION_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
                 return True
         return False
