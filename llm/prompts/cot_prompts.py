@@ -124,6 +124,19 @@ class CoTSecurityAnalyzer:
             else:
                 ctx.final_answer = raw_response
 
+        # ROBUST ÇIKARIM (override): "ADIM 6" başlığından SONRASINI al — markdown-bağımsız.
+        # ADIM 1-5 İÇ MUHAKEMEdir; kullanıcıya YALNIZ ADIM 6 (KULLANICIYA CEVAP) gösterilmeli.
+        # Eski '## ÖZET' regex'i model '##'sız düz "ÖZET" yazınca KAÇIRIP tüm 6 adımı
+        # sızdırıyordu (ham yanıta fallback). Bu başlık-temelli çıkarım formattan bağımsız.
+        _m6 = list(re.finditer(r'ADIM\s*6\b[^\n]*\n', raw_response, re.IGNORECASE))
+        if _m6:
+            _tail = raw_response[_m6[-1].end():].splitlines()
+            while _tail and re.fullmatch(r'[\s─═=_-]*', _tail[0]):
+                _tail.pop(0)  # başlığı izleyen ayraç (─/═/=) + boş satırlar
+            _fa = "\n".join(_tail).strip()
+            if _fa:
+                ctx.final_answer = _fa
+
         return ctx
 
 
