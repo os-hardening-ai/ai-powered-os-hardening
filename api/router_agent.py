@@ -68,6 +68,43 @@ def _get_small_llm():
     return _small_llm
 
 
+# Agent yalnız GÜVENLİK SIKILAŞTIRMA içindir → bu kategoriler üretimden ÖNCE reddedilir.
+#   unsafe_offensive/unsafe_spam → saldırgan ("backdoor kur")
+#   off_topic                    → alan-dışı ("çay yapma scripti yaz")
+_AGENT_REJECT_CATEGORIES = ("unsafe_offensive", "unsafe_spam", "off_topic")
+
+
+def _safety_reject(goal: str) -> Optional[str]:
+    """Layer-1 kapısı (agent için): SALDIRGAN ya da ALAN-DIŞI hedefi üretimden ÖNCE reddet.
+
+    Chat (SecurePipelineV2) Layer-1'e sahip; agent endpoint'i DEĞİLDİ → iki sızıntı vardı:
+      • saldırgan hedef ("sızma aracı yaz") → freeform script üretebiliyordu,
+      • alan-dışı hedef ("çay yapma scripti") → freeform alakasız script üretebiliyordu.
+    Bu kapı ikisini de kapatır (chat ile tutarlı). Agent SADECE güvenlik sıkılaştırma yapar.
+
+    Önce yerel hızlı-yol (LLM'siz, off_topic markerları), sonra (LLM varsa) tam sınıflandırma.
+    LLM yoksa: yalnız deterministik katalog çalışır (alan-dışı/saldırgan → eşleşen CIS kuralı
+    yok → boş/güvenli; freeform LLM gerektirir) → None. Döner: reddedilirse kategori, güvenliyse
+    None. Sınıflandırma hatası → None (freeform'un kendi DANGEROUS_COMMANDS + bash -n yedek).
+    """
+    from llm.pipelines.layers.safety_classifier import fast_local_safety, SafetyClassifier
+    # 1) Yerel hızlı-yol (deterministik): net alan-dışı (math/hava/genel kültür) → reddet.
+    local = fast_local_safety(goal)
+    if local is not None and local.category in _AGENT_REJECT_CATEGORIES:
+        return local.category
+    # 2) LLM safety (saldırgan + alan-dışı asıl burada yakalanır) — LLM varsa.
+    llm = _get_small_llm()
+    if llm is None:
+        return None
+    try:
+        result = SafetyClassifier(llm_ultra_fast=llm).classify(goal)
+        if result.category in _AGENT_REJECT_CATEGORIES:
+            return result.category
+    except Exception:
+        return None
+    return None
+
+
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
 class PlanRequest(BaseModel):
@@ -186,6 +223,26 @@ async def agent_plan(body: PlanRequest):
 async def agent_harden(body: HardenRequest):
     """İP-7 — Multi-step ajan: plan → script üret → self-verify → (gerekirse) refine."""
     try:
+        # ── Layer-1 safety: saldırgan ("backdoor") veya alan-dışı ("çay yap") hedefi
+        #    üretimden ÖNCE reddet. Bu araç YALNIZ güvenlik sıkılaştırma içindir. ──
+        _rej = await asyncio.to_thread(_safety_reject, body.goal)
+        if _rej:
+            _msg = ("Bu araç yalnız güvenlik sıkılaştırma (CIS) içindir. "
+                    + ("Saldırgan/uygunsuz hedef reddedildi."
+                       if _rej.startswith("unsafe") else
+                       "Alan-dışı (güvenlikle ilgisiz) hedef reddedildi."))
+            return HardenResponse(
+                success=False, goal=body.goal, os_target=body.os_target, format=body.format,
+                summary=_msg, rule_count=0, artifact_content="",
+                issues=[f"safety_rejected:{_rej}"],
+                steps=[AgentStepResponse(name="safety", tool="SafetyClassifier",
+                                         detail=f"reddedildi ({_rej})", ok=False)],
+                plan=PlanResponse(goal=body.goal, os_target=body.os_target,
+                                  security_level=body.security_level, summary="",
+                                  items=[], conflicts=[], warnings=[]),
+                provider=_active_provider(), mode="rejected",
+            )
+
         from llm.agents.hardening_agent import HardeningAgent
         agent = HardeningAgent(rule_engine=_get_rule_engine(), llm_fn=_get_small_llm())
         # Çok-adımlı + LLM çağrılı iş — event loop'u bloklamamak için thread'e al.
