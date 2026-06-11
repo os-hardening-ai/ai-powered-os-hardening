@@ -153,11 +153,19 @@ class SecurePipelineV2:
             debug=debug,
         )
 
-        # Layer 3C: Action Pipeline
+        # Layer 3C: Action Pipeline — (b) script üretimi için düşük-temp client'ı ÜRETİMDE
+        # geç (lane varsa); test/lane'siz ortamda None → ActionPipeline llm_large'a düşer.
+        _script_llm = None
+        try:
+            from llm.clients import get_script_llm
+            _script_llm = get_script_llm()
+        except Exception:
+            _script_llm = None
         self.action_pipeline = ActionPipeline(
             llm_large=llm_large,
             rag_builder=rag_builder,
             debug=debug,
+            llm_script=_script_llm,
         )
 
         self.stats = {
