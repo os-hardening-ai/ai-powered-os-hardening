@@ -117,7 +117,15 @@ class RequestContext(BaseModel):
     role: Optional[str] = None
     security_level: SecurityLevel = "balanced"
     zt_maturity: ZeroTrustMaturity = "medium"
-    
+    # Opt-in groundedness doğrulaması (ClaimVerifier). Default KAPALI — açıldığında RAG'li
+    # info sorgusuna ~15s ekler (her iddia kaynağa karşı LLM-judge ile doğrulanır). Hız ↔
+    # doğrulama tradeoff'u; frontend toggle bunu set eder.
+    verify_claims: bool = False
+    # Opt-in çıktı doğrulaması (OutputValidator LLM deep-check / judge+correction). Default
+    # KAPALI — açıldığında 3C script üretimine LLM judge/correction ekler (~10s daha yavaş).
+    # NOT: STATİK güvenlik kontrolü (tehlikeli komut regex) bundan BAĞIMSIZ, HER ZAMAN çalışır.
+    deep_validate: bool = False
+
     retrieved_context: Optional[str] = None
 
     # ── 1) Safety ──

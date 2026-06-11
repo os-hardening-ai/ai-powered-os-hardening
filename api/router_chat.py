@@ -130,6 +130,19 @@ class ChatRequest(BaseModel):
         examples=["medium"]
     )
     use_rag: bool = Field(True, description="RAG retrieval kullanılsın mı", examples=[True])
+    verify_claims: bool = Field(
+        False,
+        description="Groundedness doğrulaması (ClaimVerifier). Açıksa RAG'li info cevabı "
+                    "kaynağa karşı doğrulanır — daha güvenilir ama ~15s daha YAVAŞ. Default kapalı.",
+        examples=[False],
+    )
+    deep_validate: bool = Field(
+        False,
+        description="Çıktı doğrulaması (OutputValidator LLM judge/correction). Açıksa üretilen "
+                    "script LLM ile denetlenip gerekirse düzeltilir — daha güvenli ama ~10s daha "
+                    "YAVAŞ. STATİK güvenlik kontrolü (tehlikeli komut) zaten her zaman açık. Default kapalı.",
+        examples=[False],
+    )
     rag_top_k: int = Field(5, description="RAG'den kaç chunk getirileceği (her kaynak için)", ge=1, le=20, examples=[5])
     rag_min_score: float = Field(0.5, description="Minimum relevance score", ge=0.0, le=1.0, examples=[0.5])
     stream: bool = Field(False, description="Enable streaming response (SSE)", examples=[False])
@@ -357,6 +370,8 @@ async def _run_pipeline(
         role=payload.role,
         security_level=payload.security_level,  # type: ignore
         zt_maturity=payload.zt_maturity,  # type: ignore
+        verify_claims=payload.verify_claims,
+        deep_validate=payload.deep_validate,
         conversation_history=history,
     )
 
@@ -570,6 +585,8 @@ async def chat_stream(payload: ChatRequest, request: Request):
             os=payload.os, role=payload.role,
             security_level=payload.security_level,  # type: ignore
             zt_maturity=payload.zt_maturity,  # type: ignore
+            verify_claims=payload.verify_claims,
+            deep_validate=payload.deep_validate,
             conversation_history=history,
         )
 
