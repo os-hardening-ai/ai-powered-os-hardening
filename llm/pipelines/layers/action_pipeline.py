@@ -85,6 +85,7 @@ class ActionPipeline:
         llm_small: Optional[LLMCallable] = None,
         rag_builder: Optional[Callable] = None,
         debug: bool = False,
+        llm_script: Optional[LLMCallable] = None,
     ):
         """
         Args:
@@ -95,13 +96,11 @@ class ActionPipeline:
         """
         self.llm_large = llm_large
         self.llm_small = llm_small or llm_large
-        # (b) Script üretimi için DÜŞÜK-TEMP (0.1) deterministik client — daha tutarlı
-        # script. Lane env yoksa (test/lane'siz) get_script_llm None döner → llm_large.
-        try:
-            from llm.clients import get_script_llm
-            self.llm_script = get_script_llm() or llm_large
-        except Exception:
-            self.llm_script = llm_large
+        # (b) Script üretimi için DÜŞÜK-TEMP (0.1) deterministik client. ÜRETİMDE secure_v2
+        # get_script_llm()'i geçer; verilmezse (test / doğrudan kullanım) injected llm_large.
+        # NOT: __init__'te get_script_llm() ÇAĞIRMA — testlerde enjekte edilen mock'u bypass
+        # edip gerçek lane client kurardı (degradation/mock testleri kırılırdı).
+        self.llm_script = llm_script or llm_large
         self.rag_builder = rag_builder
         self.debug = debug
 

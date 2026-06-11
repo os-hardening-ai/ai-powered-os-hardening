@@ -87,23 +87,26 @@ class HybridIntentDetector:
     # SMALLTALK PATTERNS (High precision)
     # ═════════════════════════════════════════════
 
+    # Anchored (^...$) = TAM mesaj smalltalk olmalı → "hi/yo/sa/ty/thx" gibi çok-kısa
+    # tek-kelimeleri burada GÜVENLE tutabiliriz (mesajın tamamı eşleşmeli). thanks ise
+    # \b...\b (mesaj içinde geçebilir: "çok teşekkürler dostum").
     SMALLTALK_PATTERNS = {
         "greeting": [
-            r'^\s*(merhaba(?:lar)?|selam(?:lar)?|slm|sa|hi|hello|hey|günaydın|iyi\s*günler|iyi\s*akşamlar)\s*[!?.]?\s*$',
-            r'^\s*(nasılsın|nasılsınız|how\s*are\s*you|naber|n[\'’]?aber|nbr|ne\s*haber|naptın|napıyorsun|napıyon|nasıl\s*gidiyor|iyi\s*misin)\s*[?!.]*\s*$',
-            r'^\s*(hey\s*there|hi\s*there|hoşgeldin|hoş\s*geldin)\s*[!]?\s*$',
+            r'^\s*(merhaba(?:lar)?|selam(?:lar)?|selamün\s*aleyküm|aleyküm\s*selam|slm|sa|mrb|mrhb|hi+|hey+|hello+|helo|yo|hola|günaydın|tünaydın|iyi\s*(günler|akşamlar|geceler|sabahlar))\s*[!?.]*\s*$',
+            r'^\s*(nasılsın(?:ız)?|how\s*(are|r)\s*(you|u|ya)|naber|n[\'’]?aber|nbr|ne\s*haber|napt[ıi]n|nap[ıi]yorsun|nap[ıi]yon|nasıl\s*gidiyor|iyi\s*misin|keyifler\s*nasıl)\s*[?!.]*\s*$',
+            r'^\s*(hey\s*there|hi\s*there|hello\s*there|howdy|hoşgeldin(?:iz)?|hoş\s*geldin(?:iz)?|good\s*(morning|evening|afternoon|day)|what[\'’]?s?\s*up|wassup|sup)\s*[!?.]*\s*$',
         ],
         "farewell": [
-            r'^\s*(görüşürüz|hoşça\s*kal|hoşçakal|bay\s*bay|baybay|bb|bye|güle\s*güle|elveda)\s*[!.]?\s*$',
-            r'^\s*(kendine\s*iyi\s*bak|take\s*care|see\s*you)\s*[!.]?\s*$',
+            r'^\s*(görüşürüz|görüşmek\s*(üzere|dileğiyle)|hoşça\s*kal(?:ın)?|hoşçakal(?:ın)?|bay\s*bay|baybay|bb|bye(?:\s*bye)?|byebye|good\s*bye|goodbye|güle\s*güle|elveda|allaha?\s*ısmarladık|selametle)\s*[!.?]*\s*$',
+            r'^\s*(kendine\s*(iyi\s*)?bak|kendine\s*dikkat\s*et|take\s*care|see\s*(you|ya|u)(\s*(soon|later))?|catch\s*you\s*later|talk\s*later|later|cya|ttyl|peace(\s*out)?|farewell)\s*[!.?]*\s*$',
         ],
         "thanks": [
-            r'\b(teşekkür|teşekkürler|sağ\s*ol|sağol|eyvallah)\b',
-            r'\b(thanks|thank\s*you|thx|ty)\b',
+            r'\b(teşekkür(?:ler|\s*eder(?:im|iz))?|sağ\s*ol(?:un)?|sağol(?:un)?|eyvallah|minnettar(?:ım)?|el(?:in|lerin)e\s*sağlık|emeğine\s*sağlık|çok\s*sağol)\b',
+            r'\b(thanks(?:\s*a\s*lot|\s*so\s*much)?|thank\s*(you|u)(\s*(so|very)\s*much)?|thx|tysm|ty|much\s*appreciated|appreciate\s*(it|that)|cheers)\b',
         ],
         "help": [
             r'^\s*(yardım|help|destek|support|assist)\s*[?!]?\s*$',
-            r'^\s*(sana\s*bir\s*sorum\s*var|can\s*you\s*help)\s*[?]?\s*$',
+            r'^\s*(sana\s*bir\s*sorum\s*var|can\s*you\s*help|bana\s*yardım\s*eder\s*misin)\s*[?]?\s*$',
         ],
     }
 
@@ -111,23 +114,41 @@ class HybridIntentDetector:
     # yakalamak için. Yalnız KISA mesajda (<=5 kelime) ve GÜVENLİK sinyali YOKKEN uygulanır
     # ("merhaba ssh'i sıkılaştır" → güvenlik kelimesi var → smalltalk DEĞİL). TF-IDF ML bunlarda
     # zayıf olduğundan selamlama/veda/teşekkür burada deterministik yakalanır.
+    # Kısa-mesaj (<=4 kelime, güvenlik/oos sinyali yok) substring sözlüğü. Stem'ler
+    # AYIRT EDİCİ (>=3 char) seçilir; "hi/yo/ty/sa" gibi ÇOK kısa/çift-anlamlılar burada
+    # DEĞİL (yanlış eşleşme riski) — onlar anchored PATTERN'de (tam mesaj). TR + EN kapsamlı.
     SMALLTALK_LEXICON = {
         "greeting": [
-            "merhaba", "selam", "naber", "ne haber", "napt", "napıyor", "nbr", "günaydın",
-            "iyi günler", "iyi akşamlar", "iyi geceler", "nasılsın", "nasıl gidiyor",
-            "hoş geldin", "hoşgeldin", "selamün", "iyi misin", "iyi sabahlar",
-            "slm", "mrb", "mrhb",   # yaygın kısaltmalar
+            # TR
+            "merhaba", "merhabalar", "selam", "selamlar", "selamün", "naber", "ne haber",
+            "napt", "napıyor", "napıyon", "nbr", "günaydın", "tünaydın",
+            "iyi günler", "iyi akşamlar", "iyi geceler", "iyi sabahlar", "nasılsın",
+            "nasılsınız", "nasıl gidiyor", "iyi misin", "keyifler nasıl",
+            "hoş geldin", "hoşgeldin", "hoş geldiniz", "selamün aleyküm", "aleyküm selam",
+            "slm", "mrb", "mrhb", "mrhaba",   # kısaltmalar
+            # EN
+            "hello", "good morning", "good evening", "good afternoon", "good day",
+            "hey there", "hi there", "hello there", "howdy", "greetings",
+            "what's up", "whats up", "wassup",
         ],
         "farewell": [
-            "görüşürüz", "hoşça kal", "hoşçakal", "baybay", "bay bay", "kendine iyi bak",
-            "güle güle", "elveda", "görüşmek üzere", "allahaısmarladık", "selametle",
-            "grşrz", "bb",   # kısaltmalar
+            # TR
+            "görüşürüz", "görüşmek üzere", "görüşmek dileğiyle", "hoşça kal", "hoşçakal",
+            "baybay", "bay bay", "kendine iyi bak", "kendine dikkat", "güle güle", "elveda",
+            "allahaısmarladık", "selametle", "grşrz", "bb",
+            # EN  ("bye" → bye/bye bye/byebye/goodbye hepsini yakalar)
+            "bye", "good bye", "goodbye", "see you", "see ya", "take care",
+            "catch you later", "see you later", "talk later", "ttyl", "cya", "farewell",
         ],
         "thanks": [
-            "teşekkür", "sağ ol", "sağol", "minnettar", "eline sağlık", "ellerine sağlık",
-            "eyvallah", "makbule geçti", "emeğine sağlık",
-            # yaygın kısaltmalar — eskiden "tşk" gibi kısaltmalar LLM'e düşüp off_topic → red oluyordu
-            "tşk", "tsk", "tşkr", "tşkler", "teşekkurler", "tesekkur", "sagol", "sgl", "eyw", "eyv",
+            # TR
+            "teşekkür", "teşekkur", "tesekkur", "sağ ol", "sağol", "sağ olun", "sağolun",
+            "minnettar", "eline sağlık", "ellerine sağlık", "emeğine sağlık", "eyvallah",
+            "makbule geçti", "çok sağol", "çok teşekkür",
+            "tşk", "tsk", "tşkr", "tşkler", "teşekkurler", "sagol", "sgl", "eyw", "eyv",  # kısaltmalar
+            # EN
+            "thanks", "thank you", "thank u", "thx", "tysm", "much appreciated",
+            "appreciate it", "appreciate that", "cheers",
         ],
     }
 

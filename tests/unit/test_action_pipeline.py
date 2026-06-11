@@ -54,10 +54,13 @@ class TestActionPipelineDegradation:
         assert result.missing_params  # asked for params
         assert called["n"] == 0  # LLM never invoked
 
-    def test_validation_is_static_no_llm_deep_check(self):
-        """#38 (quota): action validation use_deep_check=False → STATİK regex; LLM
-        judge/correction call YOK. Statik kontrol güvenliği (tehlikeli komut/kod-bloğu)
-        korur ama 5/dk limitinde fazladan 1-2 call'ı keser."""
+    def test_validation_static_when_deep_check_disabled(self, monkeypatch):
+        """(c) deep-check artık CONFIG-DRIVEN (_USE_DEEP_CHECK / ENABLE_JUDGE_STEP).
+        KAPALIYKEN statik regex yolu çalışır → LLM judge/correction call YOK (kota güvenli
+        yol hâlâ mevcut). (Varsayılan AÇIK; bu test kapalı yolu doğrular.)"""
+        import llm.pipelines.layers.action_pipeline as ap_mod
+        monkeypatch.setattr(ap_mod, "_USE_DEEP_CHECK", False)
+
         def large(_p, **kw):
             return ("İşte CIS uyumlu sıkılaştırma scripti:\n```bash\n"
                     "#!/usr/bin/env bash\nset -euo pipefail\n"
@@ -67,4 +70,4 @@ class TestActionPipelineDegradation:
         result = pipe.handle(_ctx())
         assert result.success is True
         assert result.validation is not None
-        assert result.validation.validation_method == "regex"  # LLM deep-check DEĞİL
+        assert result.validation.validation_method == "regex"  # deep-check kapalı → statik
