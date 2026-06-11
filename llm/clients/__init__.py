@@ -424,14 +424,21 @@ class LaneLoadBalancer:
         return {**self.stats, "fallback_rate": round(rate, 4), "avg_latency_ms_by_provider": avg_lat}
 
 
-def _build_lane_balancer(role: str, lanes_env: str, stats: dict) -> Optional["LaneLoadBalancer"]:
+def _build_lane_balancer(
+    role: str, lanes_env: str, stats: dict, temperature_override: Optional[float] = None
+) -> Optional["LaneLoadBalancer"]:
     """ "openrouter:model-a,sambanova:model-b" → LaneLoadBalancer. Key'i olmayan veya
-    kurulamayan lane atlanır. Hiç lane kalmazsa None (çağıran varsayılana düşer)."""
+    kurulamayan lane atlanır. Hiç lane kalmazsa None (çağıran varsayılana düşer).
+    temperature_override verilirse role-default yerine o kullanılır (ör. script üretimi
+    için düşük-temp deterministik client)."""
     from llm.clients.openai_compatible_client import (
         build_from_preset, preset_api_key, PROVIDER_PRESETS, _CHAIN_TIMEOUT, _CHAIN_RETRIES,
     )
     from llm.core.config import SMALL_MODEL_TEMPERATURE, LARGE_MODEL_TEMPERATURE
-    temperature = SMALL_MODEL_TEMPERATURE if role == "small" else LARGE_MODEL_TEMPERATURE
+    temperature = (
+        temperature_override if temperature_override is not None
+        else (SMALL_MODEL_TEMPERATURE if role == "small" else LARGE_MODEL_TEMPERATURE)
+    )
     lanes: List[Tuple[str, LLMCallable]] = []
     for part in lanes_env.split(","):
         part = part.strip()
@@ -457,6 +464,34 @@ def _build_lane_balancer(role: str, lanes_env: str, stats: dict) -> Optional["La
         return None
     logger.info("[LaneLB:%s] %d lane aktif: %s", role, len(lanes), [l for l, _ in lanes])
     return LaneLoadBalancer(role, lanes, stats)
+
+
+_script_llm_cache: Dict[str, Optional["LLMCallable"]] = {}
+
+
+def get_script_llm() -> Optional[LLMCallable]:
+    """Script üretimi için DÜŞÜK-TEMP (deterministik) large client.
+
+    `SCRIPT_MODEL_TEMPERATURE` (default 0.1) ile `LLM_LARGE_LANES`'ten kurulur — script'ler
+    daha tutarlı/öngörülebilir olsun. Lane env YOKSA None döner → çağıran (ActionPipeline)
+    enjekte edilmiş llm_large'a düşer. Lane'siz/test ortamında GERÇEK provider init ETMEZ
+    (yan etki yok). Tek sefer kurulup cache'lenir."""
+    if "client" in _script_llm_cache:
+        return _script_llm_cache["client"]
+    lanes_env = os.environ.get("LLM_LARGE_LANES", "").strip()
+    client: Optional[LLMCallable] = None
+    if lanes_env:
+        try:
+            temp = float(os.environ.get("SCRIPT_MODEL_TEMPERATURE", "0.1"))
+            stats = {"total_calls": 0, "fallback_count": 0, "failures": 0, "by_provider": {}}
+            client = _build_lane_balancer("large", lanes_env, stats, temperature_override=temp)
+            if client is not None:
+                logger.info("[ScriptLLM] düşük-temp(%.2f) script client kuruldu", temp)
+        except Exception as exc:
+            logger.warning("[ScriptLLM] kurulamadı (injected large'a düşülecek): %s", exc)
+            client = None
+    _script_llm_cache["client"] = client
+    return client
 
 
 def get_llm_clients(enable_fallback: bool = True) -> Tuple[LLMCallable, LLMCallable]:

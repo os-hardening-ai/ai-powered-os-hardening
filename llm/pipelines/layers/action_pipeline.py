@@ -14,7 +14,11 @@ Based on:
 """
 
 from __future__ import annotations
-from typing import Callable, Optional, List
+import os
+import re
+import shutil
+import subprocess
+from typing import Callable, Optional, List, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -27,6 +31,14 @@ from .output_validator import OutputValidator, ValidationResult
 
 # Type alias
 LLMCallable = Callable[[str], str]
+
+# (c) LLM-tabanlı derin doğrulama (judge + correction) — config/env ile aç/kapa.
+# Kota için bir süre kapalıydı (3 sıralı call burst → 429); lane yük dengeleme sonrası
+# karşılanabilir → varsayılan AÇIK. ENABLE_JUDGE_STEP=false ile kapatılabilir.
+_USE_DEEP_CHECK = os.environ.get("ENABLE_JUDGE_STEP", "true").strip().lower() in ("1", "true", "yes", "on")
+
+# (a) Üretilen cevaptaki ```bash ... ``` bloklarını yakala (self-verify için).
+_BASH_FENCE_RE = re.compile(r"```(?:bash|sh)?[^\n]*\n(.*?)```", re.DOTALL)
 
 
 @dataclass
@@ -83,6 +95,13 @@ class ActionPipeline:
         """
         self.llm_large = llm_large
         self.llm_small = llm_small or llm_large
+        # (b) Script üretimi için DÜŞÜK-TEMP (0.1) deterministik client — daha tutarlı
+        # script. Lane env yoksa (test/lane'siz) get_script_llm None döner → llm_large.
+        try:
+            from llm.clients import get_script_llm
+            self.llm_script = get_script_llm() or llm_large
+        except Exception:
+            self.llm_script = llm_large
         self.rag_builder = rag_builder
         self.debug = debug
 
@@ -248,15 +267,14 @@ class ActionPipeline:
             )
 
         # STEP 2D: Output Validation — STATİK (regex) güvenlik kontrolü HER ZAMAN çalışır
-        # (tehlikeli komut, kod-bloğu, min-uzunluk, LLM-refusal). LLM tabanlı derin
-        # validate+correct (use_deep_check) KAPATILDI: action'da generation + judge +
-        # correction = 3 sıralı LLM call demekti; Cerebras 5 istek/dk limitinde bu burst
-        # 429-backoff (~30-60s) → timeout tetikliyordu. Statik kontrol tehlikeli komutları
-        # (rm -rf vb.) zaten yakaladığından güvenlik korunur, maliyet/gecikme düşer.
+        # (tehlikeli komut, kod-bloğu, min-uzunluk, LLM-refusal). (c) LLM-tabanlı derin
+        # validate+correct (judge+correction) artık _USE_DEEP_CHECK ile AÇIK (ENABLE_JUDGE_STEP).
+        # Eskiden kapalıydı (3 sıralı call → Cerebras 5/dk burst → 429); lane yük dengeleme
+        # sonrası karşılanabilir → içerik kalitesi için geri açıldı. ENABLE_JUDGE_STEP=false ile kapanır.
         validation = self.validator.validate(
             output=script,
             intent="action_request",
-            use_deep_check=False,  # quota: LLM judge/correction atlandı; statik regex kalır
+            use_deep_check=_USE_DEEP_CHECK,  # (c) judge+correction config-flag'le
         )
 
         if not validation.is_valid:
@@ -276,9 +294,13 @@ class ActionPipeline:
                 warning += "# Please review carefully before using.\n"
                 script = script + warning
 
+        # STEP 2E: (a) bash -n self-verify — script ÇALIŞIR mı? (Linux/shebang'li script;
+        # bozuksa tek LLM-onarım, yine bozuksa uyarı). PowerShell/snippet'lere dokunmaz.
+        script = self._bash_self_verify(script, ctx.os)
+
         # Success stats
         self.stats["successful_scripts"] += 1
-        estimated_cost = 0.0025 + 0.0005  # Script + ZT (validation artık statik → $0, LLM call yok)
+        estimated_cost = 0.0025 + 0.0005  # Script + ZT (+judge/correction açıksa ~+0.0010)
         self.stats["total_cost"] += estimated_cost
 
         response_time = (datetime.now() - start_time).total_seconds()
@@ -401,13 +423,74 @@ class ActionPipeline:
         # Build enhanced prompt for script generation
         cot_prompt = self._build_script_prompt(ctx)
 
-        # LLM call
-        raw_response = self.llm_large(cot_prompt)
+        # LLM call — (b) düşük-temp script client (deterministik script); lane yoksa llm_large
+        raw_response = self.llm_script(cot_prompt)
 
         # Parse CoT response
         ctx = self.cot_analyzer.parse_cot_response(raw_response, ctx)
 
         return ctx.final_answer if ctx.final_answer else raw_response
+
+    # ── (a) bash -n self-verify: üretilen script ÇALIŞIR mı? ──────────────────────
+    def _bash_self_verify(self, answer: str, os_target: str) -> str:
+        """Cevaptaki ASIL bash script'ini `bash -n` ile doğrula; bozuksa LLM ile tek onarım
+        dene, yine bozuksa şeffaf uyarı ekle. YALNIZ Linux/bash hedefi + SHEBANG'li blok
+        (config-snippet / PowerShell'e dokunmaz → yanlış pozitif yok). bash yoksa atlanır."""
+        if "windows" in (os_target or "").lower() or not shutil.which("bash"):
+            return answer
+        main = self._extract_main_bash(answer)
+        if not main:
+            return answer  # shebang'li asıl script yok (yalnız örnek snippet) → atla
+        ok, err = self._bash_syntax_ok(main)
+        if ok:
+            return answer
+        # bozuk → tek LLM-repair (tüm cevabı koru, yalnız sözdizimini düzelt)
+        repaired = self._llm_repair_answer(answer, err)
+        if repaired:
+            r_main = self._extract_main_bash(repaired)
+            if r_main and self._bash_syntax_ok(r_main)[0]:
+                return repaired
+        # onarılamadı → bozuk script'i SESSİZCE sunma: uyar
+        return answer + (
+            "\n\n> ⚠️ **Sözdizimi uyarısı:** Üretilen script `bash -n` doğrulamasından "
+            f"geçemedi ({err[:120]}). Çalıştırmadan önce sözdizimini gözden geçirin."
+        )
+
+    @staticmethod
+    def _extract_main_bash(answer: str) -> Optional[str]:
+        """Cevaptaki ```bash bloklarından ASIL script'i (shebang'li) seç. Shebang yoksa
+        None → yalnızca tam-script doğrulanır, illustrative snippet'ler doğrulanmaz."""
+        blocks = _BASH_FENCE_RE.findall(answer or "")
+        shebang = [b for b in blocks if b.lstrip().startswith("#!")]
+        return shebang[0] if shebang else None
+
+    @staticmethod
+    def _bash_syntax_ok(script: str) -> Tuple[bool, str]:
+        """`bash -n` ile sözdizimi kontrolü. Araç çalışmazsa engelleme (True döner)."""
+        try:
+            r = subprocess.run(
+                ["bash", "-n"], input=script, capture_output=True,
+                text=True, encoding="utf-8", timeout=10,
+            )
+            return (r.returncode == 0), (r.stderr or "").strip()
+        except Exception:  # pragma: no cover - defensive
+            return True, ""
+
+    def _llm_repair_answer(self, answer: str, err: str) -> Optional[str]:
+        """Sözdizimi hatasını LLM'e geri besleyip SADECE düzeltme iste (küçük model yeter)."""
+        prompt = (
+            "Aşağıdaki cevabın içindeki bash script'inde bir SÖZDİZİMİ hatası var.\n\n"
+            f"HATA:\n{err[:400]}\n\n"
+            f"CEVAP:\n{answer[:6000]}\n\n"
+            "Görev: SADECE bash sözdizimi hatasını düzelt. Açıklamaları, başlıkları, komutları "
+            "ve güvenlik anlamını KORU; yeni komut EKLEME/ÇIKARMA. Cevabın TAMAMINI (markdown + "
+            "düzeltilmiş ```bash bloğu) aynen geri döndür."
+        )
+        try:
+            out = self.llm_small(prompt)
+            return out.strip() if out and out.strip() else None
+        except Exception:  # pragma: no cover - defensive
+            return None
 
     def _build_script_prompt(self, ctx: RequestContext) -> str:
         """
@@ -610,8 +693,8 @@ class ActionPipeline:
         except Exception:
             pass
 
-        # Step 2D: Statik output doğrulama
-        validation = self.validator.validate(output=script, intent="action_request", use_deep_check=False)
+        # Step 2D: Output doğrulama (c) — judge+correction _USE_DEEP_CHECK ile (statik regex her zaman)
+        validation = self.validator.validate(output=script, intent="action_request", use_deep_check=_USE_DEEP_CHECK)
         if not validation.is_valid:
             if validation.corrected_output:
                 script = validation.corrected_output
@@ -620,6 +703,9 @@ class ActionPipeline:
                 for issue in validation.issues[:3]:
                     warning += f"# - {issue}\n"
                 script = script + warning
+
+        # Step 2E: (a) bash -n self-verify (Linux/shebang'li script; bozuksa onar/uyar)
+        script = self._bash_self_verify(script, ctx.os)
 
         estimated_cost = 0.003
         self.stats["successful_scripts"] += 1
